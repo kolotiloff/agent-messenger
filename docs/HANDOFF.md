@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+PR #257 is the candidate for Kotel 1.0.17 (build 120). It adds scoped task shortcuts, grouped agent settings, first-run setup, a compact agent limits popover, and sleep controls in the main window and General settings. General settings place the local and network update checks in consecutive rows. The sidebar gear opens Settings, local update check, and Feedback. Individual connected computers also offer a manual check, and the network update still requires review. Update notices belong to the window and follow it across chats and settings.
+
+Personal chats stay in Projects until archived by the owner. The coordinator can still archive its completed tasks. Both Claude Code and the normal Codex worker now send incremental text through the task feed. The window shows activity as soon as a reply is requested and waits one minute before warning about a worker that remains active after a reported result.
+
+The composer supports local and peer binary attachments for new tasks, within the bounded attachment protocol. Follow-ups retain path references and browser text drops. The slash picker offers built-in window actions and the provider-backed local Codex usage check when supported. Additional provider commands and binary follow-up uploads remain open. Browser fixtures use recorded or synthetic data. Installed Finder drop, audible dictation, real provider turns, and signed upgrades on connected computers remain to be exercised.
+
 Kotel 1.0.16 (build 119) is the desktop migration from 1.0.15. [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) merged at `d6e6ca59d8e1a334f016cce5c7addf2334776b41` after all eight PR checks passed. The [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/46092302620) records the signed upgrade on each platform and publication status. Keep the original repository address until the owner confirms the installed computers have moved over.
 
 Right-click a running task to stop it or an interrupted task to close it manually. A shared third-party snapshot can be hidden locally. The coordinator can resume an interrupted conversation when the executor can verify that its old worker is gone. This release retains prior executable paths and name-bound MCP permissions. Fresh connections use `kotel`.
@@ -20,7 +26,7 @@ T-367 updates the GitHub README header with the approved tagline and a short exp
 
 Build 118 includes the monochrome icon, the Graphite theme, task grouping, Network versions and updates, and per-task access controls. The local update button, version and other footer controls are at the bottom left. The My network card uses the same label typography as Connection mode and a uniform row spacing. Statistics row hover matches the Archive’s color and 4 px gap.
 
-T-365 removes the duplicate computer list from Network settings while retaining the original Connection mode layout and status colors. Computer and project menus use a divided, right-aligned footer with the installed version next to the shared update control. Project-only folders show the local computer's controls; folders grouped under a computer show that computer. Project settings opens the selected local project's name and folder fields. Update notices sit above the conversation and use the standard close icon. General offers manual dismissal by default and optional automatic dismissal. T-364 tracks the legacy macOS bundle path and Dock shortcut after in-place upgrades.
+T-365 removes the duplicate computer list from Network settings while retaining the original Connection mode layout and status colors. Computer and project menus use a divided, right-aligned footer with the installed version next to the shared update control. Project-only folders show the local computer's controls; folders grouped under a computer show that computer. Project settings opens the selected local project's name and folder fields. In build 119, update notices sit above the conversation and use the standard close icon. General offers manual dismissal by default and optional automatic dismissal. T-364 tracks the legacy macOS bundle path and Dock shortcut after in-place upgrades.
 
 T-366 applies the font choice throughout the interface. The system font uses the platform’s normal fallback chain, and the high-contrast option changes text colors without resizing it. The macOS shell remembers the selection across launches.
 
@@ -28,7 +34,31 @@ T-369 uses a slightly darker sidebar and lighter text in dark appearance. The ex
 
 T-370 reduces the trailing inset in Statistics and uses the Archive's 4 px row gap in Efficiency. Settings has a wider section list. The context popup aligns its text to the end and separates the historical measurement label with a colon. An offline computer has a crossed icon and shows its local last contact time beside its name when available. Statistics gives task rows less vertical padding. Efficiency shows the exact counts within expanded details.
 
-T-371 tracks shared task renaming and the separate Archive and Delete permanently actions. T-372 tracks task tabs and simultaneous conversations within the main window. The integration branch includes origin-owned title changes and simultaneous task views.
+T-371 tracks shared task renaming and the separate Archive and Delete permanently actions. T-372 follows up the build 119 layout: task tabs occupy the existing toolbar, and individual feeds are read by task ID, matching the window endpoint’s schema. Dragging a task owned by this client from the sidebar, or dragging an open tab, reveals the Columns, Rows and Grid drop targets. The primary conversation keeps its full view. Additional panes show their own messages and replies. Shared observer summaries still open in the main view.
+
+The T-372 branch also moves computer update notices to the top-right of the window, closes update menus when the pointer leaves, and redraws the spinner around the same fixed center. A recorded restart and a peer’s current connectivity are shown independently. Chromium and WebKit exercised the task feeds and update controls against fictional data.
+
+T-373 adds a follow-up composer to stopped and recoverable conversations. The original worker conversation and messages remain attached to the task; stopping the follow-up is an independent operation. Recovery still requires confirmation that the old worker ended. Split views use one line at each boundary. The macOS native buttons and sidebar toggle share the top row, and the Linux shell uses an alpha visual when the compositor supports it. Local and peer stop/resume tests and both browser engines passed. The Linux binaries cross-compiled for both architectures and the macOS shell type-checked. Native appearance still needs observation.
+
+T-374 places project references in document tabs beside the chat. A separate, resizable text preview is an explicit action. The coordinator setup status and the executor's injected tool connection are independent. General defaults to Inter and retains saved choices. The model search groups available options by agent. Computer and project context menus show update and cancel as text actions above the installed version. The message footer appears on hover or focus and remains visible on touch screens.
+
+T-375 lets the history scroll down to the composer and shows access beside the model below the field. Stopped turns use a short system event in the saved conversation. Task tabs use compact menu spacing, and drop targets start below the toolbar. Main-window icon buttons share size and hover styling. The project filter now says All projects.
+
+T-376 recognizes the installed macOS bundle's compatibility link in existing coordinator registrations. The project settings identify the folder-scoped MCP connection, the update menu uses a short action label, and model sections have equal insets around dividers. The grouping menu fits its choices within the viewport. The macOS icon uses more of the tile, and the running app reads it directly from the installed bundle.
+
+T-377 aligns the reply footer, clips model-list scrolling to the options below search, and adds project-first grouping with computer subgroups. A new task draft can open the local folder picker and register the folder through the project dialog. The default data path and the active update channel still use compatibility names. See D-248 for the cutover criteria.
+
+T-378 limits the version footer and update actions to computer context menus. Project folders show their own actions in every grouping.
+
+T-379 aligns the painted reply labels to the shield and context ring for the selected font. The active model uses the main text color, and the ring shows an accent segment when a measurement exists. Chromium and WebKit exercised the reply footer.
+
+T-380 keeps the compose field stationary during dictation and distinguishes the selected provider from the model. Window and composer actions share icon geometry within each control size. The 20 px archive provider icons stay. The public screenshots use a fictional HiDPI WebKit preview with a simulated macOS caption. The live data directory remains on the compatibility path pending a signed migration build and pilot under D-248.
+
+T-381 keeps the owner’s composer visible and editable while stopping a turn and after it ends. Sending waits for the stop to resolve and the task’s continuation capability. The macOS recognition notice now points to Siri and Dictation settings, since the Apple Speech error does not identify which setting applies. Spoken recognition still needs a Mac acceptance test.
+
+T-382 uses regular weight for computer and task names in the task sidebar and medium weight for the project, conversation, and archive headings. The public screenshots reflect these weights.
+
+T-383 shares the closed folder glyph across the two draft pickers, and uses the same close path for dynamic window, tab, notice and update controls. Per-computer update actions in the task sidebar are text in the context menu. The local version footer still shows the download icon and uses the 18 px action viewport for update states. T-384 records the optional first-run setup as backlog.
 
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
 

@@ -25,6 +25,9 @@ func TestParseCodexRateLimits(t *testing.T) {
 	if len(l.Windows) != 2 || l.Windows[0].Window != "5h" || l.Windows[0].UsedPercent != 42 || l.Windows[0].ResetAt.Unix() != 1794658800 {
 		t.Fatalf("windows %+v", l.Windows)
 	}
+	if l.Reported != `{"planType":"pro"}` {
+		t.Fatalf("reported metadata %q", l.Reported)
+	}
 	for _, c := range []struct {
 		raw   string
 		state string

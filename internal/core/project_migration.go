@@ -254,6 +254,7 @@ func stageComputerDatabase(ctx context.Context, backup, output string, manifest 
  (key GLOB 'net_continue_prev:*' AND substr(key,length('net_continue_prev:')+1) IN (SELECT id FROM tasks))
  OR (key GLOB 'net_continue:*' AND substr(value,1,instr(value,char(10))-1) IN (SELECT id FROM tasks));
  DROP TABLE task_images;
+ DROP TABLE task_attachments;
  DROP TABLE task_outputs;
  DROP TABLE remote_task_items;
  DROP TABLE task_run_items;

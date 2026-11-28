@@ -2,6 +2,78 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-391 settings follow-up
+
+Codex moved the network update check into General, directly after the local version row. The sidebar gear now opens a menu with Settings, Check for updates, and Feedback. The update review and request flow passed in Chromium and WebKit.
+
+## 2026-11-28 — T-384, T-386, T-388, T-389, T-391 and T-392
+
+Codex integrated the first-run flow, normal Codex worker streaming, local Codex usage, binary attachments for new tasks, manual update checks, and sleep modes on [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257). Window review checked both themes and browser engines, and corrected settings heading hierarchy, notice stacking and keyboard focus. See [HANDOFF.md](HANDOFF.md) for remaining installed checks and follow-up scope.
+
+## 2026-11-28 — T-390 Sidebar limits
+
+Codex added a sidebar popover for recorded agent usage windows and preserved the optional account plan from the existing limit read. Fixture checks in Chromium and WebKit cover usage, reset timing and stale remote snapshots. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-387 Group shortcut hover refinement
+
+Codex moved the trailing New Task shortcut to the outermost group headers. It appears on row hover or keyboard focus and shares the row highlight. The button uses the row inset and centers vertically. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-387 Task shortcuts and composer inputs
+
+Codex added project and computer shortcuts, a consistent context percentage label, installation groups, attachment chips and drop handling, and a slash picker for built-in window actions. The screenshots use the embedded window assets and fictional data in WebKit. Provider-native commands, remote binary transfer, and a Finder drop in an installed build are still unverified. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-385 Chat activity and manual archive
+
+Codex added activity feedback, Claude Code reply fragments, a one-minute delay for the final process warning, and owner-controlled archives for personal chats. Scoped coordinator MCP archive reuses the task history action. The Codex worker transport remains T-386. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-383 Rendered icon audit and T-384 First-run setup outline
+
+Codex measured painted SVG bounds and control hover fills in WebKit, shared the folder and dynamic close artwork, and aligned the local update status viewport with the action button. The optional first-run setup is recorded in T-384. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-382 Lighter task window headings
+
+Codex reduced the project, conversation, archive, and computer heading weights and compared both revisions in WebKit. The published README images were refreshed in the branch. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-381 Keep the composer available while stopping
+
+Codex kept the owner’s composer editable through the stop transition and verified draft preservation. The Apple Speech notice reflects that error 201 can refer to Siri or Dictation. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-380 Dictation layout and action icons
+
+Codex found the macOS Dictation-disabled error in the speech service logs, added a specific UI status and kept it out of composer layout. The selected model separates provider and model visually. Updated action icon geometry and the fictional HiDPI README screenshots. The data move sequence is recorded in D-248. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-379 Reply footer and icon inventory
+
+Codex centered reply labels using the selected font's cap height and aligned them to the shield and meter. An icon inventory identified the 20 px archive artwork as a candidate for sharing the 16 px model group size. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-378 Computer versions in context menus
+
+Codex removed the version footer and update actions from project folders and kept them on computer headings. Chromium and WebKit passed the grouped sidebar checks. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-377 Task grouping and draft workspace controls
+
+Codex added project-first computer grouping, routed Open folder through the existing project setup, and confined model scrolling to the options. The reply footer aligns its labels and icons. The update action uses the standard highlighted menu row. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-28 — T-376 Coordinator link detection and menu polish
+
+Codex fixed recognition of existing MCP connections through the app's compatibility link, clarified the folder-scoped connection status, and adjusted the update labels, task status separators, grouping menu and model list. The packaged macOS icon fills more of the tile. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-27 — T-375 Conversation footer and shared controls
+
+Codex moved the access detail below the reply input, aligned message times to the corresponding text edge, and displayed Stop as a system event. Task tabs and drop targets follow the toolbar spacing. Archive and main window icon buttons share the same compact style. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-27 — T-374 Project reference tabs and compact controls
+
+Codex added document tabs, a separate preview action, provider sections in model search, and text actions in update menus. Inter is the initial font, Settings navigation is wider, and message actions appear on hover and keyboard focus. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-27 — T-373 Resumable conversations and window edges
+
+A saved chat accepts another message after Stop. Core tests exercised local and remote continuation, duplicate submission, and stopping a resumed turn. The comparison board uses single dividers, the macOS chrome shares one row, and composited Linux windows use a transparent underlay. Chromium and WebKit exercised split views and the resumed composer. Native appearance remains to be observed.
+
+## 2026-11-27 — T-372 Task panes and update feedback
+
+Codex fixed secondary feeds to match the window API and verified simultaneous task messages, independent drafts, the top tab strip, and direct sidebar drops in Chromium and WebKit. Update controls share a centered spinner. Update menus close on pointer exit, and compact confirmations sit at the top right of the window.
+
 ## 2026-11-27 — T-338 and T-365 build 119
 
 [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) merged the desktop migration and task controls after [all eight checks passed](https://github.com/kolotiloff/agent-messenger/actions/runs/46090410913). The font menu sizes itself to its longest label. Chromium and WebKit verified the complete label and its checkmark. The [signed release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/46092302620) was dispatched for 1.0.16-preview.119 from the merged source.

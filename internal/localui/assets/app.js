@@ -3,19 +3,21 @@
   const root = document.getElementById('am-concept');
   const taskSidebarPreview=root.classList.contains('am-task-sidebar-preview');
   // The Mac app and the Windows window draw their own frame and title (D-054).
+  if(window.amTransparentWindow)document.body.classList.add('am-transparent-window');
   if(window.webkit?.messageHandlers?.updates||window.amDesktop)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
   const selectViews = new Map();
   function syncSelects(){selectViews.forEach(view=>view.sync());}
   // Keep the existing select as the source of truth for delivery guards. The
   // visible list is a top-layer popover, so neither pane clips it or grows.
-  function positionPopover(menu,trigger,minWidth,alignEnd=false){
+  function positionPopover(menu,trigger,minWidth,alignEnd=false,preferAbove=false){
     const rect=trigger.getBoundingClientRect(),gap=6,margin=8;
     menu.style.width=minWidth==null?'':Math.min(innerWidth-2*margin,Math.max(rect.width,minWidth))+'px';
     menu.style.maxHeight='none';
     const below=innerHeight-rect.bottom-gap-margin,above=rect.top-gap-margin;
-    const upwards=below<Math.min(300,menu.scrollHeight)&&above>below;
-    menu.style.maxHeight=Math.max(0,Math.min(360,upwards?above:below))+'px';
+    const upwards=(preferAbove||below<Math.min(300,menu.scrollHeight))&&above>below;
+    const maxHeight=menu.classList.contains('am-searchable-select')?460:360;
+    menu.style.maxHeight=Math.max(0,Math.min(maxHeight,upwards?above:below))+'px';
     const width=menu.getBoundingClientRect().width,left=alignEnd?rect.right-width:rect.left;
     menu.style.left=Math.max(margin,Math.min(left,innerWidth-width-margin))+'px';
     menu.style.top=upwards?'auto':rect.bottom+gap+'px';
@@ -28,12 +30,14 @@
     const value=document.createElement('span');value.className='am-select-value';
     const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
     if(iconPaths){
-      trigger.classList.add('am-sidebar-picker','am-card-icon');
+      trigger.classList.add('am-sidebar-picker','am-icon-btn','am-chrome-icon');
       trigger.replaceChildren(svgIcon(iconPaths));
     }
     const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role',searchable?'dialog':'listbox');menu.setAttribute('aria-label',label);menu.tabIndex=-1;
     let search,empty;
-    const list=searchable?el('div'):menu;
+    const list=searchable?el('div',undefined,'am-draft-model-options'):menu;
+    const grouped=select.id==='task-draft-model';
+    const groups=new Map();
     if(searchable){
       menu.classList.add('am-searchable-select');
       const field=el('div',undefined,'am-field am-model-search');
@@ -45,9 +49,10 @@
       menu.append(field,list,empty);
       search.addEventListener('input',()=>{
         const query=search.value.trim().toLocaleLowerCase();
-        for(const row of options)row.hidden=!row.textContent.toLocaleLowerCase().includes(query);
+        for(const row of options)row.hidden=!row.dataset.searchLabel.includes(query);
+        for(const group of groups.values())group.hidden=!group.querySelector('[role=option]:not([hidden])');
         empty.hidden=options.some(row=>!row.hidden);
-        menu.scrollTop=0;
+        list.scrollTop=0;
       });
     }
     // A modal dialog makes outside nodes inert, even top-layer popovers.
@@ -59,8 +64,10 @@
     let options=[];
     const isOpen=()=>menu.matches(':popover-open');
     function close(restore=false){if(isOpen())menu.hidePopover();trigger.setAttribute('aria-expanded','false');if(restore)trigger.focus();}
-    function renderLabel(node,option){
-      const label=option?.textContent||tr('Нет данных');
+    function renderLabel(node,option,provider=''){
+      const fullLabel=option?.textContent||tr('Нет данных');
+      const prefix=provider?names[provider]+' ':'';
+      const label=prefix&&fullLabel.startsWith(prefix)?fullLabel.slice(prefix.length):fullLabel;
       const effort=searchable&&option?.value.match(/\[effort=([a-z]+)\]$/)?.[1];
       node.textContent=label;
       if(effort&&label.toLowerCase().endsWith(' '+effort)){
@@ -69,9 +76,14 @@
       }
     }
     function sync(){
-      renderLabel(value,select.selectedOptions[0]);
+      const option=select.selectedOptions[0];
+      const provider=grouped&&names[option?.value.split(':',1)[0]];
+      if(provider&&option.textContent.startsWith(provider+' ')){
+        value.replaceChildren(el('span',provider,'am-model-trigger-provider'),
+          el('span',option.textContent.slice(provider.length),'am-muted'));
+      }else renderLabel(value,option);
       if(iconPaths){
-        trigger.title=label+' · '+value.textContent;
+        trigger.title=label+', '+value.textContent;
         trigger.setAttribute('aria-label',trigger.title);
         trigger.classList.toggle('am-filter-active',select.id!=='sidebar-group'&&select.selectedIndex>0);
         if(select.id==='agent-filter'){
@@ -85,24 +97,45 @@
     }
     function choose(index){if(select.disabled||select.options[index]?.disabled)return;select.selectedIndex=index;sync();close(true);select.dispatchEvent(new Event('change',{bubbles:true}));}
     function open(keyboard){
-      if(select.disabled||isOpen())return;list.replaceChildren();options=[];
-      Array.from(select.options).forEach((option,index)=>{
+      if(select.disabled||isOpen())return;list.replaceChildren();options=[];groups.clear();
+      const indexes=Array.from(select.options,(_,index)=>index);
+      if(grouped){
+        const order=Object.keys(names);
+        const rank=index=>order.indexOf(select.options[index].value.split(':',1)[0]);
+        indexes.sort((left,right)=>rank(left)-rank(right));
+      }
+      indexes.forEach(index=>{
+        const option=select.options[index];
         const row=document.createElement('div');row.className='am-select-option';row.setAttribute('role','option');row.setAttribute('aria-selected',String(option.selected));row.tabIndex=-1;
-        const text=document.createElement('span');renderLabel(text,option);
+        const provider=grouped?option.value.split(':',1)[0]:'';
+        let section=list;
+        if(provider&&names[provider]){
+          section=groups.get(provider);
+          if(!section){
+            section=el('div',undefined,'am-model-group');section.setAttribute('role','group');
+            const header=el('div',undefined,'am-model-group-title');header.id=menu.id+'-'+provider;
+            header.append(providerIcon(provider),names[provider]);
+            section.setAttribute('aria-labelledby',header.id);section.append(header);
+            groups.set(provider,section);list.append(section);
+          }
+          row.setAttribute('aria-label',option.textContent);
+        }
+        row.dataset.searchLabel=option.textContent.toLocaleLowerCase();
+        const text=document.createElement('span');renderLabel(text,option,provider);
         if(option.dataset.provider)row.append(providerIcon(option.dataset.provider));
         const check=document.createElement('span');check.className='am-select-check';check.setAttribute('aria-hidden','true');if(option.selected)check.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';row.append(text,check);
         if(option.disabled)row.setAttribute('aria-disabled','true');
-        row.addEventListener('click',()=>choose(index));list.append(row);options.push(row);
+        row.addEventListener('click',()=>choose(index));section.append(row);row.dataset.index=String(index);options.push(row);
       });
       if(search){search.value='';empty.hidden=options.length>0;}
       menu.showPopover();trigger.setAttribute('aria-expanded','true');
       let minWidth=searchable?276:220;
-      if(select.id==='chat-font-select'){
+      if(select.id==='chat-font-select'||select.id==='sidebar-group'){
         menu.style.width='max-content';
         minWidth=Math.max(minWidth,Math.ceil(menu.getBoundingClientRect().width));
       }
       positionPopover(menu,trigger,minWidth,searchable||!!iconPaths);
-      if(search){menu.scrollTop=0;search.focus({preventScroll:true});}
+      if(search){list.scrollTop=0;search.focus({preventScroll:true});}
       else{
         const row=options[select.selectedIndex]||options[0];row?.scrollIntoView({block:'nearest'});
         if(keyboard)row?.focus({preventScroll:true});else menu.focus({preventScroll:true});
@@ -126,7 +159,7 @@
       else if(event.key==='Enter'||event.key===' '){
         event.preventDefault();
         const choice=visible[index]||(fromSearch&&visible.length===1?visible[0]:null);
-        if(choice)choose(options.indexOf(choice));
+        if(choice)choose(Number(choice.dataset.index));
         return;
       }else return;
       event.preventDefault();visible[next]?.focus();
@@ -134,29 +167,40 @@
     menu.addEventListener('toggle',()=>trigger.setAttribute('aria-expanded',String(isOpen())));
     new MutationObserver(()=>{close();sync();}).observe(select,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});
     window.addEventListener('resize',()=>close());select.addEventListener('change',sync);
-    selectViews.set(select.id,{sync});sync();
+    selectViews.set(select.id,{sync,trigger});sync();
     return trigger;
   }
   const providerPaths = {"claude":["m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"],"cursor":["M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"],"codex":["M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"]};
   // Fonts place their capitals differently inside the line box, so a fixed
   // top padding centres control text in one font and not in another. Measure
   // the font in use and set the padding that puts the capitals in the middle.
-  function centreControlText(){
+  function controlTextOffset(style,lineHeight){
     try{
-      const host=root,style=getComputedStyle(host),size=parseFloat(style.fontSize);
+      const size=parseFloat(style.fontSize);
       const probe=document.createElement('div');
-      probe.style.cssText='position:absolute;visibility:hidden;line-height:1.35;white-space:nowrap';
+      probe.style.cssText='position:absolute;visibility:hidden;white-space:nowrap';
+      probe.style.font=style.fontWeight+' '+style.fontSize+'/'+lineHeight+' '+style.fontFamily;
       probe.append('Н',Object.assign(document.createElement('span'),{style:'display:inline-block;width:0;height:0'}));
-      host.append(probe);
-      const baseline=probe.lastChild.getBoundingClientRect().top-probe.getBoundingClientRect().top;
+      root.append(probe);
+      const bounds=probe.getBoundingClientRect();
+      const baseline=probe.lastChild.getBoundingClientRect().top-bounds.top;
       probe.remove();
       const ctx=document.createElement('canvas').getContext('2d');
       ctx.font=style.fontWeight+' '+style.fontSize+' '+style.fontFamily;
       const cap=ctx.measureText('Н').actualBoundingBoxAscent;
       if(!(cap>0&&baseline>0&&size>0))return;
-      const nudge=2*(size*1.35/2-(baseline-cap/2));
-      host.style.setProperty('--am-text-nudge',Math.round(Math.min(6,Math.max(0,nudge))*2)/2+'px');
+      return bounds.height/2-(baseline-cap/2);
     }catch{}
+  }
+  function centreControlText(){
+    const offset=controlTextOffset(getComputedStyle(root),1.35);
+    if(offset!=null)root.style.setProperty('--am-text-nudge',Math.round(Math.min(6,Math.max(0,2*offset))*2)/2+'px');
+  }
+  function centreReplyLabels(){
+    const footer=$('answer-context');
+    const style=getComputedStyle(footer);
+    const offset=controlTextOffset(style,style.lineHeight);
+    if(offset!=null)footer.style.setProperty('--am-reply-label-offset',offset+'px');
   }
   function applyTheme(theme, persist=false) {
     if(!['system','light','dark'].includes(theme))theme='system';
@@ -170,8 +214,10 @@
   }
   function applyChatFont(persist=false){
     const select=$('chat-font-select');
-    if(!select.value)select.value='system';
+    if(!select.value)select.value='inter';
     root.dataset.chatFont=select.value;
+    centreReplyLabels();
+    document.fonts?.ready.then(centreReplyLabels);
     if(persist){
       if(window.webkit?.messageHandlers?.chatFont)window.webkit.messageHandlers.chatFont.postMessage(select.value);
       else remember('messenger-chat-font',select.value);
@@ -246,7 +292,8 @@
   function renderToasts(){
     const box=$('toasts');
     // An agent action must not report its error inside the hidden Tasks tab.
-    if(tab==='tasks'||(taskSidebarPreview&&tab==='stats'))root.querySelector('.am-chat-footer').prepend(box);
+    if($('agent-setup').open)$('agent-setup').querySelector('.am-dialog-body').prepend(box);
+    else if(tab==='tasks'||(taskSidebarPreview&&tab==='stats'))root.querySelector('.am-chat-footer').prepend(box);
     else if(taskSidebarPreview)$('settings-dialog').querySelector('.am-settings-views').prepend(box);
     else root.querySelector('.am-main').insertBefore(box,root.querySelector('[data-screen]'));
     box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
@@ -415,7 +462,7 @@
       case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-wait'];
       case 'done':return [tr('Работал ')+minutes(from,end),'am-muted'];
       case 'failed':return failureStatus(t)||[tr('Ошибка через ')+minutes(from,end),'am-status-bad'];
-      case 'interrupted':return [tr('Прервана через ')+minutes(from,end),'am-status-bad'];
+      case 'interrupted':return [tr('Прервана через ')+minutes(from,end),'am-status-bad',connectionTimestamp(end)];
       case 'blocked':return [tr('Заблокирована через ')+minutes(from,end),'am-status-bad'];
       case 'cancelled':return [tr('Отменена'),'am-muted'];
     }
@@ -446,7 +493,9 @@
   }
   const taskPanes=new Map();
   const paneLayouts=['columns','stack','grid'];
-  let paneBoard=null,paneStrip=null,paneGrid=null,paneTimer=null,paneActive=null,paneDragging=null;
+  const restartOutcome='the client restarted during this run; the outcome is unknown and nothing is retried';
+  const restartLabel=()=>tr('Клиент перезапустился во время работы; результат неизвестен');
+  let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneTimer=null,paneActive=null,paneDragging=null;
   function savePanes(){
     remember('kotel-task-panes',JSON.stringify([...taskPanes.values()].map(({id,project,title,placement})=>({id,project,title,placement}))));
     remember('kotel-active-pane',paneActive?.id||'');
@@ -469,11 +518,14 @@
     if(paneActive===pane)paneActive=before[index+1]||before[index-1]||null;
     if(!taskPanes.size&&paneBoard){
       const primary=paneGrid.querySelector('.am-chat');
+      primary.hidden=false;primary.style.removeProperty('order');
+      primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
+      $('task-head').hidden=false;paneToolbar.remove();
       preservePaneFocus(()=>paneBoard.replaceWith(primary));
-      paneBoard=paneStrip=paneGrid=null;
+      paneBoard=paneStrip=paneToolbar=paneGrid=null;
       clearInterval(paneTimer);paneTimer=null;
     }
-    syncTaskPanes();
+    syncTaskPanes();renderMachines();
     if(hadFocus){
       if(paneActive)paneActive.label.focus({preventScroll:true});
       else if(!$('compose').hidden&&!$('answer-text').disabled)$('answer-text').focus({preventScroll:true});
@@ -489,8 +541,10 @@
   }
   function renderPaneControls(pane){
     const task=pane.task;
-    const canSend=task&&!task.remote?.from&&!stopProgress(task)&&!taskUnreachable(task)&&(task.owner_question||canNote(task));
-    pane.compose.hidden=!canSend&&!pane.input.value.trim();
+    const canSend=canSendTaskMessage(task);
+    pane.input.placeholder=taskMessagePlaceholder(task);
+    pane.compose.hidden=!canDraftTaskMessage(task)&&!pane.input.value.trim();
+    pane.input.disabled=!canDraftTaskMessage(task);
     pane.input.readOnly=pane.busy;
     pane.send.disabled=!canSend||pane.busy||!pane.input.value.trim();
   }
@@ -510,13 +564,17 @@
   }
   function renderPaneSnapshot(pane,snapshot,offset=0){
     const scroll=pane.body.scrollTop;
+    const fileSource=taskFileSource(snapshot.task);
     const stick=pane.body.scrollHeight-scroll-pane.body.clientHeight<32;
     if(!offset)pane.body.replaceChildren();
     for(const it of snapshot.items||[]){
-      if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||!it.text)continue;
+      if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||(!it.text&&it.kind!=='outcome'))continue;
       const message=el('div',undefined,'am-pane-message');
-      const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
-      message.append(el('span',role,'am-small am-muted'),richText(it.text));
+      if(it.kind==='outcome'&&it.state==='cancelled')message.append(stoppedNote(it,snapshot.task));
+      else{
+        const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
+        message.append(el('span',role,'am-small am-muted'),richText(it.kind==='outcome'&&it.text===restartOutcome?restartLabel():it.text,undefined,fileSource));
+      }
       pane.body.append(message);
     }
     pane.count=offset+(snapshot.items?.length||0);
@@ -532,23 +590,13 @@
   }
   async function updatePane(pane){
     if(!paneVisible(pane))return;
-    if(pane.id===selectedTask&&pane.project===project){
-      abortPaneRequest(pane);
-      if(feed?.task.id===pane.id&&feed.task.project===pane.project&&pane.primarySnapshot!==feed){
-        const offset=pane.cursor&&pane.count<=(feed.items?.length||0)&&feed.append_from===pane.count?pane.count:0;
-        renderPaneSnapshot(pane,offset?{...feed,items:feed.items.slice(offset)}:feed,offset);
-        pane.primarySnapshot=feed;
-      }
-      return;
-    }
-    pane.primarySnapshot=null;
     if(pane.request)return;
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
     pane.request=controller;
     try{
       const query=new URLSearchParams({id:pane.id,cursor:pane.cursor||''});
       const snapshot=await api('/api/task?'+query,5000,controller.signal);
-      if(controller.signal.aborted||!paneVisible(pane)||snapshot.task?.id!==pane.id||snapshot.task.project!==pane.project)return;
+      if(controller.signal.aborted||!paneVisible(pane)||snapshot.task?.id!==pane.id)return;
       if(snapshot.append_from&&snapshot.append_from!==pane.count){pane.cursor='';return;}
       renderPaneSnapshot(pane,snapshot,snapshot.append_from||0);
     }catch(error){if(!controller.signal.aborted)pane.status.textContent=tr('Не удалось загрузить задачу');}
@@ -557,24 +605,49 @@
   function syncTaskPanes(){
     if(!paneBoard)return;
     const enabled=tab==='tasks'&&!document.hidden;
-    let visible=0;
+    const primary=paneGrid.querySelector('.am-chat');
+    const current=taskPanes.get(selectedTask);
+    const usePrimary=!!current&&current.project===project;
+    const showPrimary=usePrimary&&(current===paneActive||current.placement==='alongside');
+    primary.hidden=!!paneActive&&!draftOpen&&!showPrimary;
+    if(showPrimary){
+      primary.setAttribute('role','tabpanel');
+      primary.setAttribute('aria-labelledby',current.label.id);
+    }
+    if(!showPrimary){
+      primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
+      primary.style.removeProperty('order');
+    }
+    $('task-head').hidden=!draftOpen;
+    paneToolbar.hidden=draftOpen;
+    let index=0,visible=0;
     for(const pane of taskPanes.values()){
       const active=pane===paneActive;
-      pane.node.hidden=pane.placement==='tab'&&!active;
+      const showing=!draftOpen&&!!paneActive&&(active||pane.placement==='alongside');
+      const full=usePrimary&&pane===current&&showPrimary;
+      pane.node.hidden=!showing||full;
+      pane.node.style.order=index;
+      if(full)primary.style.order=index;
+      pane.label.setAttribute('aria-controls',full?primary.id:pane.node.id);
+      if(showing)visible++;
+      index++;
       pane.label.setAttribute('aria-selected',String(active));
       pane.label.tabIndex=active?0:-1;
       pane.close.tabIndex=active?0:-1;
-      if(!pane.node.hidden)visible++;
       if(!enabled||pane.node.hidden)abortPaneRequest(pane);
       else updatePane(pane);
     }
     paneBoard.style.setProperty('--am-watch-visible',Math.max(1,visible));
+    paneBoard.toggleAttribute('data-single',visible<=1);
+    paneBoard.style.setProperty('--am-watch-order',index);
+    paneBoard.toggleAttribute('data-odd-grid',visible>1&&visible%2!==0);
     if(!enabled&&paneTimer){clearInterval(paneTimer);paneTimer=null;}
     if(enabled&&!paneTimer)paneTimer=setInterval(()=>taskPanes.forEach(updatePane),5000);
   }
   function activatePane(pane){
     paneActive=pane;
-    syncTaskPanes();savePanes();
+    if(draftOpen){closeTaskDraft();renderThread();}
+    syncTaskPanes();renderMachines();savePanes();
   }
   function reorderPane(pane,target){
     const ordered=[...taskPanes.values()];
@@ -593,7 +666,7 @@
   function setPaneLayout(layout){
     if(!paneLayouts.includes(layout))layout='grid';
     paneBoard.dataset.layout=layout;
-    for(const button of paneBoard.querySelectorAll('[data-pane-layout]')){
+    for(const button of paneToolbar.querySelectorAll('[data-pane-layout]')){
       button.setAttribute('aria-pressed',String(button.dataset.paneLayout===layout));
     }
     remember('kotel-pane-layout',layout);
@@ -604,17 +677,25 @@
       paneGrid=el('div',undefined,'am-pane-grid');
       paneStrip=el('div',undefined,'am-pane-strip');
       paneStrip.setAttribute('role','tablist');paneStrip.setAttribute('aria-label',tr('Вкладки задач'));
-      const toolbar=el('div',undefined,'am-pane-toolbar');
+      paneToolbar=el('div',undefined,'am-pane-toolbar');
       const layouts=el('div',undefined,'am-pane-layouts');
       for(const [mode,text] of [['columns',tr('Столбцы')],['stack',tr('Строки')],['grid',tr('Сетка')]]){
         const button=el('button',text,'am-quiet-button');
-        button.type='button';button.dataset.paneLayout=mode;button.onclick=()=>setPaneLayout(mode);layouts.append(button);
+        button.type='button';button.dataset.paneLayout=mode;button.onclick=()=>{
+          for(const pane of taskPanes.values())pane.placement='alongside';
+          setPaneLayout(mode);syncTaskPanes();savePanes();
+        };layouts.append(button);
       }
-      toolbar.append(paneStrip,layouts);paneBoard.append(toolbar,paneGrid);
+      paneToolbar.append(paneStrip,layouts);paneBoard.append(paneGrid);
+      $('task-head').after(paneToolbar);
       const primary=$('task-layout').querySelector('.am-chat');
+      primary.id='task-primary-pane';
       preservePaneFocus(()=>{primary.replaceWith(paneBoard);paneGrid.append(primary);});
       setPaneLayout(recall('kotel-pane-layout'));
+      const current=selectedTaskRow();
+      if(!restore&&current&&current.id!==task.id)openTaskPane(current,project,placement,true);
     }
+    if(placement==='alongside'&&paneActive)paneActive.placement='alongside';
     if(taskPanes.has(task.id)){
       const pane=taskPanes.get(task.id);
       pane.placement=placement;activatePane(pane);return;
@@ -622,7 +703,7 @@
     const node=el('section',undefined,'am-watch-pane'), tabNode=el('div',undefined,'am-pane-tab');
     const label=el('button',task.title,'am-quiet-button');
     const close=el('button',undefined,'am-icon-btn am-close-x');
-    const status=el('span','','am-small am-muted');
+    const status=el('span',tr('Загружаем задачу…'),'am-small am-muted');
     const heading=el('h3',task.title);
     const body=el('div',undefined,'am-watch-body');
     const input=el('textarea',undefined,'am-watch-input');
@@ -635,8 +716,8 @@
     node.setAttribute('aria-labelledby',label.id);
     tabNode.setAttribute('role','presentation');tabNode.draggable=true;
     close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+task.title);
-    close.append(svgIcon(['M6 6l12 12M18 6L6 18']));
-    input.rows=2;input.maxLength=20000;input.setAttribute('aria-label',tr('Ответ исполнителю'));
+    close.append(svgIcon(closeIconPaths));
+    input.rows=1;input.maxLength=20000;input.setAttribute('aria-label',tr('Ответ исполнителю'));
     input.placeholder=tr('Написать исполнителю…');send.type='submit';
     compose.hidden=true;compose.append(input,send);
     status.setAttribute('role','status');
@@ -664,22 +745,68 @@
       }
     };
     tabNode.ondragstart=event=>{
-      paneDragging=pane;event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',pane.id);
+      startPaneDrag(event,pane,pane.project);
     };
     tabNode.ondragover=event=>{
-      if(paneDragging&&paneDragging!==pane){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
+      if(paneDragging&&paneDragging.task.id!==pane.id){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
     };
     tabNode.ondragleave=()=>tabNode.classList.remove('am-pane-drop');
     tabNode.ondrop=event=>{
-      if(paneDragging){event.preventDefault();reorderPane(paneDragging,pane);paneDragging=null;}
-      tabNode.classList.remove('am-pane-drop');
+      if(paneDragging){
+        event.preventDefault();
+        const source=taskPanes.get(paneDragging.task.id);
+        if(source)reorderPane(source,pane);
+        else openTaskPane(paneDragging.task,paneDragging.project);
+        finishPaneDrag();
+      }
     };
-    tabNode.ondragend=()=>{
-      paneDragging=null;paneStrip?.querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
-    };
+    tabNode.ondragend=finishPaneDrag;
     tabNode.append(label,close);node.append(heading,status,body,compose);
     paneStrip.append(tabNode);paneGrid.append(node);taskPanes.set(task.id,pane);
     if(!restore)activatePane(pane);
+  }
+  function startPaneDrag(event,task,name){
+    paneDragging={task,project:name};
+    $('task-layout').classList.add('am-pane-dragging');
+    event.dataTransfer.effectAllowed='move';
+    event.dataTransfer.setData('text/plain',task.id);
+  }
+  function finishPaneDrag(){
+    paneDragging=null;
+    $('task-layout').classList.remove('am-pane-dragging');
+    $('task-layout').querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
+  }
+  function installPaneDropTargets(){
+    const layout=$('task-layout');
+    const targets=el('div',undefined,'am-pane-targets');
+    const layouts=[
+      ['columns',tr('Столбцы'),'M12 5v14'],
+      ['stack',tr('Строки'),'M4 12h16'],
+      ['grid',tr('Сетка'),'M12 5v14M4 12h16'],
+    ];
+    for(const [mode,title,divider] of layouts){
+      const target=el('div',undefined,'am-pane-target');
+      const preview=el('div',undefined,'am-pane-target-preview');
+      preview.append(svgIcon(['M4 5h16v14H4z',divider]),el('span',title));
+      target.append(preview);
+      target.dataset.dropLayout=mode;
+      target.ondragover=event=>{
+        if(!paneDragging)return;
+        event.preventDefault();event.dataTransfer.dropEffect='move';target.classList.add('am-pane-drop');
+      };
+      target.ondragleave=event=>{if(!target.contains(event.relatedTarget))target.classList.remove('am-pane-drop');};
+      target.ondrop=event=>{
+        if(!paneDragging)return;
+        event.preventDefault();
+        const {task,project:name}=paneDragging;
+        finishPaneDrag();
+        openTaskPane(task,name,'alongside');
+        for(const pane of taskPanes.values())pane.placement='alongside';
+        setPaneLayout(mode);syncTaskPanes();savePanes();
+      };
+      targets.append(target);
+    }
+    layout.append(targets);
   }
   function taskMenu(event,t,p,name,inArchive=false){
     event.preventDefault();
@@ -719,7 +846,7 @@
         if(inArchive)entries.push({text:tr('Убрать из архива навсегда'),pick:()=>{
           askConfirm(tr('Убрать задачу из архива?'),tr('Карточка исчезнет из списков после синхронизации. Переписка, файлы и статистика сохранятся.'),tr('Убрать из архива'),()=>changeTaskArchive(t,name,'remove'));
         }});
-      }else entries.push({text:tr('Архивировать задачу'),pick:()=>changeTaskArchive(t,name,'archive')});
+      }else entries.push({text:tr('Отправить в архив'),pick:()=>changeTaskArchive(t,name,'archive')});
     }else if(!t.archived&&(finishedStates.includes(t.state)||(p&&!interrupted&&sharedLost(t,p)))){
       entries.push({text:tr('Удалить из списка'),pick:()=>askRemoveTask(t,p,name)});
     }
@@ -857,7 +984,7 @@
       $('project-count').hidden=!view||!!sidebarProject;
       $('project-count').textContent=view?String(view.projects.length):'';
       $('split-projects').hidden=true;
-      projectOptions($('project-select'),view?[['__all',tr('Все')],...options,['__new',tr('Новый проект')]]:options,view?sidebarProject||'__all':'',!view);
+      projectOptions($('project-select'),view?[['__all',tr('Все проекты')],...options,['__new',tr('Новый проект')]]:options,view?sidebarProject||'__all':'',!view);
       $('task-new').disabled=!view?.projects.length;
       syncSelects();
       return;
@@ -890,7 +1017,7 @@
     syncSelects();
   }
   // A right-click menu; entries are {text,pick}.
-  function popMenu(x,y,entries,status=null,device=''){
+  function popMenu(x,y,entries,status=null,device='',trigger=null){
     if(!entries.length&&!status&&!device)return;
     let menu=$('device-menu');
     if(!menu){
@@ -899,15 +1026,32 @@
       menu=el('div',undefined,'am-select-menu am-context-menu');menu.id='device-menu';menu.setAttribute('popover','manual');menu.tabIndex=-1;root.append(menu);
       const close=()=>{if(menu.matches(':popover-open'))menu.hidePopover();};
       document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))close();});
-      menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}});
+      menu.addEventListener('keydown',e=>{
+        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();menu.returnFocus?.focus();return;}
+        const direction=e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0;
+        if(!direction)return;
+        const options=[...menu.querySelectorAll('button[role^=menuitem]:not(:disabled)')];
+        if(!options.length)return;
+        e.preventDefault();
+        const index=options.indexOf(document.activeElement);
+        options[(index<0?(direction>0?0:options.length-1):(index+direction+options.length)%options.length)].focus();
+      });
       menu.addEventListener('focusout',e=>{if(!menu.contains(e.relatedTarget))close();});
+      document.addEventListener('pointermove',event=>{
+        if(event.pointerType==='mouse'&&menu.matches(':popover-open')&&
+          menu.querySelector('.am-context-device')&&!menu.contains(event.target))close();
+      });
+      window.addEventListener('blur',close);
       window.addEventListener('resize',close);
     }
     const items=[];
     for(const it of entries){
-      const item=el('div',it.text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
-      const run=()=>{menu.hidePopover();it.pick();};
-      item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
+      const item=contextMenuItem(menu,it.text,it.pick);
+      if(typeof it.selected==='boolean'){
+        item.setAttribute('role','menuitemradio');
+        item.setAttribute('aria-checked',String(it.selected));
+        if(it.selected){const mark=el('span',undefined,'am-select-check');mark.append(svgIcon(['M6 12.5l4.5 4.5L19 7.5']));item.append(mark);}
+      }
       items.push(item);
     }
     menu.setAttribute('role',status?'status':'menu');
@@ -919,10 +1063,16 @@
       menu.append(footer);
       renderDeviceMenuFooter(footer);
     }
+    menu.returnFocus=trigger;
     menu.showPopover();
     menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
     menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
-    (items[0]||menu.querySelector('.am-context-device button:not(:disabled)')||menu).focus();
+    (menu.querySelector('[aria-checked=true]')||menu.querySelector('button[role^=menuitem]:not(:disabled)')||menu).focus();
+  }
+  function contextMenuItem(menu,text,pick){
+    const item=el('button',text,'am-select-option');item.type='button';item.setAttribute('role','menuitem');
+    item.onclick=()=>{menu.hidePopover();pick();};
+    return item;
   }
   function deviceMenu(d,x,y,can){
     const peer=(server?.peers||[]).find(other=>other.id===d.id);
@@ -937,40 +1087,57 @@
     const device=footer.dataset.device;
     const local=device==='local';
     const peer=local?null:server?.peers?.find(item=>item.id===device);
-    const version=local?$('app-installed-version').textContent:(peer?versionName(peerInstalledVersion(peer)||''):'');
-    let control;
-    if(local){
-      const mark=updateMark(null);
-      if(updateInProgress(mark))control=updateControl(null,mark);
-      else{
-        const original=$('app-update-button');
-        if(!original.hidden){
-          control=original.cloneNode(true);
-          control.removeAttribute('id');
-          control.classList.add('am-local-update-copy');
-          control.addEventListener('click',()=>original.click());
-        }
+    const version=local?($('app-installed-version').textContent||versionName(clientInfo?.window_version||'')):(peer?versionName(peerInstalledVersion(peer)||''):'');
+    const menu=footer.parentNode,mark=local||peer?updateMark(peer):null;
+    const original=$('app-update-button');
+    let caption='',pick=null;
+    if(updateInProgress(mark)){
+      const state=updatePresentation(peer,mark);
+      caption=state.canCancel?tr('Отменить обновление'):state.caption;
+      if(state.canCancel)pick=()=>void cancelUpdate(state);
+    }else if(local&&!original.hidden){
+      caption=original.title;
+      if(!original.disabled)pick=()=>original.click();
+    }else if(peer){
+      const newest=peerUpdateOffer(peer,peerInstalledVersion(peer),mark);
+      if(newest){
+        caption=tr('Обновить версию');
+        pick=()=>confirmPeerUpdate(peer,newest);
       }
-    }else if(peer)control=peerUpdateButton(peer,peerInstalledVersion(peer));
-    if(control?.matches('button:not(.am-update-cancel)')){
-      control.addEventListener('click',()=>$('device-menu').hidePopover(),{capture:true});
     }
     const label=el('span',version||'—','am-version');
     label.title=version?tr('Версия ')+version.replace(/^v/,''):tr('Версия неизвестна');
-    const parts=control?[control,label]:[label];
-    if(parts.length===footer.children.length&&parts.every((part,index)=>part.isEqualNode(footer.children[index])))return;
-    const restoreFocus=footer.contains(document.activeElement);
-    if(restoreFocus)$('device-menu').focus({preventScroll:true});
-    footer.replaceChildren(...parts);
-    if(restoreFocus)footer.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
+    if(!label.isEqualNode(footer.firstChild))footer.replaceChildren(label);
+    let check=menu.querySelector('[data-device-check]');
+    if(!check){
+      check=contextMenuItem(menu,'',()=>void manualUpdateCheck(device));
+      check.dataset.deviceCheck='';
+      footer.after(check);
+    }
+    check.textContent=updateCheckScope===device?tr('Проверка обновлений…'):tr('Проверить обновления');
+    check.disabled=!!updateCheckScope||localUpdateRunning()||updateInProgress(mark)||(!local&&!peerFresh(peer||{}));
+    const next=caption?(pick?contextMenuItem(menu,caption,pick):el('div',caption,'am-context-status')):null;
+    const previous=menu.querySelector('[data-device-update]');
+    if(next)next.dataset.deviceUpdate=JSON.stringify([device,mark?.id]);
+    if((!next&&!previous)||next?.isEqualNode(previous))return;
+    const restoreFocus=previous===document.activeElement;
+    if(restoreFocus)menu.focus({preventScroll:true});
+    previous?.remove();
+    if(next)footer.before(next);
+    if(restoreFocus&&pick)next.focus({preventScroll:true});
   }
   // Asking another computer to update itself (T-078). Its answers arrive
   // with the server status and show as notices in the window;
   // the card only says while it is under way.
   async function requestUpdate(peer){
-    try{const answer=await postAPI('/api/server-action',{action:'update',device:peer.id},28000);if(answer?.result)server=answer.result;}
-    catch(error){addNotice('refused-'+peer.id+'-'+Date.now(),'bad',(peer.name||'')+tr(' не обновлён'),capital(error.message));}
-    renderMachines();
+    try{
+      const answer=await postAPI('/api/server-action',{action:'update',device:peer.id},28000);
+      if(answer?.result)server=answer.result;
+      return '';
+    }catch(error){
+      addNotice('refused-'+peer.id+'-'+Date.now(),'bad',(peer.name||'')+tr(' не обновлён'),capital(error.message));
+      return capital(error.message);
+    }finally{renderMachines();}
   }
   // The broker wakes all open windows when the same request changes phase.
   // Keep the last snapshot across ordinary server/status refreshes.
@@ -1074,14 +1241,14 @@
     if(!canCancel){b.setAttribute('role','img');return b;}
     b.setAttribute('aria-description',caption);
     b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
-    b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+    b.append(svgIcon(closeIconPaths));
     b.addEventListener('keydown',e=>e.stopPropagation());
     b.addEventListener('click',e=>{e.stopPropagation();void cancelUpdate(state);});
     return b;
   }
-  const notices=[],noticeSince=Date.now();
+  const notices=[],noticeSince=Date.now(),noticeHome=$('notices').parentNode;
   const noticePreference='messenger-notice-dismissal',noticeDuration=8000;
-  let autoCloseNotices=recall(noticePreference)==='automatic';
+  let noticeMode=recall(noticePreference)||'manual';
   const waitingUpdateNotices=new Map();
   function closedNotices(){try{return JSON.parse(localStorage.getItem('messenger-notices-closed')||'{}')||{};}catch(_){return {};}}
   // T-181: no scroll of their own; at most noticeLimit are shown and a new
@@ -1096,7 +1263,7 @@
   }
   function scheduleNoticeClose(notice){
     clearTimeout(notice.timer);
-    if(!autoCloseNotices)return;
+    if(noticeMode!=='automatic')return;
     notice.timer=setTimeout(()=>{
       const card=$('notices').querySelector('[data-key="'+CSS.escape(notice.key)+'"]');
       if(card?.matches(':hover,:focus-within'))scheduleNoticeClose(notice);
@@ -1108,6 +1275,18 @@
     const notice={key,kind,title,text:text||''};
     notices.push(notice);scheduleNoticeClose(notice);
     while(notices.length>noticeLimit)closeNotice(notices[0].key);
+    renderNotices();
+  }
+  function updateNotice(kind,title,text='',action=null){
+    const key='manual-update-check';
+    const index=notices.findIndex(n=>n.key===key);
+    if(index>=0){clearTimeout(notices[index].timer);notices.splice(index,1);}
+    if(title){
+      const notice={key,kind,title,text,action};
+      notices.push(notice);
+      if(kind!=='updating'&&!action)scheduleNoticeClose(notice);
+      if(notices.length>noticeLimit)closeNotice(notices[0].key);
+    }
     renderNotices();
   }
   function collectNotices(){
@@ -1143,17 +1322,26 @@
   }
   function renderNotices(){
     const box=$('notices');if(!box)return;
-    box.replaceChildren();box.hidden=!notices.length;
-    for(const n of notices){
+    const layer=$('window-setup-dialog')?.open?$('window-setup-dialog'):$('settings-dialog').open?$('settings-dialog'):noticeHome;
+    if(box.parentNode!==layer)layer.prepend(box);
+    const visible=notices.filter(n=>noticeMode!=='off'||n.key==='manual-update-check'||n.key.startsWith('window-setup-test-'));
+    box.replaceChildren();box.hidden=!visible.length;
+    for(const n of visible){
       const card=el('div',undefined,'am-notice am-notice-'+n.kind);card.dataset.key=n.key;
-      const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
-      icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
+      const icon=n.kind==='updating'?updateSpinner():document.createElementNS('http://www.w3.org/2000/svg','svg');
+      icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
+      if(n.kind!=='updating')icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
       const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted am-notice-text'));
       const close=el('button',undefined,'am-icon-btn am-close-x');close.type='button';
       close.setAttribute('aria-label',tr('Закрыть'));
-      close.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+      close.append(svgIcon(closeIconPaths));
       close.addEventListener('click',()=>closeNotice(n.key));
-      card.append(icon,body,close);
+      card.append(icon,body);
+      if(n.action){
+        const button=el('button',tr('Обновить'),'am-notice-action');
+        button.type='button';button.onclick=n.action;card.append(button);
+      }
+      card.append(close);
       box.append(card);
     }
     updateNoticeTooltips();
@@ -1575,17 +1763,34 @@
     count.setAttribute('aria-hidden','true');
     return count;
   }
-  function sidebarTaskRows(body,head,card,computer,items=[]){
+  function sidebarNewTask(group,name='',computer){
+    const projects=(view?.projects||[]).map(p=>p.name);
+    const preferred=name||sidebarProject||project;
+    const candidates=name?[name]:Array.from(new Set([preferred,...projects]));
+    const available=candidates.find(candidate=>projects.includes(candidate)&&taskDraftComputers(candidate)
+      .some(p=>(computer===undefined||p.id===computer)&&taskDraftModels(p).length));
+    const label=tr('Новая задача, {group}').replace('{group}',()=>group);
+    const plus=iconButton(label,['M12 4v16M4 12h16'],false,()=>{
+      show('tasks');openTaskDraft(true,available,computer);loadServer();
+    });
+    plus.classList.add('am-chrome-icon','am-group-new');
+    plus.dataset.sidebarFocus=JSON.stringify(['new',name,computer]);
+    plus.disabled=!online||!available||draftSending;
+    return plus;
+  }
+  function sidebarTaskRows(body,head,card,computer,items=[],projectGroup=''){
+    if(!projectGroup)head.append(sidebarNewTask(computerName(computer)||computer,'',computer==='local'?'':computer));
+    const key=projectGroup?JSON.stringify([projectGroup,computer]):computer;
     if(!items.length)return;
     const rows=el('div',undefined,'am-sidebar-task-rows');
     body.append(rows);
     const disclosure=el('button',undefined,'am-sidebar-disclosure');disclosure.type='button';
-    disclosure.dataset.sidebarFocus=JSON.stringify([computer]);
+    disclosure.dataset.sidebarFocus=JSON.stringify([key]);
     if(head.title)disclosure.title=head.title;
     const label=head.querySelector('.am-machine-label'),count=tasksWord(items.length);
     const countLabel=sidebarTaskCount(items.length);
     function update(){
-      const collapsed=collapsedComputers.has(computer);
+      const collapsed=collapsedComputers.has(key);
       body.inert=collapsed;
       if(collapsed)label.after(countLabel);
       else countLabel.remove();
@@ -1594,8 +1799,8 @@
       disclosure.setAttribute('aria-label',computerName(computer)+(collapsed?', '+count:'')+' — '+action);
     }
     disclosure.addEventListener('click',()=>{
-      if(collapsedComputers.has(computer))collapsedComputers.delete(computer);
-      else collapsedComputers.add(computer);
+      if(collapsedComputers.has(key))collapsedComputers.delete(key);
+      else collapsedComputers.add(key);
       update();
     });
     head.append(disclosure);card.classList.add('am-sidebar-has-tasks');update();
@@ -1605,8 +1810,8 @@
       appendSidebarRows(rows,items);
     }
   }
-  function appendProjectFolders(container,items,computer){
-    const folders=new Map();
+  function appendProjectFolders(container,items,computer,appendRows=appendSidebarRows,projects=[]){
+    const folders=new Map(projects.map(name=>[name,[]]));
     for(const item of items){
       if(!folders.has(item.name))folders.set(item.name,[]);
       folders.get(item.name).push(item);
@@ -1634,6 +1839,7 @@
       }
       button.append(count);
       showFolder(!collapsedFolders.has(key));
+      button.disabled=!tasks.length;
       button.addEventListener('click',()=>{
         const expand=rows.hidden;
         if(expand)collapsedFolders.delete(key);else collapsedFolders.add(key);
@@ -1644,7 +1850,7 @@
         popMenu(x,y,[
           {text:tr('Настройки проекта'),pick:()=>{if(project!==name)selectProject(name);show('project');}},
           {text:tr('Удалить локальный проект'),pick:()=>askRemoveProject(name)},
-        ],null,computer||'local');
+        ]);
       };
       button.addEventListener('contextmenu',event=>{
         event.preventDefault();
@@ -1657,8 +1863,11 @@
           openProjectMenu(bounds.left,bounds.bottom);
         }
       });
-      appendSidebarRows(rows,tasks);
-      folder.append(button,rows);container.append(folder);
+      appendRows(rows,tasks,name);
+      const heading=el('div',undefined,'am-folder-row');
+      heading.append(button);
+      if(!computer)heading.append(sidebarNewTask(projectTitle(name),name));
+      folder.append(heading,rows);container.append(folder);
     }
   }
   function appendSidebarRows(rows,items){
@@ -1667,7 +1876,9 @@
       const selection=peer?{peer:peer.peer,id:t.id}:null;
       row.dataset.sidebarFocus=JSON.stringify([name,peer?.peer||'',t.id]);
       row.dataset.motionTask=row.dataset.sidebarFocus;
-      row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
+      const selected=paneActive?!selection&&paneActive.project===name&&paneActive.id===t.id:
+        name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask);
+      row.setAttribute('aria-pressed',String(!draftOpen&&selected));
       const title=el('span',undefined,'am-sidebar-task-title');
       if(groupSelect.value==='project'){
         const machine=peer?sharedComputer(t,peer):computerName(taskComputer(t))||t.remote?.name||taskComputer(t);
@@ -1686,7 +1897,7 @@
       }else{
         const detail=el('span',status,color);
         if(tip)detail.title=tip;
-        details.append(identity+' · ',detail);
+        details.append(identity+', ',detail);
       }
       meta.append(providerIcon(t.agent),details);
       title.title=title.textContent;
@@ -1694,8 +1905,14 @@
       row.append(title,meta);
       row.addEventListener('click',()=>{
         if(tab!=='tasks')show('tasks');
-        selectProject(name,selection?'':t.id,'',selection);
+        if(paneBoard&&!selection)openTaskPane(t,name,taskPanes.get(t.id)?.placement||'tab');
+        else selectProject(name,selection?'':t.id,'',selection);
       });
+      if(!peer){
+        row.draggable=true;
+        row.ondragstart=event=>startPaneDrag(event,t,name);
+        row.ondragend=finishPaneDrag;
+      }
       row.addEventListener('contextmenu',event=>taskMenu(event,t,peer,name));
       rows.append(row);
     }
@@ -1717,7 +1934,7 @@
     if(updateInProgress(mark))return updateControl(peer,mark);
     const newest=peerUpdateOffer(peer,installed,mark);
     if(!newest)return null;
-    const label=tr('Обновить до ')+newest;
+    const label=tr('Обновить версию');
     const b=el('button',undefined,'am-update-icon am-peer-update');
     b.type='button';b.title=label;b.setAttribute('aria-label',label);
     appendUpdateGlyphs(b);
@@ -1739,6 +1956,7 @@
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer(view?.project===project?view:null);
     const sidebarTasks=taskSidebarPreview?currentTasksByComputer():null;
+    const projectFirst=['project','project-computer'].includes(groupSelect.value);
     const projectActivity=splitProjects.map(name=>{
       const snapshot=view?.project===name?view:auxActivity?.project===name?auxActivity:null;
       return {name,snapshot,tasks:busyTasksByComputer(snapshot)};
@@ -1785,7 +2003,7 @@
     if(sidebarTasks){
       const body=el('div',undefined,'am-sidebar-tasks');
       head.append(localMeta);machine.append(head,body);
-      if(groupSelect.value!=='project')sidebarTaskRows(body,head,machine,'local',sidebarTasks.get('local'));
+      if(!projectFirst)sidebarTaskRows(body,head,machine,'local',sidebarTasks.get('local'));
     }else if(projectActivity.length)appendProjectCells(machine,head,localMeta,'local',projectActivity);
     else{
       const body=el('div',undefined,'am-machine-body');
@@ -1848,7 +2066,7 @@
       }
       if(sidebarTasks){
         peerBody.className='am-sidebar-tasks';
-        if(groupSelect.value!=='project')sidebarTaskRows(peerBody,name,card,peer.id,sidebarTasks.get(peer.id));
+        if(!projectFirst)sidebarTaskRows(peerBody,name,card,peer.id,sidebarTasks.get(peer.id));
       }else if(projectActivity.length){
         appendProjectCells(card,name,meta,peer.id,projectActivity,peer);
       }else if(fresh){
@@ -1874,9 +2092,54 @@
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
     const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
     box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
-    if(taskSidebarPreview&&groupSelect.value==='project'){
+    if(taskSidebarPreview&&projectFirst){
+      const cards=[...box.children];
       box.replaceChildren();
-      appendProjectFolders(box,Array.from(sidebarTasks.values()).flat(),'');
+      const appendRows=groupSelect.value==='project-computer'?(rows,tasks,name)=>{
+        const groups=new Map();
+        for(const item of tasks){
+          const computer=item.peer?sharedRunsOn(item.t,item.peer):taskComputer(item.t);
+          if(!groups.has(computer))groups.set(computer,[]);
+          groups.get(computer).push(item);
+        }
+        const roster=new Map(cards.map(card=>[card.dataset.peer||'local',card]));
+        const order=new Set([...roster.keys(),...groups.keys()]);
+        for(const computer of order){
+          const items=groups.get(computer);
+          if(!items)continue;
+          const card=el('div',undefined,'am-machine-card am-sidebar-project-computer');
+          card.dataset.computer=computer;
+          const original=roster.get(computer);
+          const heading=original?.querySelector('.am-machine-name').cloneNode(true)||el('div',undefined,'am-machine-name');
+          heading.querySelector('.am-machine-meta')?.remove();
+          heading.removeAttribute('tabindex');
+          if(!original){
+            const {t,peer}=items[0];
+            const label=(peer?sharedComputer(t,peer):computerName(computer)||t.remote?.name)||computer;
+            heading.append(machinePresence(false,false,t.remote?.last_seen),el('span',label,'am-machine-label'));
+          }
+          const body=el('div',undefined,'am-sidebar-tasks');
+          sidebarTaskRows(body,heading,card,computer,items,name);
+          function openMenu(x,y){
+            const peer=server?.peers?.find(item=>item.id===computer);
+            if(peer)deviceMenu(peer,x,y,{revoke:false});
+            else if(computer==='local')popMenu(x,y,[],null,'local');
+          }
+          heading.addEventListener('contextmenu',event=>{
+            event.preventDefault();
+            openMenu(event.clientX,event.clientY);
+          });
+          heading.addEventListener('keydown',event=>{
+            if(event.key!=='ContextMenu'&&!(event.shiftKey&&event.key==='F10'))return;
+            event.preventDefault();
+            const bounds=heading.getBoundingClientRect();
+            openMenu(bounds.left,bounds.bottom);
+          });
+          card.append(heading,body);
+          rows.append(card);
+        }
+      }:appendSidebarRows;
+      appendProjectFolders(box,Array.from(sidebarTasks.values()).flat(),'',appendRows,sidebarProjects());
       if(!box.childElementCount)box.append(el('p',tr('Нет текущих задач'),'am-small am-muted'));
     }else if(taskSidebarPreview){
       for(const card of box.children){
@@ -2095,7 +2358,7 @@
     for(const it of items){
       if(needsDecision(it))groups.attention.push(it);
       else if(it.t.state==='running'&&!it.t.started_at&&(it.t.pending_launch||it.t.remote?.unaccepted)&&!(it.peer&&sharedWorkerRunning(it.t)))groups.planned.push(it);
-      else if(activeStates.includes(it.t.state))groups.active.push(it);
+      else if(activeStates.includes(it.t.state)||it.t.keep_open&&finishedStates.includes(it.t.state))groups.active.push(it);
       else groups.done.push(it);
     }
     return groups;
@@ -2434,7 +2697,7 @@
     const box=$('coord-box');if(!box||!view?.project)return;
     const heading=el('div',undefined,'am-coord-head');
     heading.append(el('h3',tr('MCP-плагин')));
-    heading.append(el('p',tr('Подключение к графическому редактору'),'am-small am-muted'));
+    heading.append(el('p',tr('Подключение координатора к Kotel'),'am-small am-muted'));
     const steps=el('div',undefined,'am-steps');
     steps.append(coordinatorAgentRow('claude',view.coordinator_link||{state:'unknown'}));
     steps.append(coordinatorAgentRow('codex',view.codex_link||{state:'unknown'}));
@@ -2474,16 +2737,18 @@
     if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
     if(link.state==='connected'){
       let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Kotel'):tr('Подключён. Откройте папку проекта в новом чате');
-      if(agent==='cursor'&&link.server_name==='messenger')sub=tr('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.');
+      if(agent==='claude')sub=tr('Откройте эту папку в локальном сеансе Claude Code. Проверьте Kotel в списке MCP.');
+      if(link.server_name==='messenger')sub=tr('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.');
       if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».');
       return stepRow('ok',title,sub,null);
     }
     if(failure)return stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(agent)]);
     if(link.state===missing)return stepRow(1,title,tr('Сначала настройте его во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')]);
     if(link.state==='no_folder')return stepRow(1,title,tr('Сначала укажите папку проекта'),null);
-    if(link.state==='other')return stepRow('no',title,tr('Имя MCP-сервера занято. Проверьте подключения в настройках агента.'),null);
+    if(link.state==='other')return stepRow('no',title,tr('Запись MCP относится к другому подключению. Проверьте настройки агента.'),null);
     if(link.state==='off')return stepRow('no',title,tr('Подключение MCP выключено в настройках агента'),null);
     if(link.state==='unknown')return stepRow('no',title,(agent==='cursor'?tr('Не удалось прочитать настройки Cursor'):agent==='codex'?tr('Не удалось прочитать настройки Codex'):tr('Не удалось прочитать настройки Claude'))+(link.detail?': '+link.detail:''),connect);
+    if(agent==='claude'&&link.state==='missing')return stepRow(1,title,tr('MCP не подключён для этой папки в Claude Code'),connect);
     return stepRow(1,title,tr('Не подключён'),connect);
   }
   // Whether this computer's Claude Code is the project's coordinator. Other
@@ -2524,18 +2789,21 @@
     steps.append(stepRow(place&&!codexBare?'ok':4,tr('Координатор'),coordSub,
       !hasProject||place&&!codexBare?null:codexBare?[tr('Проверить доверие'),()=>show('agents')]:[tr('Настроить координатора'),()=>show('project')]));
     box.append(intro,steps);
+    if(!hasProject)box.append(setupButton(tr('Начать личный чат'),()=>openPersonalChat().catch(showError)));
     return box;
   }
-  function showComposerAccess(node,enabled,remote=''){
+  function showComposerAccess(node,enabled,remote='',compact=false){
     node.hidden=enabled==null&&!remote;
-    const label=remote?tr('Доступ задаётся на {computer}').replace('{computer}',()=>remote):enabled?tr('Любые команды'):tr('Обычный доступ');
-    const detail=remote?tr('Разрешения задаются на компьютере исполнителя.'):enabled?label:tr('Используются обычные разрешения агента.');
+    const remoteDetail=tr('Доступ задаётся на {computer}').replace('{computer}',()=>remote);
+    const label=remote?(compact?tr('Доступ на {computer}').replace('{computer}',()=>remote):remoteDetail):enabled?tr('Любые команды'):tr('Обычный доступ');
+    const detail=remote?(compact?remoteDetail:tr('Разрешения задаются на компьютере исполнителя.')):enabled?label:tr('Используются обычные разрешения агента.');
     node.classList.toggle('am-full-access',!remote&&enabled===true);
     node.title=node.hidden?'':detail;
+    node.setAttribute('aria-label',label);
     node.replaceChildren();
     if(node.hidden)return;
     const icon=svgIcon(['M12 2.25 3.75 6v5.25c0 4.5 3 7.5 8.25 10.5 5.25-3 8.25-6 8.25-10.5V6z']);
-    node.append(icon,el('span',label));
+    node.append(icon);
   }
   function taskDraftComputers(name){
     const local={id:'',name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents||[]};
@@ -2572,13 +2840,16 @@
   function canDraftTask(name){
     return online&&taskDraftComputers(name).some(computer=>taskDraftModels(computer).length);
   }
-  function renderTaskDraft(){
+  function renderTaskDraft(preferredProject,preferredComputer){
     const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
     const projects=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
-    const name=projects.some(([key])=>key===projectSelect.value)?projectSelect.value:sidebarProject||project;
-    projectOptions(projectSelect,projects,name,draftSending);
+    const requested=typeof preferredProject==='string'?preferredProject:projectSelect.value;
+    const name=projects.some(([key])=>key===requested)?requested:sidebarProject||project;
+    projectSelect.dataset.selectedProject=name;
+    projectOptions(projectSelect,[...projects,['__new',tr('Открыть папку…')]],name,draftSending||!online);
     const computers=taskDraftComputers(name);
-    const current=computerSelect.selectedIndex<0?null:computers.find(p=>p.id===computerSelect.value);
+    const current=preferredComputer!==undefined?computers.find(p=>p.id===preferredComputer):
+      computerSelect.selectedIndex<0?null:computers.find(p=>p.id===computerSelect.value);
     const computer=current||computers.find(p=>taskDraftModels(p).length)||computers[0];
     projectOptions(computerSelect,computers.map(p=>[p.id,p.name]),computer?.id||'',draftSending||!computer);
     const models=taskDraftModels(computer);
@@ -2586,7 +2857,9 @@
     const choices=models.map(([key])=>key).filter(key=>key.startsWith(providerName+':'));
     const preferred=choices.find(key=>key===providerName+':'+preferredTaskModels[providerName])||
       choices.find(key=>/\bmedium\b/.test(key))||choices[0]||'';
-    const model=models.some(([key])=>key===modelSelect.value)?modelSelect.value:preferred;
+    const savedDefault=defaultTaskModel;
+    const model=models.some(([key])=>key===modelSelect.value)?modelSelect.value:
+      models.some(([key])=>key===savedDefault)?savedDefault:preferred;
     projectOptions(modelSelect,models,model,draftSending||!models.length);
     const provider=model.split(':',1)[0];
     const agent=computer?.agents.find(a=>a.agent===provider);
@@ -2599,10 +2872,11 @@
     const input=$('task-draft-text');
     input.readOnly=draftSending;
     $('task-draft-add').disabled=draftSending;
-    $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!input.value.trim();
+    const attachmentProblem=composerAttachmentProblem(input);
+    $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!composerMessage(input)||!!attachmentProblem;
     const status=$('task-draft-status');
-    status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
-    status.classList.toggle('am-status-bad',!draftSending&&!!draftAttempt?.error);
+    status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||attachmentProblem||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
+    status.classList.toggle('am-status-bad',!draftSending&&!!(draftAttempt?.error||attachmentProblem));
     composerDictation?.sync();
     syncSelects();
   }
@@ -2612,9 +2886,10 @@
     const provider=$('task-draft-model').value.split(':')[0];
     if($('task-draft-computer').value||view?.agents?.some(a=>a.agent===provider&&a.full_access))
       choices.push(['full',tr('Любые команды в пределах разрешений')]);
-    popMenu(rect.left,rect.bottom,choices.map(([value,text])=>({text,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})));
+    popMenu(rect.left,rect.bottom,choices.map(([value,text])=>({text,selected:value===button.value,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})),null,'',button);
   });
   function closeTaskDraft(){
+    draftAttachmentContext++;
     composerDictation?.cancel();
     draftOpen=false;
     $('task-new').setAttribute('aria-expanded','false');
@@ -2622,20 +2897,75 @@
     if($('task-draft-add').getAttribute('aria-expanded')==='true')$('task-draft-add-menu').hidePopover();
     feedSignature='';
   }
-  function openTaskDraft(focus=true){
+  function openTaskDraft(focus=true,name,computer){
     draftOpen=true;
     $('task-new').setAttribute('aria-expanded','true');
     $('task-draft').hidden=false;
     if(!$('task-draft-text').value)$('task-draft-project').value=sidebarProject||project;
     renderThread();
+    if(name){draftAttachmentContext++;renderTaskDraft(name,computer);}
     if(focus)$('task-draft-text').focus();
     renderMachines();renderTaskList();
+  }
+  const composerAttachments=new Map();
+  let draftAttachmentContext=0;
+  function composerMessage(input){
+    return [input.value.trim(),...(composerAttachments.get(input)||[]).map(item=>item.text)].filter(Boolean).join('\n\n');
+  }
+  function composerAttachmentProblem(input){
+    const attachments=composerAttachments.get(input)||[];
+    const files=attachments.flatMap(item=>item.files||[]);
+    const bytes=files.reduce((sum,file)=>sum+(file.data?atob(file.data).length:0),0);
+    if(files.length>64||bytes>112*1024)return tr('Вложения превышают лимит: 112 КБ или 64 файла и папки.');
+    if(input.id==='task-draft-text'&&attachments.some(item=>item.computer!==undefined&&item.computer!==$('task-draft-computer').value))return tr('Вложения находятся на другом компьютере.');
+    return composerMessage(input).length>input.maxLength?tr('Сообщение с вложениями слишком длинное.'):'';
+  }
+  function updateComposerAttachments(input,items){
+    composerAttachments.set(input,items);
+    const form=input.closest('.am-compose');
+    let bar=form.querySelector('.am-composer-attachments');
+    if(!bar){
+      bar=el('div',undefined,'am-composer-attachments');
+      bar.setAttribute('aria-label',tr('Вложения'));
+      input.parentElement.before(bar);
+    }
+    bar.hidden=!items.length;
+    bar.replaceChildren(...items.map(item=>{
+      const chip=el('span',undefined,'am-attachment');
+      chip.title=item.text||item.name;
+      const remove=iconButton(tr('Убрать вложение {name}').replace('{name}',()=>item.name),['M6 6l12 12M18 6 6 18'],false,()=>{
+        if(draftSending||answering)return;
+        updateComposerAttachments(input,items.filter(other=>other!==item));
+        input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));
+      });
+      chip.append(el('span',item.name),remove);
+      return chip;
+    }));
+  }
+  function addComposerReferences(input,items){
+    const current=composerAttachments.get(input)||[];
+    const next=[...current];
+    for(const item of items){
+      if(item.files&&next.some(other=>other.files&&other.name.toLowerCase()===item.name.toLowerCase()))
+        return tr('Вложения с таким именем уже добавлены.');
+      if(item.files||!next.some(other=>other.text===item.text&&other.computer===item.computer))next.push(item);
+    }
+    if(next.length>16)return tr('В одно сообщение можно добавить до 16 вложений.');
+    updateComposerAttachments(input,next);
+    input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));
+    return '';
+  }
+  function pathAttachment(path,computer){
+    const parts=path.replace(/[\\/]+$/,'').split(/[\\/]/);
+    return {text:path,name:parts.at(-1)||path,computer};
   }
   function setupComposerPaths(){
     const menu=$('task-draft-add-menu'),pathInput=$('task-draft-path'),manual=$('task-draft-manual-path');
     const status=$('task-draft-path-status'),insertButton=$('task-draft-insert-path'),showPath=$('task-draft-show-path');
     const draftComputer=$('task-draft-computer');
-    const pickers=[['file',$('task-draft-file')],['folder',$('task-draft-folder')]];
+    const folderPicker=$('task-draft-folder');
+    folderPicker.prepend(svgIcon(folderIconPaths));
+    const pickers=[['file',$('task-draft-file')],['folder',folderPicker]];
     const isOpen=()=>menu.matches(':popover-open');
     let target,busy=false;
     function valid(current){
@@ -2647,10 +2977,10 @@
     function insert(path,current){
       if(!path||!valid(current))return;
       const {input,trigger}=current;
-      const addition=(input.value&&!input.value.endsWith('\n')?'\n':'')+path;
-      if(input.value.length+addition.length>input.maxLength){status.textContent=tr('Путь не помещается в сообщение.');place(trigger);return;}
-      input.setRangeText(addition,input.value.length,input.value.length,'end');
-      menu.hidePopover();input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));
+      if(/[\r\n\0]/.test(path)){status.textContent=tr('Этот путь нельзя добавить.');return;}
+      const error=addComposerReferences(input,[pathAttachment(path,current.isDraft?current.computer:undefined)]);
+      if(error){status.textContent=error;place(trigger);return;}
+      menu.hidePopover();
     }
     for(const [trigger,input,isDraft] of [[$('task-draft-add'),$('task-draft-text'),true],[$('answer-add'),$('answer-text'),false]]){
       trigger.addEventListener('click',()=>{
@@ -2658,18 +2988,18 @@
         if(busy)return;
         target={trigger,input,isDraft,computer:draftComputer.value,task:selectedTask};
         const local=isDraft?!draftComputer.disabled&&!draftComputer.value:!selectedTaskRow()?.remote;
-        $('task-draft-local-pick').hidden=!local;
+        $('task-draft-local-pick').hidden=!isDraft&&!local;
         manual.hidden=true;showPath.setAttribute('aria-expanded','false');
         status.textContent='';pathInput.value='';insertButton.disabled=true;
         menu.showPopover();trigger.setAttribute('aria-expanded','true');place(trigger);
-        (local?pickers[0][1]:showPath).focus({preventScroll:true});
+        (isDraft||local?pickers[0][1]:showPath).focus({preventScroll:true});
       });
     }
     menu.addEventListener('toggle',()=>{
       if(!isOpen())target?.trigger.setAttribute('aria-expanded','false');
     });
     window.addEventListener('resize',()=>menu.hidePopover());
-    draftComputer.addEventListener('change',()=>menu.hidePopover());
+    draftComputer.addEventListener('change',()=>{draftAttachmentContext++;menu.hidePopover();});
     showPath.addEventListener('click',()=>{
       manual.hidden=!manual.hidden;
       showPath.setAttribute('aria-expanded',String(!manual.hidden));
@@ -2687,10 +3017,143 @@
       if(!valid(current))return;
       busy=true;for(const [,picker] of pickers)picker.disabled=true;
       status.textContent='';
-      try{insert(await requestPath(kind,pathInput.value.trim()),current);}
+      try{
+        if(!current.isDraft){insert(await requestPath(kind,pathInput.value.trim()),current);return;}
+        const {attachments}=await choosePath('attach-'+kind,pathInput.value.trim());
+        if(!valid(current)||!attachments?.length)return;
+        const error=addComposerReferences(current.input,[{name:attachments[0].path.split('/')[0],files:attachments}]);
+        if(error){status.textContent=error;place(current.trigger);return;}
+        menu.hidePopover();
+      }
       catch(error){if(valid(current)){status.textContent=pickerError(error);place(current.trigger);}}
       finally{busy=false;for(const [,picker] of pickers)picker.disabled=false;}
     });
+    const chat=root.querySelector('.am-chat-body');
+    const dropLabel=el('div',tr('Перетащите файлы или папку сюда'),'am-attachment-drop');
+    dropLabel.hidden=true;
+    chat.append(dropLabel);
+    const reset=()=>{dropLabel.hidden=true;};
+    const dropTarget=()=>{
+      if(tab!=='tasks'||root.querySelector('dialog:modal'))return null;
+      if(draftOpen&&!draftSending)return $('task-draft-text');
+      if(!$('compose').hidden&&!$('answer-text').disabled&&!answering)return $('answer-text');
+      return null;
+    };
+    const isLocal=input=>input.id==='task-draft-text'?!draftComputer.disabled&&!draftComputer.value:!selectedTaskRow()?.remote;
+    const report=(input,text)=>{
+      const node=$(input.id==='task-draft-text'?'task-draft-status':'answer-status');
+      text||=composerAttachmentProblem(input);
+      node.textContent=text;node.classList.toggle('am-status-bad',!!text);
+    };
+    function addPaths(input,paths){
+      if(!input)return;
+      if(!isLocal(input)){report(input,tr('Укажите путь на компьютере исполнителя через меню вложений.'));return;}
+      if(paths.length>16){report(input,tr('В одно сообщение можно добавить до 16 вложений.'));return;}
+      const eligible=paths.filter(path=>typeof path==='string'&&path.length>0&&path.length<=4096&&!/[\r\n\0]/.test(path));
+      if(eligible.length!==paths.length){report(input,tr('Этот путь нельзя добавить.'));return;}
+      report(input,addComposerReferences(input,eligible.map(path=>pathAttachment(path,input.id==='task-draft-text'?'':undefined))));
+    }
+    window.messengerDropFiles=(paths,x,y)=>{
+      reset();
+      if(Array.isArray(paths)&&chat.contains(document.elementFromPoint(x,y)))addPaths(dropTarget(),paths);
+    };
+    window.messengerDropAttachments=(result,context,x,y)=>{
+      reset();
+      const input=dropTarget();
+      if(context!==draftAttachmentContext||input?.id!=='task-draft-text'||!chat.contains(document.elementFromPoint(x,y)))return;
+      const error=result.error==='limit'?tr('Вложения превышают лимит: 112 КБ или 64 файла и папки.'):
+        result.error?tr('Не удалось прочитать выбранные вложения.'):addComposerReferences(input,result.groups||[]);
+      report(input,error);
+    };
+    const fileDrop=event=>['Files','text/uri-list'].some(type=>event.dataTransfer.types.includes(type));
+    chat.addEventListener('dragover',event=>{
+      if(!fileDrop(event)||!dropTarget())return;
+      event.preventDefault();event.dataTransfer.dropEffect='copy';dropLabel.hidden=false;
+    });
+    chat.addEventListener('dragleave',event=>{if(!chat.contains(event.relatedTarget))reset();});
+    chat.addEventListener('drop',async event=>{
+      if(!fileDrop(event))return;
+      event.preventDefault();reset();
+      const input=dropTarget();
+      if(!input)return;
+      const data=event.dataTransfer;
+      if(input.id==='task-draft-text'&&(data.files.length||[...data.items].some(item=>item.kind==='file'))){
+        const context=draftAttachmentContext;
+        const current=()=>context===draftAttachmentContext&&input===dropTarget();
+        try{
+          const items=await readComposerDrop(data);
+          if(items.length&&current())report(input,addComposerReferences(input,items));
+        }catch(error){if(current())report(input,error.message||tr('Не удалось прочитать выбранные вложения.'));}
+        return;
+      }
+      const paths=data.getData('text/uri-list').split(/\r?\n/).flatMap(line=>{
+        try{
+          const url=new URL(line);
+          if(url.protocol!=='file:'||url.hostname&&url.hostname!=='localhost')return [];
+          return [decodeURIComponent(url.pathname).replace(/^\/([a-z]:\/)/i,'$1')];
+        }catch(_){return [];}
+      });
+      if(paths.length&&isLocal(input)){addPaths(input,paths);return;}
+      const files=[...data.files];
+      if(!files.length||files.length>16||files.some(file=>file.size>input.maxLength)){
+        report(input,tr('Перетащите файл из Finder или выберите его через меню вложений.'));return;
+      }
+      const task=selectedTask,computer=draftComputer.value;
+      try{
+        const decoder=new TextDecoder('utf-8',{fatal:true});
+        const items=await Promise.all(files.map(async file=>{
+          const text=decoder.decode(await file.arrayBuffer());
+          if(text.includes('\0'))throw Error();
+          return {name:file.name,text:tr('Файл {name}').replace('{name}',()=>file.name)+'\n'+text};
+        }));
+        if(input===dropTarget()&&task===selectedTask&&computer===draftComputer.value)report(input,addComposerReferences(input,items));
+      }catch(_){if(input===dropTarget())report(input,tr('Браузер передаёт только содержимое текстовых файлов. Выберите файл в приложении.'));}
+    });
+  }
+  async function readComposerDrop(data){
+    const sources=[...data.items].filter(item=>item.kind==='file').flatMap(item=>{
+      const entry=item.webkitGetAsEntry?.();
+      const file=entry?.isDirectory?null:item.getAsFile();
+      return file||entry?[{file,entry}]:[];
+    });
+    if(!sources.length)sources.push(...[...data.files].map(file=>({file})));
+    let remaining=112*1024,count=0;
+    const limit=()=>Error(tr('Вложения превышают лимит: 112 КБ или 64 файла и папки.'));
+    const encode=async(file,path)=>{
+      if(file.size>remaining)throw limit();
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      if(bytes.length>remaining)throw limit();
+      remaining-=bytes.length;
+      let binary='';
+      for(let start=0;start<bytes.length;start+=8192)binary+=String.fromCharCode(...bytes.subarray(start,start+8192));
+      return {path,data:btoa(binary)};
+    };
+    const readEntry=async(entry,path,out)=>{
+      if(++count>64)throw limit();
+      if(entry.isFile){
+        const file=await new Promise((resolve,reject)=>entry.file(resolve,reject));
+        out.push(await encode(file,path));
+      }else if(entry.isDirectory){
+        out.push({path,dir:true});
+        const reader=entry.createReader();
+        for(;;){
+          const children=await new Promise((resolve,reject)=>reader.readEntries(resolve,reject));
+          if(!children.length)break;
+          for(const child of children)await readEntry(child,path+'/'+child.name,out);
+        }
+      }
+    };
+    const items=[];
+    for(const {file,entry} of sources){
+      const name=file?.name||entry.name;
+      const records=[];
+      if(file){
+        if(++count>64)throw limit();
+        records.push(await encode(file,name));
+      }else await readEntry(entry,name,records);
+      if(records.length)items.push({name,files:records});
+    }
+    return items;
   }
   function setupComposerTokens(){
     const trigger=$('answer-tokens'),menu=$('answer-token-menu');
@@ -2706,6 +3169,86 @@
       event.preventDefault();event.stopPropagation();menu.hidePopover();trigger.focus();
     });
     window.addEventListener('resize',()=>menu.hidePopover());
+  }
+  function setupComposerCommands(){
+    const menu=el('div',undefined,'am-select-menu am-composer-commands');
+    menu.setAttribute('popover','manual');
+    menu.setAttribute('role','listbox');menu.setAttribute('aria-label',tr('Команды'));
+    menu.id='composer-commands';
+    root.append(menu);
+    for(const input of [$('task-draft-text'),$('answer-text')]){
+      input.setAttribute('aria-controls',menu.id);
+      let choices=[],index=0;
+      const draft=input.id==='task-draft-text';
+      const close=()=>{
+        if(menu.matches(':popover-open'))menu.hidePopover();
+        input.removeAttribute('aria-activedescendant');
+        choices=[];
+      };
+      const highlight=()=>{
+        [...menu.children].forEach((option,i)=>option.setAttribute('aria-selected',String(i===index)));
+        input.setAttribute('aria-activedescendant',menu.children[index].id);
+        menu.children[index].scrollIntoView({block:'nearest'});
+      };
+      function refresh(){
+        const query=input.value.match(/^\/([a-z-]*)$/i);
+        if(!query){close();return;}
+        const task=draft?null:selectedTaskRow();
+        const codex=draft?(!$('task-draft-computer').disabled&&!$('task-draft-computer').value&&$('task-draft-model').value.startsWith('codex:')):
+          (task?.agent==='codex'&&!task.remote);
+        const usage=codex&&online&&view?.agents?.some(agent=>agent.agent==='codex'&&agent.cli&&!agent.paused);
+        choices=[
+          ...(usage?[['/usage',tr('Обновить лимиты учётной записи Codex'),refreshComposerCodexLimits]]:[]),
+          ['/attach',tr('Добавить файл или папку'),()=>$(draft?'task-draft-add':'answer-add').click()],
+          ...(draft?[
+            ...($('task-draft-model').disabled?[]:[['/model',tr('Выбрать модель'),()=>selectViews.get('task-draft-model')?.trigger.click()]])
+          ]:[
+            ['/new',tr('Открыть новую задачу'),()=>openTaskDraft()],
+            ...($('answer-tokens').hidden?[]:[['/context',tr('Показать контекст и токены задачи'),()=>$('answer-tokens').click()]]),
+            ...($('task-stop').hidden||$('task-stop').disabled?[]:[['/stop',tr('Остановить задачу'),stopSelectedTask]]),
+            ...(task&&!task.remote?.from&&!task.archived&&finishedStates.includes(task.state)?[
+              ['/archive',tr('Отправить в архив'),()=>changeTaskArchive(task,project,'archive')]
+            ]:[])
+          ])
+        ].filter(([command])=>command.startsWith('/'+query[1].toLowerCase()));
+        if(!choices.length){close();return;}
+        index=0;
+        const pick=choice=>{
+          close();input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));choice[2]();
+        };
+        menu.replaceChildren(...choices.map((choice,i)=>{
+          const row=el('div',undefined,'am-select-option');row.id='composer-command-'+i;row.setAttribute('role','option');
+          row.append(el('code',choice[0]),el('span',choice[1],'am-muted'));
+          row.addEventListener('mousedown',event=>event.preventDefault());
+          row.addEventListener('click',()=>pick(choice));
+          return row;
+        }));
+        if(!menu.matches(':popover-open'))menu.showPopover();
+        const field=input.closest('.am-compose-field');
+        const attachments=field.previousElementSibling;
+        positionPopover(menu,attachments?.matches('.am-composer-attachments:not([hidden])')?attachments:field,260,false,true);
+        highlight();
+      }
+      input.addEventListener('input',refresh);
+      input.addEventListener('blur',close);
+      input.addEventListener('keydown',event=>{
+        if(!choices.length||event.isComposing)return;
+        if(!['ArrowDown','ArrowUp','Enter','Tab','Escape'].includes(event.key)||event.shiftKey)return;
+        event.preventDefault();event.stopImmediatePropagation();
+        if(event.key==='Escape'){close();return;}
+        if(event.key==='Enter'||event.key==='Tab'){menu.children[index].click();return;}
+        index=(index+choices.length+(event.key==='ArrowDown'?1:-1))%choices.length;
+        highlight();
+      },true);
+      window.addEventListener('resize',close);
+    }
+  }
+  async function refreshComposerCodexLimits(){
+    try{
+      await postAPI('/api/codex-account-limits',{},35000);
+      await refresh();
+      if(!limitsMenu.matches(':popover-open'))limitsTrigger.click();
+    }catch(error){showError(error);}
   }
   function renderComposerTokens(task,model,available){
     const trigger=$('answer-tokens'),menu=$('answer-token-menu');
@@ -2734,7 +3277,6 @@
     const spent=$('answer-task-total');
     spent.hidden=!task.usage;
     spent.textContent=spent.hidden?'':tr('{tokens} по задаче').replace('{tokens}',tokensFull(task.usage.input_tokens+task.usage.output_tokens));
-    if(hasContext&&task.state!=='running')$('answer-context-summary').textContent=tr('Последний замер контекста')+': '+occupancy;
     const details=$('answer-context-count');
     details.textContent=count;
     details.hidden=!count;
@@ -2748,9 +3290,11 @@
     const split=selection.indexOf(':');
     const payload={
       project:$('task-draft-project').value,computer:$('task-draft-computer').value,
-      agent:selection.slice(0,split),model:selection.slice(split+1),text:$('task-draft-text').value.trim()
+      agent:selection.slice(0,split),model:selection.slice(split+1),text:composerMessage($('task-draft-text'))
     };
     if($('task-draft-access').value)payload.access=$('task-draft-access').value;
+    const files=(composerAttachments.get($('task-draft-text'))||[]).flatMap(item=>item.files||[]);
+    if(files.length)payload.attachments=files;
     const key=JSON.stringify(payload);
     if(draftAttempt?.key!==key)draftAttempt={key,op:'window-'+crypto.randomUUID()};
     draftSending=true;renderTaskDraft();
@@ -2759,7 +3303,7 @@
       if(typeof id!=='string'||!id)throw Error(tr('Действие не подтверждено. Проверьте состояние и повторите.'));
       draftAttempt=null;
       $('task-draft-access').value='';
-      const input=$('task-draft-text');input.value='';sizeComposer(input);
+      const input=$('task-draft-text');input.value='';updateComposerAttachments(input,[]);sizeComposer(input);
       if(draftOpen){
         if(sidebarProject)sidebarProject=payload.project;
         selectProject(payload.project,id,'');
@@ -2774,8 +3318,7 @@
   }
   function renderThread(){
     composerDictation?.sync();
-    const companion=taskPanes.get(selectedTask);
-    if(companion)updatePane(companion);
+    if(paneBoard)syncTaskPanes();
     const thread=$('thread'),head=$('task-head');
     const panelOpen=!!view?.project&&$('list-toggle').getAttribute('aria-expanded')==='true';
     $('task-panel').hidden=!panelOpen;$('task-layout').classList.toggle('am-queue-collapsed',!panelOpen);
@@ -2903,6 +3446,22 @@
       else if(part)p.append(document.createTextNode(part));
     }
     return p;
+  }
+  function taskFileSource(t){
+    if(!t)return undefined;
+    return {
+      scope:t.id,
+      remote:t.remote&&!t.remote.from?(t.remote.name||t.remote.id||tr('Другой компьютер')):'',
+      request:async(ref,action)=>{
+        const response=await fetch('/api/task-file',{
+          method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+          body:JSON.stringify({task:t.id,path:ref.path,action}),cache:'no-store',signal:AbortSignal.timeout(4500),
+        });
+        if(response.status===502)throw outdatedMessage();
+        if(!response.ok)throw Error(tr('Файл недоступен в локальной папке этой задачи.'));
+        return response.json();
+      },
+    };
   }
   function richText(text,cls,fileSource){
     const box=el('div',undefined,'am-rich'+(cls?' '+cls:''));
@@ -3087,6 +3646,9 @@
       }
     }
     const thread=$('thread');
+    for(const notice of root.querySelectorAll('[data-show-after][hidden]')){
+      if(now>=Number(notice.dataset.showAfter))notice.hidden=false;
+    }
     for(const timer of thread.querySelectorAll('[data-command-start]')){
       timer.textContent=commandElapsed(Number(timer.dataset.commandStart));
     }
@@ -3105,7 +3667,7 @@
     return !!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
   }
   function canStopTask(t){return activeStates.includes(t.state)&&!taskUnreachable(t);}
-  function stopProgress(t){return t.remote?.cancel_state||stopSubmissions.get(t.id);}
+  function stopProgress(t){return activeStates.includes(t.state)?t.remote?.cancel_state||stopSubmissions.get(t.id):'';}
   function stopMessage(progress){
     return {
       sending:tr('Отправляем запрос на остановку…'),
@@ -3114,14 +3676,12 @@
     }[progress]||'';
   }
   function renderStopControls(t){
-    const field=$('answer-text').parentElement,status=$('task-stop-status');
+    const status=$('task-stop-status');
     const canStop=canStopTask(t),progress=canStop?stopProgress(t):'';
-    const text=stopMessage(progress),wasHidden=field.hidden;
+    const text=stopMessage(progress);
     $('task-stop').hidden=!canStop||!!text;
-    field.hidden=!!text;
-    $('answer-status').hidden=!!text;
-    if(wasHidden&&!field.hidden)sizeAnswer();
     if(status.textContent!==text)status.textContent=text;
+    answerControls();
   }
   function closeHere(row=selectedTaskRow(),name=project){
     if(!row)return;
@@ -3306,7 +3866,11 @@
     const q=t.quiet;if(!q||t.state!=='running')return null;
     if(q.final_at){
       const p=el('p',undefined,'am-small');
-      p.append(el('span',tr('Итог написан в ')+clock(q.final_at)+tr(', но процесс исполнителя не завершился'),'am-status-wait'));
+      const at=Date.parse(q.final_at);
+      if(!Number.isFinite(at))return null;
+      p.dataset.showAfter=at+60000;
+      p.hidden=Date.now()<Number(p.dataset.showAfter);
+      p.append(el('span',tr('Ответ получен, исполнитель ещё завершает работу'),'am-status-wait'));
       const left=(q.processes||[]).map(x=>(x.name||'?')+' ('+x.pid+')'+(x.worker?tr(' — сам исполнитель'):''));
       p.append(el('span','. '+(left.length?tr('Ещё работают: ')+left.join(', ')+'. ':'')+tr('Закройте лишнее на этом компьютере или остановите задачу.'),'am-muted'));
       return p;
@@ -3355,23 +3919,45 @@
     if(files.size>3)card.append(more);
     return card;
   }
+  // A provider snapshot replaces the preview of the same text. Keep an
+  // interrupted preview when no completed text arrived for it.
+  function visibleFeedItems(raw){
+    const items=[];
+    let preview=null;
+    for(const item of raw){
+      if(item.kind==='text_delta'){
+        if(!preview)preview={...item,kind:'text',text:''};
+        preview.text+=item.text;
+        preview.at=item.at;
+        continue;
+      }
+      if(preview){
+        if(!['text','report','question'].includes(item.kind))items.push(preview);
+        preview=null;
+      }
+      items.push(item);
+    }
+    if(preview)items.push(preview);
+    return items;
+  }
   function renderFeed(t){
     const thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
-    const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
+    const items=visibleFeedItems(feed.items||[]);
+    const count=items.filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const displayModel=taskModelLabel(t),quiet=quietLine(t);
     const header=taskSidebarPreview?conversationTitle(t.title):taskFeedHeader(t,displayModel,quiet);
     const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
-    const direct=feed.items[0]?.author==='owner';
+    const direct=items[0]?.author==='owner';
     // Keep live output visible until a verified reply for this run is available.
     const replyProgress=new Map();
-    if(direct)for(const it of feed.items){
+    if(direct)for(const it of items){
       if(it.run>0&&it.kind==='report'&&it.verified&&it.audience!=='held'&&it.text?.trim())replyProgress.set(it.run,[]);
     }
     const out=[];let group=null,tools=null;
     const appliedFiles=new Map();
     const pending=new Map(), unfinished=new Set();
-    for(const [index,it] of feed.items.entries()){
+    for(const [index,it] of items.entries()){
       if(it.kind==='command_start'){pending.set(it.title,index);unfinished.add(index);}
       if(it.kind==='command_end'){unfinished.delete(pending.get(it.title));pending.delete(it.title);}
       if(['task','answer','report','question','outcome'].includes(it.kind))pending.clear();
@@ -3379,13 +3965,13 @@
     const running=t.state==='running'&&!t.pending_launch&&!t.remote?.lost&&!t.remote?.silent&&online;
     // Only the latest worker action group can show a timer. Keep matching
     // late command ends so an earlier group can still show its finished count.
-    let liveFrom=feed.items.length;
+    let liveFrom=items.length;
     if(running&&pending.size){
-      for(let i=feed.items.length-1;i>=0;i--){
-        const {kind}=feed.items[i];
+      for(let i=items.length-1;i>=0;i--){
+        const {kind}=items[i];
         if(kind==='command_end')continue;
         if(kind==='tool'||kind==='command_start'){liveFrom=i;continue;}
-        if(liveFrom===feed.items.length&&(kind==='note'||kind==='accepted'))continue;
+        if(liveFrom===items.length&&(kind==='note'||kind==='accepted'))continue;
         break;
       }
     }
@@ -3469,13 +4055,12 @@
           copy.title=status.textContent;
           reset=setTimeout(()=>{delete copy.dataset.copied;copy.title=label;copy.replaceChildren(svgIcon(copyPaths));status.textContent='';},1500);
         });
-        if(group.firstElementChild.classList.contains('am-outgoing'))actions.append(time,copy);
-        else actions.append(copy,time);
-        actions.append(status);group.append(actions);
+        actions.append(time,copy,status);group.append(actions);
       }else{
         meta.append(time);
       }
     };
+    const reportFiles=taskFileSource(t);
     const outgoing=(author,role,text,at,model,provider)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
@@ -3483,7 +4068,7 @@
       if(author)meta.append(messageAuthor(author,model?modelName(model):'',role));
       if(role&&!taskSidebarPreview)meta.append(roleTag(role));
       if(author)body.append(meta);
-      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(content);row.append(body);g.append(row);
+      const content=el('div',undefined,'am-message-content');content.append(richText(text,undefined,reportFiles));body.append(content);row.append(body);g.append(row);
       appendMessageTime(g,meta,at,text);out.push(g);
     };
     const outgoingOwner=it=>outgoing(taskSidebarPreview?'':tr('Вы'),'',it.text,it.at);
@@ -3502,22 +4087,10 @@
       if(!taskSidebarPreview)appendMessageTime(g,meta,at);
       out.push(g);group=content;return content;
     };
-    const reportFiles={
-      remote:t.remote&&!t.remote.from?(t.remote.name||t.remote.id||tr('Другой компьютер')):'',
-      request:async(ref,action)=>{
-        const response=await fetch('/api/task-file',{
-          method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-          body:JSON.stringify({task:t.id,path:ref.path,action}),cache:'no-store',signal:AbortSignal.timeout(4500),
-        });
-        if(response.status===502)throw outdatedMessage();
-        if(!response.ok)throw Error(tr('Файл недоступен в локальной папке этой задачи.'));
-        return response.json();
-      },
-    };
     const workerMessages=new Map();
     function appendWorkerText(it,cls){
       const content=workerGroup(it.at);
-      content.append(richText(it.text,cls,it.kind==='report'&&it.verified?reportFiles:null));
+      content.append(richText(it.text,cls,reportFiles));
       if(taskSidebarPreview&&it.text){
         const article=content.closest('article');
         const message=workerMessages.get(article)||{parts:[]};
@@ -3528,7 +4101,7 @@
       return content;
     }
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
-    for(const [index,it] of feed.items.entries()){
+    for(const [index,it] of items.entries()){
       if(it.kind==='command_end')continue;
       if(it.kind==='command_start'){
         const batch=collectTools(index);
@@ -3546,7 +4119,7 @@
       if(it.kind==='answer'){if(it.author==='owner'){outgoingOwner(it);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
-        if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
+        if(items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
       if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере {computer}').replace('{computer}',()=>it.text),'am-status-good'));group=null;continue;}
       if(it.kind==='text'){
         const progress=replyProgress.get(it.run);
@@ -3588,9 +4161,13 @@
           appliedFiles.delete(it.run);
         }
         let note;
+        if(!it.verified&&it.kind==='report'&&it.state==='running'){group=null;continue;}
         if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
         else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
-        else if(it.kind==='report')note=delivery(direct?tr('Задача завершена'):tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
+        else if(it.kind==='report'){
+          if(direct){group=null;continue;}
+          note=delivery(tr('Отчёт отправлен координатору'),'am-delivery-close');
+        }
         else if(it.audience==='owner')note=delivery(direct?tr('Вопрос вам'):tr('Вопрос вам, координатор его не видит'),'am-status-wait');
         else note=delivery(tr('Вопрос координатору'),'am-status-wait');
         if(it.verified){
@@ -3604,15 +4181,24 @@
         group=null;
         const overloaded=it.state==='failed'&&capacityFailure(it.text);
         const failedTitle=overloaded?tr('Завершение запуска не подтверждено'):t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой');
-        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
-        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad')),line=el('p',text);
+        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:restartLabel(),continue_refused:tr('Не удалось продолжить сессию')}[it.state]||it.state;
+        if(it.state==='cancelled'){out.push(stoppedNote(it,t));continue;}
+        const note=el('div',undefined,'am-outcome am-status-bad'),line=el('p',text);
         appendEventTime(line,it.at,t.remote&&!t.remote.from);note.append(line);
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
-        if(it.text)note.append(el('p',it.text,'am-small am-muted'));
+        if(it.text&&it.text!==restartOutcome)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
     }
     flushTools();
+    const stopping=stopProgress(t);
+    if(online&&t.state==='running'&&!taskUnreachable(t)&&!t.quiet?.final_at&&!stopping){
+      const label=t.remote?.unaccepted?taskStatus(t)[0]:t.waits_for_lock||t.pending_launch?tr('В очереди')
+        :feed.items?.at(-1)?.kind==='text_delta'?tr('Исполнитель пишет ответ'):tr('Исполнитель работает');
+      const live=el('div',label, 'am-turn-progress am-small am-muted am-tool-running-label');
+      live.setAttribute('role','status');
+      workerGroup(items.at(-1)?.at||t.created_at).append(live);
+    }
     if(taskSidebarPreview){
       for(const [article,message] of workerMessages)appendMessageTime(article,null,message.at,message.parts.join('\n\n'));
       const date=conversationDate(t);
@@ -3622,8 +4208,6 @@
     head.replaceChildren(header);
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
-    // A task another computer started is answered there.
-    const q=t.remote?.from?null:t.owner_question;
     // T-131: a task sent to another computer can be closed here also when
     // its outcome there is already unknown.
     // T-131: an unreachable task can be closed here. Sending waits for contact.
@@ -3636,11 +4220,13 @@
     if(unreachable){
       const since=t.remote.last_seen?stamp(t.remote.last_seen):'';
       if(t.remote.silent&&!t.remote.lost)$('lost-text').textContent='«'+t.remote.name+tr('» на связи, но не отвечает по этой задаче. Что с ней там, неизвестно: она могла и выполниться.');
+      else if(!t.remote.lost&&['interrupted','blocked'].includes(t.state))$('lost-text').textContent=(t.state==='interrupted'?tr('Клиент перезапустился во время работы, и исход задачи неизвестен.'):tr('Процесс исполнителя не завершился полностью, исход задачи неизвестен.'));
       else $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
     }
+    if(t.can_continue&&(unreachable||stuckHere))$('lost-text').textContent+=' '+tr('Новое сообщение продолжит сессию после проверки процесса.');
     const active=activeStates.includes(t.state),box=$('answer-text'),compose=$('compose');
     if(compose.dataset.task!==t.id&&$('answer-add').getAttribute('aria-expanded')==='true')$('task-draft-add-menu').hidePopover();
-    const note=canNote(t),canDraft=!t.remote?.from&&(!!q||active||note);
+    const canDraft=canDraftTaskMessage(t);
     const liveTokens=$('answer-live-tokens'),reportedTokens=t.quiet?.live_tokens;
     liveTokens.hidden=taskSidebarPreview||reportedTokens==null||t.state!=='running';
     liveTokens.textContent=liveTokens.hidden?'':tokensText(reportedTokens)+tr(' т.');
@@ -3652,19 +4238,17 @@
       const model=$('answer-model');
       model.textContent=displayModel;
       model.title=displayModel?taskModelDetail(t):'';
-      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'');
+      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'',true);
       renderComposerTokens(t,displayModel,!compose.hidden);
-      $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden;
+      $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden&&$('answer-access').hidden;
     }
     box.disabled=!canDraft;
-    box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):t.remote?.from?tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»':tr('Написать исполнителю…');
+    box.placeholder=taskMessagePlaceholder(t);
     $('answer-send').hidden=!canDraft;
     $('answer-add').hidden=!taskSidebarPreview||!canDraft;
-    if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';$('answer-status').textContent='';}
-    box.title=canDraft&&(unreachable||!q&&!note)?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
-    $('answer-send').title=box.title||tr('Отправить ответ');
+    if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';updateComposerAttachments(box,[]);$('answer-status').textContent='';}
     renderStopControls(t);
-    sizeAnswer();answerControls();
+    sizeAnswer();
     if(atBottom){thread.scrollTop=thread.scrollHeight;feedPinned=true;}
     else if(grew)$('to-bottom').classList.add('am-has-new');
     toBottomState();
@@ -3718,29 +4302,56 @@
     if(!t.remote)return t.state==='running'||t.state==='waiting_coordinator';
     return t.state==='running'&&!t.remote.from&&!t.remote.lost&&!t.remote.silent;
   }
-  function answerControls(){const t=selectedTaskRow();$('answer-send').disabled=answering||!t||taskUnreachable(t)||!!stopProgress(t)||!$('answer-text').value.trim()||!(t.owner_question&&!t.remote?.from||canNote(t));composerDictation?.sync();}
+  function stoppedNote(item,task){
+    const note=el('p',tr('Работа остановлена'),'am-delivery am-delivery-close am-system-event');
+    if(taskSidebarPreview)note.title=connectionTimestamp(item.at);
+    else appendEventTime(note,item.at,task.remote&&!task.remote.from);
+    return note;
+  }
+  function canDraftTaskMessage(t){
+    return !!t&&!t.archived&&!t.remote?.from;
+  }
+  function taskMessagePlaceholder(t){
+    if(t?.owner_question)return tr('Ответить исполнителю…');
+    if(t?.can_continue)return tr('Продолжить в этой сессии…');
+    if(t?.state==='waiting_coordinator'&&canNote(t))return tr('Ответить вместо координатора…');
+    if(t?.remote?.from)return tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»';
+    return tr('Написать исполнителю…');
+  }
+  function canSendTaskMessage(t){return !!t&&!t.archived&&!t.remote?.from&&!stopProgress(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
+  function answerControls(){
+    const task=selectedTaskRow(),box=$('answer-text'),send=$('answer-send');
+    const available=canSendTaskMessage(task);
+    box.title=canDraftTaskMessage(task)&&!available?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
+    send.title=box.title||tr('Отправить ответ');
+    const problem=composerAttachmentProblem(box);
+    send.disabled=answering||!available||!composerMessage(box)||!!problem;
+    if(problem)$('answer-status').textContent=problem;
+    else if($('answer-status').textContent===tr('Сообщение с вложениями слишком длинное.'))$('answer-status').textContent='';
+    composerDictation?.sync();
+  }
   async function sendNote(){
     const t=selectedTaskRow();if(!canNote(t)||answering)return;
-    const text=$('answer-text').value.trim();if(!text)return;
+    const box=$('answer-text'),text=composerMessage(box);if(!text||composerAttachmentProblem(box))return;
     const key='messenger-note-op:'+t.id+':'+text;
     let op=recall(key);
     if(!op){op='window-'+t.id+'-'+crypto.randomUUID();remember(key,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем сообщение…');
-    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});try{localStorage.removeItem(key);}catch(_){}if(selectedTask===t.id){showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
+    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});try{localStorage.removeItem(key);}catch(_){}if(selectedTask===t.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
     catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
   async function sendAnswer(){
     if(composerDictation?.finishFor($('answer-text')))return;
     const t=selectedTaskRow(),q=t?.owner_question;
-    if(!t||$('compose').inert||taskUnreachable(t)||stopProgress(t))return;
+    if($('compose').inert||!canSendTaskMessage(t))return;
     if(!q&&canNote(t))return sendNote();
     if(!q||answering||t.remote?.from)return;
-    const text=$('answer-text').value.trim();if(!text)return;
+    const box=$('answer-text'),text=composerMessage(box);if(!text||composerAttachmentProblem(box))return;
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
-    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});if(selectedTask===t.id){showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
+    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});if(selectedTask===t.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
     catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
@@ -3749,16 +4360,16 @@
   // with Kotel, limit) with a mark on the left and one action on the
   // right; one «Задачи» button under them. Steps that cannot be checked yet
   // are grey and numbered.
-  const checkPath=['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'];
-  const gearPath=['M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'];
   // The update mark: a down arrow.
   function appendUpdateGlyphs(node){node.append(svgIcon(['M12 3v12m-5-5 5 5 5-5M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4']));}
   function updateSpinner(){
-    // Both ends of the arc are nine units from the center of the viewBox.
-    const icon=svgIcon(['M21 12A9 9 0 1 1 19.2 6.6','M20 3.5l-.8 3.1-3.2.6']);
+    // Keep the rotation axis at the center of the 24-unit viewBox.
+    const icon=svgIcon(['M12 4A8 8 0 0 0 4 12M12 20a8 8 0 0 0 8-8','M1 9l3 3 3-3M17 15l3-3 3 3']);
     icon.classList.add('am-update-spin');
     return icon;
   }
+  const closeIconPaths=['M6 6l12 12M18 6L6 18'];
+  const folderIconPaths=['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'];
   function svgIcon(paths,circle){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
     if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
@@ -3781,6 +4392,91 @@
     if(w==='seven_day_sonnet')return tr('Недельный лимит Sonnet');
     return '';
   }
+  function limitPlan(limit){
+    try{
+      const plan=JSON.parse(limit.reported)?.planType;
+      return typeof plan==='string'&&/^[\w -]{1,64}$/.test(plan)&&!/^unknown$/i.test(plan)
+        ?plan.replace(/[_-]+/g,' ').replace(/\b[a-z]/g,c=>c.toUpperCase()):'';
+    }catch(_){return '';}
+  }
+  function limitTime(minutes){
+    const units=[['day',1440],['hour',60],['minute',1]],parts=[];
+    for(const [unit,size] of units){
+      const count=Math.floor(minutes/size);
+      if(count)parts.push(new Intl.NumberFormat(amLocale,{style:'unit',unit,unitDisplay:'short'}).format(count));
+      minutes%=size;
+    }
+    return parts.slice(0,2).join(' ');
+  }
+  const limitsTrigger=$('limits-open'),limitsMenu=$('agent-limits');
+  function renderAgentLimits(){
+    const body=$('agent-limits-body'),now=Date.now();
+    const computers=[
+      {name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents,stale:!online},
+      ...(server?.peers||[]).map(peer=>({...peer,stale:!peerFresh(peer)}))
+    ];
+    const groups=[];
+    for(const {name,agents,stale} of computers){
+      const measured=(agents||[]).filter(agent=>agent.limit);
+      if(!measured.length)continue;
+      const group=el('section',undefined,'am-agent-limits-group');
+      group.append(el('span',name+(stale?' · '+tr('Устаревшие данные'):''),'am-small am-muted'));
+      for(const {agent,limit} of measured){
+        const provider=el('section',undefined,'am-agent-limits-provider');
+        const head=el('header'),plan=limitPlan(limit);
+        head.append(providerIcon(agent),el('span',names[agent]||agent));
+        if(plan)head.append(el('span','· '+plan,'am-small am-muted'));
+        provider.append(head);
+        for(const window of limit.windows?.length?limit.windows:[limit]){
+          const row=el('div'),meta=el('div',undefined,'am-agent-limits-meta am-small');
+          const name=limitWindow(window.window)||tr('Лимит использования');
+          const reset=Date.parse(window.resets_at),expired=window.reset_passed||reset<=now;
+          const minutes=Math.max(1,Math.ceil((reset-now)/60000));
+          meta.append(el('span',name));
+          if(expired||Number.isFinite(reset)){
+            meta.append(el('span',expired?tr('Срок сброса прошёл'):tr('До сброса {time}').replace('{time}',limitTime(minutes)),'am-muted'));
+          }
+          row.append(meta);
+          const used=window.used_percent;
+          if(typeof used==='number'){
+            const share=Math.min(100,Math.max(0,used));
+            const percent=(used/100).toLocaleString(amLocale,{style:'percent',maximumFractionDigits:1});
+            meta.append(el('span',percent,'am-agent-limits-percent'));
+            const track=el('div',undefined,'am-agent-limits-track'),fill=el('span',undefined,'am-agent-limits-fill');
+            track.setAttribute('aria-hidden','true');
+            fill.dataset.level=expired||stale?'stale':limitLevel(window);
+            fill.style.inlineSize=share+'%';
+            track.append(fill);row.append(track);
+          }else if(limit.state==='exhausted'){
+            meta.append(el('span',tr('Лимит исчерпан'),'am-muted'));
+          }
+          provider.append(row);
+        }
+        group.append(provider);
+      }
+      groups.push(group);
+    }
+    body.replaceChildren(...(groups.length?groups:[el('p',tr('Замеров лимитов пока нет.'),'am-agent-limits-empty am-small am-muted')]));
+  }
+  limitsTrigger.addEventListener('click',()=>{
+    if(limitsMenu.matches(':popover-open')){limitsMenu.hidePopover();return;}
+    renderAgentLimits();
+    limitsMenu.showPopover();
+    positionPopover(limitsMenu,limitsTrigger,360,false,true);
+    limitsMenu.focus();
+  });
+  limitsMenu.addEventListener('toggle',()=>limitsTrigger.setAttribute('aria-expanded',String(limitsMenu.matches(':popover-open'))));
+  limitsMenu.addEventListener('keydown',event=>{
+    if(event.key!=='Escape')return;
+    event.preventDefault();event.stopPropagation();
+    limitsMenu.hidePopover();limitsTrigger.focus();
+  });
+  function updateOpenAgentLimits(){
+    if(limitsMenu.matches(':popover-open'))renderAgentLimits();
+  }
+  window.addEventListener('resize',()=>{
+    if(limitsMenu.matches(':popover-open'))positionPopover(limitsMenu,limitsTrigger,360,false,true);
+  });
   function limitRing(l){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 18 18');svg.setAttribute('class','am-ring');svg.setAttribute('aria-hidden','true');
     const ring=(cls,share)=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','9');c.setAttribute('cy','9');c.setAttribute('r','7');c.setAttribute('class',cls);
@@ -3800,12 +4496,13 @@
     // Like installing, removing runs in a terminal: it shows what it will
     // remove and asks there (owner, 2026-11-15: no web pages).
     askConfirm(tr('Удалить ')+names[provider]+' CLI?',tr('Откроется терминал: он покажет, что будет удалено, и спросит подтверждение. Вход в агент и настройки Kotel сохранятся.'),tr('Открыть терминал'),async()=>{
-      try{await postAPI('/api/agent-uninstall',{provider});noteRow(provider+':auth',tr('Терминал удаления открыт'),15000);}
+      try{await postAPI('/api/agent-uninstall',{provider});noteRow(provider+':program',tr('Терминал удаления открыт'),15000);}
       catch(error){showError(error);}
     });
   }
   let agentComputer='local';
   function renderAgents(){
+    renderAgentSetupActions();
     const live=$('agents'),cards=live.cloneNode(false);
     if(taskSidebarPreview){
       const options=computerOptions();
@@ -3816,7 +4513,12 @@
       syncSelects();
     }
     const computer=taskSidebarPreview?agentComputer:computerFilter;
-    if(computer&&computer!=='local'){renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
+    if(computer&&computer!=='local'){delete live.dataset.localGroups;renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
+    const groups=new Map([
+      ['installed',[tr('Установлено'),[]]],
+      ['available',[tr('Доступны для установки'),[]]],
+      ['checking',[tr('Проверка установки'),[]]]
+    ]);
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
@@ -3836,78 +4538,49 @@
       sw.title=on?tr('Kotel даёт задачи ')+names[provider]+tr(' на этом компьютере'):cli?tr('Включить: Kotel будет давать задачи ')+names[provider]:tr('Сначала установите ')+names[provider]+' CLI';
       sw.disabled=!a&&!cli;
       sw.addEventListener('click',async()=>{sw.disabled=true;try{await setAgentOn(provider,!on);}finally{sw.disabled=false;}});
-      const recheck=iconButton(busy?tr('Проверяем'):cli?tr('Проверить снова'):tr('Найти'),checkPath,false,()=>{if(cli)checkCard(provider);else installAgent(provider,'find');});
-      recheck.disabled=busy;
-      head.append(heading,recheck,iconButton(tr('Настройки'),gearPath,true,()=>openAgentSetup(provider)),sw);
-      card.append(head);
-      const steps=el('div',undefined,'am-steps');
-      // mark: 'ok', 'no', a step number, or a node (the limit ring).
-      const step=(mark,title,sub,action,tip)=>steps.append(stepRow(mark,title,sub,action,tip));
-      const check=agentChecks.get(provider),auth=check?.authentication?.state;
-      // 1. The program.
-      const programNote=rowNote.get(provider+':program');
-      if(programNote)step(1,names[provider]+' CLI',programNote,setupRecoverable.has(provider)?[tr('Найти'),()=>installAgent(provider,'find')]:undefined);
-      else if(missing)step('no',names[provider]+tr(' CLI не установлен'),tr('Не найден на этом компьютере'),[tr('Установить'),()=>installAgent(provider)]);
-      else if(cli){
-        // T-139: a CLI newer than the one this release was checked with.
-        const newer=check?.tested==='newer';
-        let sub=check?.version?.value||(busy?tr('Проверяем'):'');
-        if(newer){
-          const box=document.createDocumentFragment(),mark=el('span',', '+tr('не проверена'),'am-status-wait');
-          mark.title=tr('Kotel проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
-          box.append(el('span',sub),mark);sub=box;
+      head.append(heading);
+      if(cli||a){
+        const running=a?.project_running||0,todayTasks=a?.project_today||0;
+        if(running||todayTasks){
+          const activity=el('button',[running?running+tr(' идёт'):'',todayTasks?todayTasks+tr(' сегодня'):''].filter(Boolean).join(', '),'am-agent-activity am-quiet-button');
+          activity.type='button';activity.title=tr('Задачи');
+          activity.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
+          head.append(activity);
         }
-        step('ok',names[provider]+tr(' CLI установлен'),sub,[tr('Удалить'),()=>uninstallAgent(provider)]);
+        head.append(sw);
+      }else if(missing){
+        const install=el('button',tr('Установить'));
+        install.type='button';install.addEventListener('click',()=>{openAgentSetup(provider);installAgent(provider);});
+        head.append(install);
+      }else{
+        head.append(el('span',tr('Проверяем'),'am-muted am-small'));
       }
-      else step(1,names[provider]+' CLI',tr('Проверяем'));
-      // 2. The sign-in. No confirmed login offers «Войти» (T-056).
-      const authNote=rowNote.get(provider+':auth');
-      if(!cli)step(2,tr('Вход в аккаунт'),tr('После установки'));
-      else if(authNote)step(2,tr('Вход в аккаунт'),authNote);
-      else if(busy&&!check)step(2,tr('Вход в аккаунт'),tr('Проверяем'));
-      else if(auth==='authenticated'){
-        const method=check.authentication.value==='chatgpt'?tr('Аккаунт ChatGPT'):check.authentication.value==='api_key'?tr('Ключ API'):'';
-        step('ok',tr('Вход выполнен'),method,[tr('Выйти'),()=>logoutFromCard(provider,cli,profile)]);
+      const settings=iconButton(tr('Настройки'),[],false,()=>openAgentSetup(provider));
+      settings.replaceChildren($('settings-open').querySelector('svg').cloneNode(true));
+      head.append(settings);
+      card.append(head);
+      groups.get(cli||a?'installed':missing?'available':'checking')[1].push(card);
+    }
+    if(!live.hasAttribute('data-local-groups'))live.replaceChildren();
+    live.dataset.localGroups='';
+    const existing=new Map([...live.querySelectorAll('.am-agent-card[data-provider]')].map(card=>[card.dataset.provider,card]));
+    for(const [key,[title,providers]] of groups){
+      let section=live.querySelector('[data-agent-group="'+key+'"]');
+      if(!section){
+        section=el('section',undefined,'am-settings-group am-agent-section');
+        section.dataset.agentGroup=key;
+        section.append(el('h3',title),el('div',undefined,'am-agent-roster'));
+        live.append(section);
       }
-      else if(auth==='not_authenticated')step('no',tr('Вход не выполнен'),tr('Войдите в аккаунт агента'),[tr('Войти'),()=>loginFromCard(provider,cli,profile)]);
-      else step(2,tr('Вход в аккаунт'),check?tr('Не удалось проверить'):tr('Ещё не проверен'),[tr('Войти'),()=>loginFromCard(provider,cli,profile)]);
-      // 3. Work with Kotel: set only by what a task showed (D-070).
-      const trust=a?.trust?.state;
-      if(a&&view?.folder&&trust&&trust!=='trusted')step('no',tr('Не доверяет папке проекта'),tr('Подтвердите доверие в терминале'),[tr('Доверять'),()=>trustFolder(provider)],a.trust?.hint);
-      else if(a?.last_done)step('ok',tr('Работает с Kotel'),tr('Последняя задача ')+dayClock(a.last_done));
-      else step(3,tr('Работает с Kotel'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
-      // 4. The limit the agent reported during its last task (T-044).
-      const l=a?.limit,level=limitLevel(l);
-      const today=a?.today_tokens?tr('сегодня ')+tokensText(a.today_tokens)+tr(' токенов'):'';
-      if(l){
-        const title=el('span');title.append(tr('Лимит '));
-        const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?tr('исчерпан'):l.state==='warning'?tr('близко к пределу'):tr('в норме');
-        title.append(el('span',used,'am-status-'+level));
-        const r=l.resets_at?tr('сброс ')+resetText(l.resets_at):'';
-        const sub=[limitWindow(l.window),r,today].filter(Boolean).join(', ');
-        step(limitRing(l),title,sub?sub[0].toUpperCase()+sub.slice(1):(l.observed_at?tr('По данным задачи в ')+clock(l.observed_at):''));
-      }else step(limitRing(null),tr('Лимит'),today?today[0].toUpperCase()+today.slice(1):tr('Появится после задачи исполнителя на этом компьютере'));
-      card.append(steps);
-      if(busy)steps.querySelectorAll('button').forEach(button=>button.disabled=true);
-      const running=a?.project_running||0,todayTasks=a?.project_today||0;
-      const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
-      if(running||todayTasks){
-        const label=el('span');label.append(tr('Задачи: '));
-        if(running)label.append(el('span',running+tr(' идёт'),'am-status-run'));
-        if(running&&todayTasks)label.append(', ');
-        if(todayTasks)label.append(todayTasks+tr(' сегодня'));
-        tasks.append(label);
-        tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
-      }else{tasks.textContent=tr('Задачи');tasks.disabled=true;}
-      card.append(tasks);cards.append(card);
+      section.hidden=!providers.length;
+      const roster=section.lastElementChild;
+      providers.forEach((card,index)=>{
+        const old=existing.get(card.dataset.provider);
+        const node=old?.outerHTML===card.outerHTML?old:card;
+        if(old&&node!==old)old.remove();
+        if(roster.children[index]!==node)roster.insertBefore(node,roster.children[index]||null);
+      });
     }
-    // A check on one provider must not replace the other providers' cards.
-    for(const [index,card] of [...cards.children].entries()){
-      const previous=live.children[index];
-      if(previous?.outerHTML===card.outerHTML)continue;
-      if(previous)previous.replaceWith(card);else live.append(card);
-    }
-    while(live.children.length>3)live.lastElementChild.remove();
     renderAccessBar();
   }
   // Another computer's agents, as its reports show them: view only (T-076).
@@ -4009,6 +4682,7 @@
       // only then the owner is asked.
       if(info.outdated&&info.restart&&info.client==='running'&&!autoRestarted&&!restart.busy&&!restart.ask){autoRestarted=true;restartClient(false);return;}
       renderRestart();
+      renderManualUpdateControls();
     }catch(_){}
   }
   // T-123: «Дождаться и перезапустить» keeps asking the client every few
@@ -4168,7 +4842,7 @@
       if(!v.projects.some(p=>p.name===project))setProject(v.project||'');
       if(v.history_unchanged){
         const live=new Set(v.tasks.map(t=>t.id));
-        v.tasks.push(...(view?.tasks||[]).filter(t=>finishedStates.includes(t.state)&&!live.has(t.id)));
+        v.tasks.push(...(view?.tasks||[]).filter(t=>finishedStates.includes(t.state)&&!t.keep_open&&!live.has(t.id)));
         if(view?.history_next)v.history_next=view.history_next;
         delete v.history_unchanged;
       }
@@ -4191,6 +4865,7 @@
         render();if(taskSidebarPreview)loadSidebarProjects();
       }
       else if(cameOnline){renderMachines();renderNotice();}
+      updateOpenAgentLimits();
       applyTopTaskScope();
       // Nothing chosen yet (the first start, or the chosen task went away):
       // show the top task instead of an empty conversation.
@@ -4232,6 +4907,7 @@
         if(tab==='stats'&&!statistics.open)statistics.showModal();
       }else if(!dialog.open)dialog.showModal();
     }
+    renderNotices();
     $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='project')renderProjectPage();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
     if(tab==='tasks'&&setupPaneShown())renderThread();
@@ -4650,6 +5326,7 @@
         const sharedRuns=()=>JSON.stringify([view,taskListView(passiveProject())].flatMap(snapshot=>(snapshot?.shared||[]).flatMap(p=>p.tasks.filter(t=>(!t.started_at||t.pending_launch||!peerFresh(p))&&sharedWorkerRunning(t)).map(t=>t.id))));
         const previous=sharedRuns(),previousPeers=welcomePeerCount(),wasHosting=!!server?.host?.running;
         server=next;
+        updateOpenAgentLimits();
         if(draftOpen)renderTaskDraft();
         else if(tab==='tasks'&&setupPaneShown()&&(previousPeers!==welcomePeerCount()||wasHosting!==!!next.host?.running||
           taskSidebarPreview&&view?.project&&canDraftTask(sidebarProject||project)))renderThread();
@@ -4753,6 +5430,7 @@
     $('member-since').textContent=connectionTimestamp(m.connected_at)||'—';
     const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=serverBusy);
     if(!serverBusy)$('host-invite').disabled=!h.addresses.length;
+    renderManualUpdateControls();
     renderHostToggle();
     syncSelects();renderNotes();
     if(focused&&document.activeElement===document.body)root.querySelector('[data-key="'+CSS.escape(focused)+'"]')?.focus();
@@ -4882,7 +5560,8 @@
     }catch(e){$('fb-status').textContent=e.message;}
     finally{fbExportLabel();}
   }
-  function openProjectDialog(){
+  function openProjectDialog(fromDraft=false){
+    $('project-dialog').toggleAttribute('data-from-draft',fromDraft===true);
     $('project-name').value='';$('project-folder').value='';$('project-rules').value='';$('project-status').textContent='';
     $('project-dialog').showModal();
   }
@@ -4895,7 +5574,10 @@
       const rules=$('project-rules').value.trim();
       if(rules)await postAPI('/api/project-rules',{name,rules});
       setProject(name);remember('messenger-project',name);
+      const fromDraft=$('project-dialog').hasAttribute('data-from-draft');
       $('project-dialog').close();viewSignature='';await refresh();
+      if($('window-setup-dialog')?.open){setupChoice='';renderWindowSetup();}
+      if(fromDraft&&draftOpen){renderTaskDraft(name);$('task-draft-text').focus();}
       // Connect the coordinator right away; the result is shown, not retried.
       if(view?.project===name)await connectReadyCoordinators();
     }catch(error){$('project-status').textContent=error.message;}
@@ -4983,12 +5665,11 @@
   // A row note shows for a while, then the row offers its action again.
   function noteRow(key,text,ms){rowNote.set(key,text);renderAgents();if(ms)setTimeout(()=>{if(rowNote.get(key)===text){rowNote.delete(key);renderAgents();}},ms);}
   async function installAgent(provider,action='install'){
-    setupRecoverable.delete(provider);
     noteRow(provider+':program',tr('Открываем терминал…'));
     try{const state=await postAPI(action==='find'?'/api/agent-find':'/api/agent-install',{provider,action});setupPending=true;setupSeen.delete(state.id);await pollSetup();}
     catch(error){rowNote.delete(provider+':program');renderAgents();showError(error);}
   }
-  const setupSeen=new Map(),setupFinishing=new Set(),setupRecoverable=new Set();let setupPolling=false,setupPending=false;
+  const setupSeen=new Map(),setupFinishing=new Set();let setupPolling=false,setupPending=false;
   async function pollSetup(){
     if(setupPolling)return;setupPolling=true;
     try{
@@ -5003,11 +5684,9 @@
         }
         if(setupSeen.get(id)===state.state)continue;setupSeen.set(id,state.state);
         if(state.state==='running'||state.state==='unknown'){
-          if(state.action==='install')setupRecoverable.add(provider);
           noteRow(provider+':program',state.action==='install'?tr('Нет подтверждения из терминала. Если он закрыт, нажмите «Найти».'):tr('Поиск не подтверждён. Проверьте терминал или выберите файл CLI в настройках.'));
         }
         else if(state.state==='connected'){
-          setupRecoverable.delete(provider);
           rowNote.delete(provider+':program');viewSignature='';await refresh();await loadDiscovery();checkCard(provider,true);
           if(setupProvider===provider&&$('agent-setup').open)$('agent-cli').value=state.cli;
         }else if(state.state==='failed')noteRow(provider+':program',tr('Установка или поиск не завершились. Проверьте терминал; можно выбрать файл CLI в настройках.'),15000);
@@ -5049,6 +5728,42 @@
     const agent=(view?.agents||[]).find(a=>a.agent===provider);
     return view?.coordinator_models?.[provider]??(agent?agent.models||[]:defaultModels[provider]||[]);
   }
+  function renderAgentSetupActions(){
+    const dialog=$('agent-setup');
+    if(!dialog.open||!setupProvider)return;
+    const provider=setupProvider,{cli,environment}=agentPaths(provider);
+    const agent=view?.agents?.find(a=>a.agent===provider);
+    const check=agentChecks.get(provider),auth=check?.authentication?.state;
+    const steps=el('div',undefined,'am-steps am-agent-setup-actions');
+    steps.id='agent-setup-actions';steps.dataset.selection=JSON.stringify([provider,cli,environment]);
+    const programNote=rowNote.get(provider+':program');
+    let program=programNote||check?.version?.value||'';
+    if(!programNote&&check?.tested==='newer'){
+      const version=el('span',program);
+      const newer=el('span',', '+tr('не проверена'),'am-status-wait');
+      newer.title=tr('Kotel проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
+      version.append(newer);program=version;
+    }
+    const programRow=stepRow(cli?'ok':1,names[provider]+' CLI',program,programNote?null:
+      cli?[tr('Удалить'),()=>uninstallAgent(provider)]:[tr('Установить'),()=>installAgent(provider)]);
+    programRow.querySelector('.am-step-sub')?.setAttribute('role','status');
+    steps.append(programRow);
+    if(cli){
+      const authNote=rowNote.get(provider+':auth');
+      const authRow=stepRow(auth==='authenticated'?'ok':2,tr('Вход в аккаунт'),
+        authNote||(auth==='authenticated'?tr('Вход выполнен'):auth==='not_authenticated'?tr('Вход не выполнен'):tr('Ещё не проверен')),
+        authNote||checking.has(provider)?null:auth==='authenticated'?[tr('Выйти'),()=>logoutFromCard(provider,cli,environment)]:[tr('Войти'),()=>loginFromCard(provider,cli,environment)]);
+      authRow.querySelector('.am-step-sub')?.setAttribute('role','status');
+      steps.append(authRow);
+      if(view?.folder&&agent?.trust?.state&&agent.trust.state!=='trusted'){
+        steps.append(stepRow('no',tr('Не доверяет папке проекта'),tr('Подтвердите доверие в терминале'),[tr('Доверять'),()=>trustFolder(provider)],agent.trust?.hint));
+      }
+    }
+    const previous=$('agent-setup-actions');
+    if(previous?.outerHTML===steps.outerHTML)return;
+    if(previous)previous.replaceWith(steps);
+    else $('agent-models-open').closest('.am-agent-settings-rows').after(steps);
+  }
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent=tr('Настройки: ')+names[provider];
@@ -5056,7 +5771,9 @@
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
     $('agent-models-open').disabled=!view;
     setStatus('agent-save-status','');
+    $('agent-setup-actions')?.remove();
     if(!$('agent-setup').open)$('agent-setup').showModal();
+    renderAgentSetupActions();renderToasts();
   }
   // One check at a time: the client refuses a second one while one runs.
   let checkQueue=Promise.resolve();
@@ -5200,7 +5917,7 @@
     const make=(action,label,paths,cls)=>{const b=el('button',undefined,'am-window-btn'+(cls?' '+cls:''));b.type='button';b.title=label;b.setAttribute('aria-label',label);b.tabIndex=-1;b.append(svgIcon(paths));b.addEventListener('click',()=>window.amWindow(action));bar.append(b);};
     make('minimize',tr('Свернуть'),['M5 12h14']);
     make('maximize',tr('Развернуть'),['M6 6h12v12H6z']);
-    make('close',tr('Закрыть'),['M6 6l12 12M18 6L6 18'],'am-window-close');
+    make('close',tr('Закрыть'),closeIconPaths,'am-window-close');
     if(taskSidebarPreview)bar.prepend($('list-toggle'));
     root.append(bar);
     const dragZone=e=>{
@@ -5266,12 +5983,15 @@
           if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
         }
       }
-      const message={zones:zones.map(box),holes:holes.map(box)},text=JSON.stringify(message);
+      const fileDrop=tab==='tasks'&&!root.querySelector('dialog:modal')?[root.querySelector('.am-chat-body')?.getBoundingClientRect()].filter(Boolean):[];
+      const message={zones:zones.map(box),holes:holes.map(box),fileDrop:fileDrop.map(box),fileDropDraft:draftOpen?draftAttachmentContext:null},text=JSON.stringify(message);
       if(text!==last){last=text;bridge.postMessage(message);}
     };
     const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
     new ResizeObserver(later).observe(document.documentElement);
     if(toolbar)new ResizeObserver(later).observe(toolbar);
+    new MutationObserver(later).observe($('task-draft'),{attributeFilter:['hidden']});
+    $('task-draft-computer').addEventListener('change',later);
     if(navToggle)new MutationObserver(later).observe(navToggle,{attributeFilter:['aria-expanded']});
     for(const node of document.querySelectorAll('.am-tabs,.am-sidebar,.am-task-toolbar'))new MutationObserver(later).observe(node,{childList:true,subtree:true,attributes:true});
     const modalObserver=new MutationObserver(later);
@@ -5282,12 +6002,13 @@
   window.messengerRefresh=()=>{viewSignature='';refresh();};
   // «Выбрать»: the local server opens the system's own dialog (D-053); the
   // Mac app keeps its native folder dialog for the project folder.
-  async function requestPath(kind,current){
+  async function choosePath(kind,current){
     const response=await fetch('/api/pick',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({kind,current}),cache:'no-store',signal:AbortSignal.timeout(610000)});
     const result=await response.json().catch(()=>({}));
     if(!response.ok||result.ok!==true)throw Error(result.detail||tr('Окно выбора не открылось. Вставьте путь вручную.'));
-    return result.path;
+    return result;
   }
+  async function requestPath(kind,current){return (await choosePath(kind,current)).path;}
   function pickerError(error){return error.name==='TimeoutError'?tr('Окно выбора не ответило. Вставьте путь вручную.'):error.message;}
   async function pick(field,kind,status){
     const input=$(field);$(status).textContent='';
@@ -5336,10 +6057,139 @@
     for(const v of [clientInfo?.window_version,clientInfo?.client_version,knownUpdate,...(server?.peers||[]).map(p=>p.version)])if(v&&(!best||versionOlder(best,v)))best=v;
     return best;
   }
-  // The update icon says in its tooltip which version came out (T-066).
+  let updateCheckScope='',checkedLocalUpdate='',networkUpdatesSending=false;
+  function localUpdateRunning(){return !!(updateRun&&!updateRun.error);}
+  function renderManualUpdateControls(installed=''){
+    const version=$('settings-program-version');
+    if(version){
+      const current=installed||clientInfo?.window_version||'';
+      if(current||!version.textContent)version.textContent=current?versionName(current):'—';
+    }
+    const local=$('settings-update-check');
+    if(local){
+      local.textContent=updateCheckScope==='local'?tr('Проверка обновлений…'):tr('Проверить обновления');
+      local.disabled=!!updateCheckScope||localUpdateRunning()||updateInProgress(updateMark(null));
+      const menuCheck=$('settings-menu-update');
+      menuCheck.lastElementChild.textContent=local.textContent;
+      menuCheck.disabled=local.disabled;
+      $('settings-update-install').hidden=!checkedLocalUpdate;
+      $('settings-update-install').disabled=local.disabled;
+    }
+    const network=$('settings-network-update-check');
+    if(network){
+      $('settings-network-update-row').hidden=!updateNetwork()||!(server?.peers||[]).length;
+      network.textContent=updateCheckScope==='network'?tr('Проверка обновлений…'):tr('Проверить обновления');
+      network.disabled=!!updateCheckScope||localUpdateRunning()||serverBusy||networkUpdatesSending;
+    }
+    renderDeviceMenuFooter();
+  }
+  async function manualUpdateCheck(scope){
+    if(updateCheckScope||localUpdateRunning()||(scope==='network'&&networkUpdatesSending))return;
+    const network=updateNetwork();
+    const target=scope==='local'||scope==='network'?null:server?.peers?.find(peer=>peer.id===scope);
+    updateCheckScope=scope;
+    renderManualUpdateControls();
+    updateNotice('updating',tr('Проверка обновлений…'),target?.name||'');
+    try{
+      const result=await postAPI('/api/update-check',{},24500);
+      const published=result.version;
+      if(typeof published!=='string'||!published)throw Error(tr('Не удалось проверить обновления.'));
+      if(scope==='local'){
+        if(typeof result.installed_version!=='string'||!result.installed_version)throw Error(tr('Версия неизвестна'));
+        renderManualUpdateControls(result.installed_version);
+        checkedLocalUpdate=versionOlder(result.installed_version,published)?published:'';
+        if(checkedLocalUpdate)updateNotice('info',tr('Доступна версия ')+versionName(published),'',startCheckedLocalUpdate);
+        else updateNotice('info',tr('Установлена последняя версия.'));
+      }else{
+        await loadServer();
+        if(!network||updateNetwork()!==network)throw Error(tr('Сеть недоступна.'));
+        if(scope==='network'){
+          updateNotice('info','','');
+          showNetworkUpdateReview(published,network);
+        }else{
+          const peer=server?.peers?.find(item=>item.id===scope);
+          if(!peer||!peerFresh(peer))throw Error(tr('Компьютер не в сети.'));
+          const checked=networkUpdateStatus(peer,published);
+          const action=checked.available?()=>{
+            const current=server?.peers?.find(item=>item.id===scope);
+            if(updateNetwork()===network&&current&&networkUpdateStatus(current,published).available)confirmPeerUpdate(current,versionName(published));
+            else updateNotice('info',tr('Пропущено: состояние изменилось'));
+          }:null;
+          updateNotice('info',checked.status,peer.name,action);
+        }
+      }
+      if(!knownUpdate||versionOlder(knownUpdate,published))knownUpdate=published;
+      renderMachines();
+    }catch(error){
+      updateNotice('bad',tr('Не удалось проверить обновления.'),error.message===tr('Не удалось проверить обновления.')?'':tr(error.message));
+    }finally{
+      updateCheckScope='';
+      renderManualUpdateControls();
+    }
+  }
+  function startCheckedLocalUpdate(){
+    if(!checkedLocalUpdate||updateCheckScope||updateInProgress(updateMark(null))||localUpdateRunning())return;
+    if(window.webkit?.messageHandlers?.updates)startMacUpdate(checkedLocalUpdate,true);
+    else void startUpdate(checkedLocalUpdate,true);
+  }
+  function networkUpdateStatus(peer,published){
+    const installed=peerInstalledVersion(peer)||'';
+    if(!peerFresh(peer)||peer.reconnecting)return {installed,status:tr('Не в сети')};
+    if(updateInProgress(updateMark(peer)))return {installed,status:tr('Обновление уже идёт')};
+    if(!installed||installed==='dev')return {installed,status:tr('Версия неизвестна')};
+    if(versionOlder(installed,published))return {installed,status:tr('Опубликована ')+versionName(published),available:true};
+    return {installed,status:tr('Установлена последняя версия')};
+  }
+  function showNetworkUpdateReview(published,network){
+    const dialog=$('network-update-dialog'),rows=$('network-update-rows'),submit=$('network-update-send');
+    const peers=[...(server?.peers||[])].sort((a,b)=>Number(!!a.host)-Number(!!b.host));
+    const targets=[];
+    rows.replaceChildren();
+    for(const peer of peers){
+      const {installed,status,available}=networkUpdateStatus(peer,published);
+      const feedback=el('span',status,'am-muted');
+      const row=el('li',undefined,'am-network-update-row');
+      row.append(el('span',peer.name||tr('Компьютер')),el('span',versionName(installed)||'—','am-muted'),feedback);
+      rows.append(row);
+      if(available)targets.push({peer,feedback});
+    }
+    $('network-update-note').textContent=!rows.children.length?tr('В сети нет других компьютеров.'):targets.length?
+      tr('Компьютеры проверят обновление перед установкой. Если есть выполняющиеся задачи, установка подождёт.')+(targets.some(({peer})=>peer.host)?' '+tr('Запрос серверу уйдёт последним. При перезапуске сервера связь временно пропадёт.'):''):'';
+    submit.hidden=!targets.length;
+    submit.disabled=false;
+    submit.onclick=async()=>{
+      if(networkUpdatesSending)return;
+      networkUpdatesSending=true;
+      submit.disabled=true;
+      renderManualUpdateControls();
+      try{
+        for(const {peer,feedback} of targets){
+          const current=server?.peers?.find(item=>item.id===peer.id);
+          if(!current||updateNetwork()!==network||!networkUpdateStatus(current,published).available){
+            feedback.textContent=tr('Пропущено: состояние изменилось');
+            continue;
+          }
+          feedback.textContent=tr('Отправка запроса…');
+          const error=await requestUpdate(current);
+          feedback.textContent=error||tr('Запрос отправлен');
+        }
+      }finally{
+        networkUpdatesSending=false;
+        submit.hidden=true;
+        renderManualUpdateControls();
+      }
+    };
+    dialog.showModal();
+    renderNotices();
+  }
+  $('settings-update-check').onclick=()=>void manualUpdateCheck('local');
+  $('settings-update-install').onclick=startCheckedLocalUpdate;
+  $('settings-network-update-check').onclick=()=>void manualUpdateCheck('network');
+  $('network-update-close').onclick=()=>$('network-update-dialog').close();
+  $('network-update-dialog').addEventListener('close',renderNotices);
+  // The update icon names the action or shows its active progress.
   function updateTip(version,busy){
-    const name=versionName(version);
-    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Обновить до ')+name:tr('Обновить');
+    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):version?tr('Обновить версию'):tr('Обновить');
     if(busy==='downloading'&&updateProgress)text=tr('Загружается обновление')+(updateProgress.version?' '+versionName(updateProgress.version):'')+': '+Math.floor(100*updateProgress.done/updateProgress.total)+'%';
     $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
   }
@@ -5385,7 +6235,7 @@
     updateTip(version,busy);
     button.classList.toggle('am-update-active',!!busy);
     button.disabled=!!busy;
-    renderDeviceMenuFooter();
+    renderManualUpdateControls(installed);
   }
   // Windows and Linux: the program updates itself from the window (D-048).
   let selfUpdate=null,selfUpdateBusy=false,selfUpdateTimer=0;
@@ -5408,7 +6258,7 @@
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
     updateTip(version,s.state==='downloading'?'downloading':installing?'installing':'');
     $('app-update-button').disabled=installing;
-    renderDeviceMenuFooter();
+    renderManualUpdateControls(installed);
     renderUpdateDialog();
   }
   async function loadSelfUpdate(){
@@ -5420,6 +6270,14 @@
   // dialog shows each step (owner, 2026-11-15: a download first and the same
   // icon again after it was confusing).
   let updateRun=null,updateRunTimer=0;
+  function renderUpdateRunNotice(title,step){
+    if(!updateRun.global)return;
+    const text=updateRun.error||step;
+    const signature=title+'\n'+text;
+    if(signature===updateRun.noticeSignature)return;
+    updateRun.noticeSignature=signature;
+    updateNotice(updateRun.error?'bad':'updating',title,text);
+  }
   function renderUpdateDialog(){
     if(!updateRun)return;
     if(updateRun.mac){renderMacRun();return;}
@@ -5441,6 +6299,7 @@
     else if(p&&p.total>0){share=Math.min(1,p.done/p.total);step=tr('Загрузка…')+' '+Math.floor(100*share)+'%';}
     else{step=tr('Загрузка…');share=0;}
     $('update-step').textContent=step;
+    renderUpdateRunNotice($('update-title').textContent,step);
     $('update-bar-fill').style.setProperty('--am-update-share',String(share));
     $('update-error').textContent=updateRun.error||'';$('update-error').hidden=!updateRun.error;
     $('update-actions').hidden=!updateRun.error;
@@ -5454,10 +6313,10 @@
     pollUpdateProgress();
     updateRunTimer=setTimeout(followUpdate,500);
   }
-  async function startUpdate(){
-    if(!updateRun)updateRun={version:selfUpdate?.version||''};
+  async function startUpdate(version='',global=false){
+    if(!updateRun||global)updateRun={version:version||selfUpdate?.version||'',global};
     Object.assign(updateRun,{error:'',busy:false,back:0});
-    if(!$('update-dialog').open)$('update-dialog').showModal();
+    if(!updateRun.global&&!$('update-dialog').open)$('update-dialog').showModal();
     renderUpdateDialog();
     try{
       const r=await postAPI('/api/self-update',{action:'update'},15000);
@@ -5479,6 +6338,7 @@
     else if(r.total>0){share=Math.min(1,r.done/r.total);step=tr('Загрузка…')+' '+Math.floor(100*share)+'%';}
     else{step=tr('Загрузка…');share=0;}
     $('update-step').textContent=step;
+    renderUpdateRunNotice($('update-title').textContent,step);
     $('update-bar-fill').style.setProperty('--am-update-share',String(share));
     $('update-error').textContent=r.error||'';$('update-error').hidden=!r.error;
     $('update-actions').hidden=!r.error;
@@ -5500,9 +6360,9 @@
     if(updateRun.error)clearTimeout(updateRunTimer);else macRunQuiet();
     renderMacRun();
   };
-  function startMacUpdate(){
-    updateRun={mac:true,version:macUpdate?.version||'',phase:'downloading',done:0,total:0,error:''};
-    if(!$('update-dialog').open)$('update-dialog').showModal();
+  function startMacUpdate(version='',global=false){
+    updateRun={mac:true,version:version||macUpdate?.version||'',global,phase:'downloading',done:0,total:0,error:''};
+    if(!global&&!$('update-dialog').open)$('update-dialog').showModal();
     renderMacRun();macRunQuiet();
     window.webkit.messageHandlers.updates.postMessage('install');
   }
@@ -5529,6 +6389,7 @@
     const toolbar=el('header',undefined,'am-task-toolbar');
     toolbar.append($('task-head'),toggle);
     $('task-layout').prepend(toolbar);
+    installPaneDropTargets();
     toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-label',label);toggle.title=label;
     $('task-panel').setAttribute('aria-label',tr('Архив'));$('task-list-heading').textContent=tr('Архив');
     const plus=$('task-new');
@@ -5543,6 +6404,7 @@
     if(draftOpen)closeTaskDraft();
     if(!taskSidebarPreview&&(!combinedTasks()||computer!==''))taskHistories.clear();
     setProject(name,computer);remember('messenger-project',name);
+    paneActive=shared?null:taskPanes.get(task)||null;
     selectedTask=task;selectedShared=shared;feed=null;feedSignature='';viewSignature='';topTaskScope='';
     if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();
     renderProjects();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();loadProjectActivity();refresh();
@@ -5628,11 +6490,47 @@
   });
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
-  $('settings-open').addEventListener('click',()=>{
+  const settingsTrigger=$('settings-open'),settingsMenu=$('settings-menu');
+  const settingsMenuItems=()=>[...settingsMenu.querySelectorAll('button:not(:disabled)')];
+  const positionSettingsMenu=()=>positionPopover(settingsMenu,settingsTrigger,null,false,true);
+  function toggleSettingsMenu(){
+    if(settingsMenu.matches(':popover-open')){settingsMenu.hidePopover();return;}
+    settingsMenu.showPopover();
+    positionSettingsMenu();
+    settingsMenuItems()[0].focus();
+  }
+  settingsTrigger.addEventListener('click',toggleSettingsMenu);
+  settingsTrigger.addEventListener('keydown',event=>{
+    if(event.key!=='ArrowDown')return;
+    event.preventDefault();
+    if(!settingsMenu.matches(':popover-open'))toggleSettingsMenu();
+  });
+  settingsMenu.addEventListener('toggle',()=>settingsTrigger.setAttribute('aria-expanded',String(settingsMenu.matches(':popover-open'))));
+  settingsMenu.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!event.isComposing){
+      event.preventDefault();event.stopPropagation();
+      settingsMenu.hidePopover();settingsTrigger.focus();return;
+    }
+    const direction=event.key==='ArrowDown'?1:event.key==='ArrowUp'?-1:0;
+    if(!direction)return;
+    event.preventDefault();
+    const entries=settingsMenuItems(),index=entries.indexOf(document.activeElement);
+    entries[(index+direction+entries.length)%entries.length].focus();
+  });
+  window.addEventListener('resize',()=>{if(settingsMenu.matches(':popover-open'))positionSettingsMenu();});
+  const openSettingsAction=$('settings-menu-open');
+  openSettingsAction.prepend(settingsTrigger.querySelector('svg').cloneNode(true));
+  function chooseSettingsAction(action){
+    settingsMenu.hidePopover();
+    settingsTrigger.focus();
+    action();
+  }
+  $('settings-menu-update').addEventListener('click',()=>chooseSettingsAction(()=>void manualUpdateCheck('local')));
+  openSettingsAction.addEventListener('click',()=>chooseSettingsAction(()=>{
     $('auto-update-status').textContent='';
     if(taskSidebarPreview)show('settings');
-    else{$('settings-dialog').showModal();loadServer();}
-  });
+    else{$('settings-dialog').showModal();renderNotices();loadServer();}
+  }));
   $('settings-dialog').addEventListener('close',renderNotices);
   if(taskSidebarPreview){
     const dialog=$('settings-dialog');
@@ -5641,7 +6539,7 @@
     const panel=el('div',undefined,'am-settings');
     const card=el('div',undefined,'am-card');
     card.append(preferences);
-    panel.append(el('h3',tr('Общие')),card);
+    panel.append(el('h2',tr('Общие')),card);
     $('settings-page').append(panel);
     const layout=el('div',undefined,'am-settings-layout');
     const sections=el('nav',undefined,'am-settings-nav');
@@ -5685,7 +6583,7 @@
   $('auto-update-toggle').addEventListener('click',toggleAutoUpdate);
   $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
   setupPictureViewer();
-  $('fb-open').addEventListener('click',openFeedback);
+  $('fb-open').addEventListener('click',()=>chooseSettingsAction(openFeedback));
   $('fb-close').addEventListener('click',()=>$('fb-dialog').close());
   $('fb-save').addEventListener('click',saveFeedback);
   $('fb-export').addEventListener('click',exportFeedback);
@@ -5729,7 +6627,7 @@
   $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
   framelessWindow();
   macTitlebar();
-  $('agent-cli-find').addEventListener('click',()=>{const provider=setupProvider;$('agent-setup').close();installAgent(provider,'find');});
+  $('agent-cli-find').addEventListener('click',()=>installAgent(setupProvider,'find'));
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
   $('restart-dialog').addEventListener('cancel',event=>{
@@ -5744,6 +6642,7 @@
   });
   $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent=tr('Скопировано');}catch(_){b.textContent=tr('Не удалось скопировать');}setTimeout(()=>b.textContent=tr('Скопировать команду'),2000);});
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
+  $('agent-setup').addEventListener('close',renderToasts);
   $('agent-cli').addEventListener('change',saveAgentPaths);
   $('agent-profile').addEventListener('change',saveAgentPaths);
   $('agent-models-open').addEventListener('click',openModelPicker);
@@ -5805,17 +6704,24 @@
   if(taskSidebarPreview){
     enhanceSelect($('stats-computer'));enhanceSelect($('agents-computer'));
     const draftContextIcons={
-      'task-draft-project':['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'],
+      'task-draft-project':folderIconPaths,
       'task-draft-computer':serverIconPaths
     };
     for(const id of ['task-draft-project','task-draft-computer','task-draft-model']){
       const select=$(id),paths=draftContextIcons[id];
       const trigger=enhanceSelect(select,id==='task-draft-model');
       if(paths)trigger.prepend(svgIcon(paths));
-      select.addEventListener('change',renderTaskDraft);
+      select.addEventListener('change',()=>{
+        if(id==='task-draft-project'&&select.value==='__new'){
+          renderTaskDraft(select.dataset.selectedProject);
+          openProjectDialog(true);
+          $('project-pick').click();
+        }else renderTaskDraft();
+      });
     }
     setupComposerPaths();
     setupComposerTokens();
+    setupComposerCommands();
     $('task-draft').addEventListener('submit',sendTaskDraft);
     $('task-draft-text').addEventListener('input',event=>{
       sizeComposer(event.currentTarget);
@@ -5836,11 +6742,12 @@
       unavailable:tr('Для языка интерфейса недоступно распознавание речи на этом Mac.'),
       'microphone-denied':tr('Разрешите Kotel доступ к микрофону в настройках macOS.'),
       'speech-denied':tr('Разрешите Kotel распознавание речи в настройках macOS.'),
+      'dictation-disabled':tr('Служба распознавания Apple недоступна. Проверьте настройки Siri и диктовки в macOS.'),
       'microphone-unavailable':tr('Микрофон недоступен.'),
       empty:tr('Не удалось расслышать речь.'),
       failed:tr('Не удалось распознать речь. Попробуйте снова.')
     };
-    const microphone=['M9 6a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z','M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3'];
+    const microphone=['M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z','M5 10v1a7 7 0 0 0 14 0v-1M12 18v3M9 21h6'];
     const square=['M7 7h10v10H7z'];
     const targets=[];
     let active=null;
@@ -5899,7 +6806,8 @@
       button.hidden=true;
       status.setAttribute('role','status');
       input.after(button);
-      input.parentElement.after(status);
+      const statusAnchor=input.form||input.parentElement;
+      statusAnchor.append(status);
       const target={input,button,status,key:''};
       targets.push(target);
       paint(target);
@@ -5959,12 +6867,12 @@
   enhanceSelect(chatFont);
   chatFont.addEventListener('change',()=>applyChatFont(true));
   const noticeDismissal=$('notice-dismissal');
-  noticeDismissal.value=autoCloseNotices?'automatic':'manual';
+  noticeDismissal.value=noticeMode;
   enhanceSelect(noticeDismissal);
   noticeDismissal.addEventListener('change',()=>{
-    autoCloseNotices=noticeDismissal.value==='automatic';
-    remember(noticePreference,noticeDismissal.value);
-    notices.forEach(scheduleNoticeClose);
+    noticeMode=noticeDismissal.value;
+    remember(noticePreference,noticeMode);
+    notices.forEach(scheduleNoticeClose);renderNotices();
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
@@ -5989,10 +6897,7 @@
     chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');
     const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;
   })).observe(chatFooter);
-  new ResizeObserver(()=>{
-    updateNoticeTooltips();
-    const thread=$('thread');if(feedPinned)thread.scrollTop=thread.scrollHeight;
-  }).observe($('notices'));
+  new ResizeObserver(updateNoticeTooltips).observe($('notices'));
   if(taskSidebarPreview){
     try{
       for(const saved of JSON.parse(recall('kotel-task-panes')||'[]')){
@@ -6001,7 +6906,232 @@
       paneActive=taskPanes.get(recall('kotel-active-pane'))||taskPanes.values().next().value||null;
     }catch(_){}
   }
-  show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
+  // Sleep preference is owned by the local client, so closing the window
+  // doesn't release the hold while an agent is still running.
+  const sleepOptions=[['off',tr('Разрешить сон')],['working',tr('Пока работают агенты')],['always',tr('Пока запущен Kotel')]];
+  const sleepButton=iconButton(tr('Режим сна'),['M21 13.2A9 9 0 1 1 10.8 3 7 7 0 0 0 21 13.2Z'],false,()=>openSleepMenu());
+  sleepButton.id='sleep-open';
+  sleepButton.className='am-fb-open am-icon-btn am-chrome-icon';
+  sleepButton.hidden=true;
+  sleepButton.setAttribute('aria-haspopup','dialog');
+  sleepButton.setAttribute('aria-controls','sleep-menu');
+  sleepButton.setAttribute('aria-expanded','false');
+  const sleepMenu=el('div',undefined,'am-select-menu am-sleep-menu');
+  sleepMenu.id='sleep-menu';sleepMenu.setAttribute('popover','auto');sleepMenu.setAttribute('role','dialog');
+  sleepMenu.setAttribute('aria-label',tr('Режим сна'));sleepMenu.tabIndex=-1;
+  $('limits-open').after(sleepButton,sleepMenu);
+  const preferencesPanel=root.querySelector('.am-prefs');
+  const sleepSetting=el('div',undefined,'am-theme-setting');
+  const sleepLabel=el('label',tr('Режим сна'));sleepLabel.htmlFor='sleep-setting';
+  const sleepSelect=el('select');sleepSelect.id='sleep-setting';
+  sleepSetting.append(sleepLabel,sleepSelect);sleepSetting.hidden=true;
+  preferencesPanel.append(sleepSetting);
+  projectOptions(sleepSelect,sleepOptions,'off');
+  enhanceSelect(sleepSelect);
+  let sleepState=null,sleepSaving=false,sleepRead=0;
+  function renderSleep(){
+    if(!sleepState)return;
+    sleepSetting.hidden=sleepButton.hidden=false;
+    sleepButton.dataset.active=String(sleepState.active);
+    const current=sleepOptions.find(([value])=>value===sleepState.mode)[1];
+    sleepButton.title=tr('Режим сна')+' · '+current;
+    sleepSelect.value=sleepState.mode;syncSelects();
+    if(!sleepMenu.matches(':popover-open'))return;
+    const status=el('span',sleepState.failed?tr('Системная блокировка сна недоступна.'):
+      sleepState.active?tr('Сон приостановлен'):tr('Сон разрешён'),'am-small am-muted am-sleep-status');
+    status.setAttribute('role','status');
+    const entries=sleepOptions.map(([value,label])=>{
+      const button=el('button',undefined,'am-select-option');button.type='button';
+      button.setAttribute('aria-pressed',String(value===sleepState.mode));
+      button.append(el('span',label));
+      if(value===sleepState.mode){
+        const mark=el('span',undefined,'am-select-check');mark.append(svgIcon(['M5 12l4 4 10-10']));button.append(mark);
+      }
+      button.addEventListener('click',()=>{sleepMenu.hidePopover();sleepButton.focus();saveSleep(value);});
+      return button;
+    });
+    const focused=Array.from(sleepMenu.querySelectorAll('button')).indexOf(document.activeElement);
+    const next=sleepMenu.cloneNode(false);next.append(status,...entries);swapChildren(sleepMenu,next);
+    if(focused>=0&&!sleepMenu.contains(document.activeElement)){
+      sleepMenu.querySelectorAll('button')[focused]?.focus({preventScroll:true});
+    }
+  }
+  async function loadSleep(){
+    if(sleepSaving)return;
+    const read=++sleepRead;
+    try{
+      const state=await api('/api/sleep-mode');
+      if(read===sleepRead&&sleepOptions.some(([value])=>value===state?.mode)){sleepState=state;renderSleep();}
+    }catch(_){}
+  }
+  async function saveSleep(mode){
+    if(sleepSaving)return;
+    sleepSaving=true;++sleepRead;
+    try{sleepState=await postAPI('/api/sleep-mode',{mode});}
+    catch(error){showError(error);}
+    finally{sleepSaving=false;renderSleep();loadSleep();}
+  }
+  function openSleepMenu(){
+    if(sleepMenu.matches(':popover-open')){sleepMenu.hidePopover();return;}
+    sleepMenu.showPopover();renderSleep();
+    positionPopover(sleepMenu,sleepButton,234,false,true);
+    sleepMenu.focus();loadSleep();
+  }
+  sleepMenu.addEventListener('toggle',()=>sleepButton.setAttribute('aria-expanded',String(sleepMenu.matches(':popover-open'))));
+  sleepMenu.addEventListener('keydown',event=>{
+    if(event.key!=='Escape'||event.isComposing)return;
+    event.preventDefault();event.stopPropagation();
+    sleepMenu.hidePopover();sleepButton.focus();
+  });
+  window.addEventListener('resize',()=>{if(sleepMenu.matches(':popover-open'))positionPopover(sleepMenu,sleepButton,234,false,true);});
+  sleepSelect.addEventListener('change',()=>saveSleep(sleepSelect.value));
+
+  const setupDialog=el('dialog',undefined,'am-session-dialog am-window-setup');
+  setupDialog.id='window-setup-dialog';
+  const setupTitle=el('h3');setupTitle.id='window-setup-title';setupTitle.tabIndex=-1;
+  setupDialog.setAttribute('aria-labelledby',setupTitle.id);
+  const setupHeader=el('div',undefined,'am-dialog-header');
+  const setupClose=iconButton(tr('Закрыть'),closeIconPaths,false,()=>finishWindowSetup(false));
+  setupHeader.append(setupTitle,setupClose);
+  const setupBody=el('div',undefined,'am-dialog-body');
+  setupDialog.append(setupHeader,setupBody);root.append(setupDialog);
+  function setupButton(label,action,primary=false){
+    const button=el('button',label,primary?'am-primary':undefined);button.type='button';
+    button.addEventListener('click',action);return button;
+  }
+  const setupSetting=el('div',undefined,'am-theme-setting');
+  setupSetting.append(el('span',tr('Первоначальная настройка')),setupButton(tr('Открыть'),()=>showWindowSetup(setupPage)));
+  preferencesPanel.append(setupSetting);
+  let setupPage=0,setupBusy=false,setupChoice='',defaultTaskModel='';
+  function setupSelect(label,values,selected,pick){
+    const wrapper=el('label',label,'am-theme-setting');
+    const control=el('select');
+    for(const [value,title] of values){const option=el('option',title);option.value=value;control.append(option);}
+    control.value=selected;
+    control.addEventListener('change',()=>pick(control.value,control));
+    wrapper.append(control);return wrapper;
+  }
+  function pauseWindowSetup(screen){
+    setupDialog.close();
+    if($('settings-dialog').open)$('settings-dialog').close();
+    show(screen);
+    addNotice('window-setup-resume','info',tr('Первоначальная настройка'),tr('Продолжить можно в общих настройках.'));
+  }
+  async function openPersonalChat(){
+    const response=await postAPI('/api/onboarding',{action:'direct-chat'});
+    setProject(response.project,'');remember('messenger-project',response.project);
+    await refresh();
+    if($('settings-dialog').open)$('settings-dialog').close();
+    show('tasks');openTaskDraft(!setupDialog.open,response.project,'');
+  }
+  async function saveDefaultTaskModel(model){
+    await postAPI('/api/onboarding',{action:'default-model',model});
+    defaultTaskModel=model;
+    if(!draftOpen)$('task-draft-model').selectedIndex=-1;
+  }
+  function renderWindowSetup(){
+    const pages=[tr('Язык и оформление'),tr('Агент и модель'),tr('Рабочая папка'),tr('Сеть и координатор'),tr('Уведомления')];
+    setupTitle.textContent=pages[setupPage];
+    const count=el('p',tr('Шаг {current} из {total}').replace('{current}',setupPage+1).replace('{total}',pages.length),'am-small am-muted');
+    const choices=el('div',undefined,'am-window-setup-actions');
+    const content=el('div',undefined,'am-prefs');
+    switch(setupPage){
+      case 0:
+        content.append(setupSelect(tr('Язык'),[['ru',tr('Русский')],['en','English']],amLang,language=>{
+          try{sessionStorage.setItem('kotel-setup-resume','0');}catch(_){}
+          $('lang-select').value=language;$('lang-select').dispatchEvent(new Event('change'));
+        }),setupSelect(tr('Тема'),[['system',tr('Как в системе')],['light',tr('Светлая')],['dark',tr('Тёмная')]],$('theme-select').value,theme=>applyTheme(theme,true)));
+        break;
+      case 1:{
+        const models=taskDraftModels({id:'',agents:view?.agents||[]});
+        if(models.length){
+          const selected=models.some(([key])=>key===defaultTaskModel)?defaultTaskModel:models[0][0];
+          content.append(setupSelect(tr('Модель по умолчанию'),models,selected,async(model,control)=>{
+            control.disabled=true;
+            try{await saveDefaultTaskModel(model);feedback.textContent='';}
+            catch(error){control.value=defaultTaskModel||selected;feedback.textContent=error.message;}
+            finally{control.disabled=false;}
+          }));
+          choices.append(setupButton(tr('Проверить агента'),async event=>{
+            const button=event.currentTarget;button.disabled=true;
+            const provider=(models.some(([key])=>key===defaultTaskModel)?defaultTaskModel:selected).split(':',1)[0];
+            if(checking.has(provider)){feedback.textContent=tr('Проверяем');button.disabled=false;return;}
+            await checkCard(provider,true);
+            const state=agentChecks.get(provider)?.authentication?.state;
+            feedback.textContent=state==='authenticated'?tr('Вход выполнен'):state==='not_authenticated'?tr('Вход не выполнен'):tr('Не удалось проверить');
+            button.disabled=false;
+          }));
+        }else content.append(el('p',tr('Настройте агента и включите хотя бы одну модель.'),'am-muted'));
+        choices.append(setupButton(tr('Настроить агентов'),()=>pauseWindowSetup('agents')));
+        break;
+      }
+      case 2:
+        if(view?.project)content.append(el('p',projectTitle(view.project),'am-muted'));
+        choices.append(setupButton(tr('Открыть папку…'),()=>openProjectDialog()),
+          setupButton(tr('Начать без проекта'),()=>{setupChoice='direct-chat';feedback.textContent=tr('Откроется личный чат.');}));
+        break;
+      case 3:
+        content.append(el('p',tr('По желанию подключите другие компьютеры через сервер.'),'am-muted'));
+        choices.append(setupButton(tr('Настроить подключение'),()=>pauseWindowSetup('server')));
+        if(view?.project)choices.append(setupButton(tr('Настроить координатора'),()=>pauseWindowSetup('project')));
+        break;
+      case 4:
+        content.append(setupSelect(tr('Всплывающие уведомления'),[['manual',tr('Закрывать вручную')],['automatic',tr('Закрывать автоматически')],['off',tr('Выключены')]],$('notice-dismissal').value,value=>{
+          $('notice-dismissal').value=value;$('notice-dismissal').dispatchEvent(new Event('change'));
+        }));
+        choices.append(setupButton(tr('Отправить тестовое уведомление'),()=>{
+          addNotice('window-setup-test-'+Date.now(),'info',tr('Тестовое уведомление Kotel'),'');
+        }));
+        break;
+    }
+    const feedback=el('p','','am-small am-muted');
+    feedback.setAttribute('role','status');feedback.id='window-setup-status';
+    const navigation=el('div',undefined,'am-window-setup-nav');
+    const actions=el('div',undefined,'am-actions');
+    if(setupPage>0)actions.append(setupButton(tr('Назад'),()=>changeWindowSetupPage(setupPage-1)));
+    actions.append(setupButton(setupPage===4?tr('Завершить'):tr('Продолжить'),()=>{
+      if(setupPage===4)finishWindowSetup(true);
+      else changeWindowSetupPage(setupPage+1);
+    },true));
+    navigation.append(setupButton(tr('Настроить позже'),()=>finishWindowSetup(false)),actions);
+    setupBody.replaceChildren(count,content,choices,feedback,navigation);
+  }
+  function changeWindowSetupPage(page){
+    setupPage=page;renderWindowSetup();setupTitle.focus();
+  }
+  function showWindowSetup(page){
+    setupPage=page;renderWindowSetup();setupDialog.showModal();setupTitle.focus();renderNotices();
+  }
+  async function finishWindowSetup(start){
+    if(setupBusy)return;
+    setupBusy=true;
+    try{
+      const personal=start&&(setupChoice==='direct-chat'||!view?.project);
+      if(personal)await openPersonalChat();
+      await postAPI('/api/onboarding',{action:'dismiss'});
+      setupDialog.close();
+      setupPage=0;setupChoice='';
+      if(personal)$('task-draft-text').focus();
+      if(start&&!personal&&view?.project){
+        if($('settings-dialog').open)$('settings-dialog').close();
+        show('tasks');openTaskDraft(true,view.project,'');
+      }
+    }catch(error){$('window-setup-status').textContent=error.message;}
+    finally{setupBusy=false;}
+  }
+  setupDialog.addEventListener('cancel',event=>{event.preventDefault();finishWindowSetup(false);});
+  setupDialog.addEventListener('close',renderNotices);
+  $('project-dialog').addEventListener('close',()=>{if(setupDialog.open)renderWindowSetup();});
+  function loadWindowSetup(){
+    let resume=null;
+    try{resume=sessionStorage.getItem('kotel-setup-resume');sessionStorage.removeItem('kotel-setup-resume');}catch(_){}
+    api('/api/onboarding').then(state=>{
+      if(typeof state?.model==='string'){defaultTaskModel=state.model;if(draftOpen)renderTaskDraft();}
+      if((state?.pending||resume==='0')&&!setupDialog.open)showWindowSetup(0);
+    }).catch(()=>{});
+  }
+  loadSleep();setInterval(loadSleep,5000);
+  show('tasks');loadMachineOrder();refresh().then(loadWindowSetup);loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
   setInterval(updateTimers,1000);
   setInterval(loadProjectActivity,3000);
   setInterval(()=>{if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();},2000);

@@ -15,6 +15,11 @@ func finishedTask(state string) bool {
 	return state == "done" || state == "failed" || state == "cancelled"
 }
 
+// Archive returns the saved state and version of a finished task's archive entry.
+func (t Task) Archive() (bool, int64) {
+	return t.archiveState == archiveStored && finishedTask(t.State), t.archiveVersion
+}
+
 func taskHistoryEditKey(project string) string { return "task_history_edit:" + project }
 
 func advanceTaskHistoryEdit(tx *sql.Tx, project string) error {

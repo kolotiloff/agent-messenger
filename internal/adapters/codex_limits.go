@@ -66,6 +66,7 @@ func ParseCodexRateLimits(raw json.RawMessage, at time.Time) (LimitState, error)
 		RateLimits *struct {
 			Primary              *window `json:"primary"`
 			Secondary            *window `json:"secondary"`
+			PlanType             *string `json:"planType"`
 			RateLimitReachedType *string `json:"rateLimitReachedType"`
 		} `json:"rateLimits"`
 	}
@@ -93,6 +94,9 @@ func ParseCodexRateLimits(raw json.RawMessage, at time.Time) (LimitState, error)
 		return LimitState{}, fmt.Errorf("%w: no usage window in the answer", ErrCodexProtocol)
 	}
 	l.State = LimitStateFor(l.UsedPercent)
+	if plan := result.RateLimits.PlanType; plan != nil && *plan != "" && len(*plan) <= 64 {
+		l.Reported = reported(map[string]any{"planType": *plan})
+	}
 	if t := result.RateLimits.RateLimitReachedType; t != nil && *t != "" {
 		l.State = LimitExhausted
 	}

@@ -61,6 +61,19 @@ func isCommandActivity(kind string) bool {
 	return kind == "command_start" || kind == "command_end"
 }
 
+// Give previews and command timing their own allowance so neither can
+// displace complete messages or tool rows.
+func runItemLimit(kind string, seq, visible, deltas, limit int) bool {
+	switch kind {
+	case "text_delta":
+		return deltas >= limit
+	case "command_start", "command_end":
+		return seq-visible-deltas >= 2*limit
+	default:
+		return visible >= limit
+	}
+}
+
 // AppendTaskRunItem stores one sanitized item of a worker's event stream
 // (its text or a tool action) for the window. Items past the bound are
 // dropped; this never affects verification.
@@ -73,17 +86,17 @@ func (s *Store) AppendTaskRunItem(run, kind, title, text, description string) er
 		return project.AppendTaskRunItem(run, kind, title, text, description)
 	}
 	activity := isCommandActivity(kind)
-	if kind != "text" && kind != "tool" && !activity {
+	if kind != "text" && kind != "tool" && kind != "text_delta" && !activity {
 		return fmt.Errorf("%w: unknown item kind", ErrRejected)
 	}
 	description = clip(strings.Join(strings.Fields(description), " "), 200)
 	return s.tx(func(tx *sql.Tx) error {
-		var seq, n int
-		if err := tx.QueryRow(`SELECT COALESCE(MAX(seq),0), COUNT(CASE WHEN kind IN ('text','tool') THEN 1 END) FROM task_run_items WHERE run_id=?`, run).Scan(&seq, &n); err != nil {
+		var seq, n, deltas int
+		if err := tx.QueryRow(`SELECT COALESCE(MAX(seq),0), COUNT(CASE WHEN kind IN ('text','tool') THEN 1 END), COUNT(CASE WHEN kind='text_delta' THEN 1 END) FROM task_run_items WHERE run_id=?`, run).Scan(&seq, &n, &deltas); err != nil {
 			return err
 		}
 		// Timing records have their own allowance and never displace visible items.
-		if (!activity && n >= maxRunItems) || (activity && seq-n >= 2*maxRunItems) {
+		if runItemLimit(kind, seq, n, deltas, maxRunItems) {
 			return nil
 		}
 		if _, err := tx.Exec(`INSERT INTO task_run_items(run_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, run, seq+1, kind, clip(title, 200), clip(text, maxRunItemText), description, now()); err != nil {
@@ -100,7 +113,7 @@ func (s *Store) AppendTaskRunItem(run, kind, title, text, description string) er
 				return err
 			}
 		}
-		if (!activity && n >= maxForwardedItems) || (activity && seq-n >= 2*maxForwardedItems) {
+		if runItemLimit(kind, seq, n, deltas, maxForwardedItems) {
 			return nil
 		}
 		link, err := taskLink(tx, task)
@@ -144,6 +157,7 @@ type WindowTask struct {
 	FinishedAt     string `json:"finished_at,omitempty"`
 	Archived       bool   `json:"archived,omitempty"`
 	ArchiveVersion int64  `json:"archive_version,omitempty"`
+	KeepOpen       bool   `json:"keep_open,omitempty"`
 	// OwnerQuestion is set while the worker waits for the owner.
 	OwnerQuestion *TaskQuestion `json:"owner_question,omitempty"`
 	// PendingLaunch is set while the task's latest run is recorded but not
@@ -225,9 +239,9 @@ func remoteContact(machine, tx *sql.Tx, task string, link netLink, out *RemoteCo
 	var name, remoteTask sql.NullString
 	var created, updated string
 	var cancel, cancelQueued bool
-	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested,
- CASE WHEN cancel_requested=1 THEN EXISTS(SELECT 1 FROM net_outbox WHERE op_id=?) ELSE 0 END
- FROM tasks WHERE id=?`, safeNetOp("cancel."+task), task).Scan(&name, &remoteTask, &created, &updated, &cancel, &cancelQueued); err != nil {
+	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested=1 AND state IN ('running','waiting_owner','waiting_coordinator'),
+ CASE WHEN cancel_requested=1 AND state IN ('running','waiting_owner','waiting_coordinator') THEN EXISTS(SELECT 1 FROM net_outbox WHERE task_id=tasks.id AND kind='cancel') ELSE 0 END
+ FROM tasks WHERE id=?`, task).Scan(&name, &remoteTask, &created, &updated, &cancel, &cancelQueued); err != nil {
 		return err
 	}
 	if cancel {
@@ -570,7 +584,7 @@ func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersi
 }
 
 func (s *Store) unfinishedWindowTasks(project string) ([]WindowTask, error) {
-	return s.windowTaskRows(`WHERE project=? AND hidden_at IS NULL AND state NOT IN `+finishedWindowStates+`
+	return s.windowTaskRows(`WHERE project=? AND hidden_at IS NULL AND (state NOT IN `+finishedWindowStates+` OR `+openConversation+`)
  ORDER BY created_at DESC,rowid DESC`, project)
 }
 
@@ -595,6 +609,7 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 	out := make([]WindowTask, 0, len(tasks))
 	for _, t := range tasks {
 		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
+		w.KeepOpen = t.archiveState == "" && t.SenderAgent == AudienceOwner
 		w.Archived, w.ArchiveVersion = t.archiveState == archiveStored && finishedTask(t.State), t.archiveVersion
 		// The row shows the model the worker started on (T-202).
 		w.RanModel = s.ranModel(t.ID)
@@ -614,7 +629,7 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 		if err := s.fillWindowLaunch(&w); err != nil {
 			return nil, err
 		}
-		w.CanContinue = t.archiveState == "" && canWindowContinue(w, t.SessionID)
+		w.CanContinue = t.archiveState == "" && canWindowContinue(w, t)
 		if w.Usage, err = s.taskUsage(t.ID); err != nil {
 			return nil, err
 		}
@@ -663,6 +678,7 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 		return f, t, err
 	}
 	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: t.RanModel, FullAccess: t.FullAccess}
+	f.Task.KeepOpen = t.archiveState == "" && t.SenderAgent == AudienceOwner
 	f.Task.Archived, f.Task.ArchiveVersion = t.archiveState == archiveStored && finishedTask(t.State), t.archiveVersion
 	if t.OpenQuestion != nil && (t.OpenQuestion.Audience == AudienceOwner || t.SenderAgent == AudienceOwner) {
 		f.Task.State = "waiting_owner"
@@ -679,21 +695,21 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 		return f, t, err
 	}
 	f.Task.ContextWindow = snapshot.Window
-	f.Task.CanContinue = t.archiveState == "" && canWindowContinue(f.Task, t.SessionID)
+	f.Task.CanContinue = t.archiveState == "" && canWindowContinue(f.Task, t)
 	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
 		return f, t, err
 	}
 	return f, t, nil
 }
 
-func canWindowContinue(t WindowTask, session string) bool {
-	if t.State != "done" && t.State != "failed" {
+func canWindowContinue(t WindowTask, task Task) bool {
+	if !canResumeTask(t.State) {
 		return false
 	}
 	if t.Remote == nil {
-		return session != ""
+		return task.launchedSession
 	}
-	return !t.Remote.From && !t.Remote.Unaccepted && !t.Remote.Lost && !t.Remote.Silent
+	return !t.Remote.From && !t.Remote.Unaccepted && !t.Remote.Lost && !t.Remote.Silent && !remoteCloseUnconfirmed(task)
 }
 
 // TaskFeed builds the feed of one task.
@@ -887,7 +903,7 @@ func (s *Store) remoteEvents(f *TaskFeed) error {
 			f.Items = append(f.Items, FeedItem{Kind: "accepted", Author: "messenger", Text: f.Task.Remote.Name, At: at, Verified: true})
 		case "report", "late_report":
 			f.Items = append(f.Items, FeedItem{Kind: "report", Author: "worker", Text: text, At: at, Verified: true, State: "finished", Images: pics[disposed]})
-		case "failed", "blocked", "interrupted", "cancelled":
+		case "failed", "blocked", "interrupted", "cancelled", "continue_refused":
 			f.Items = append(f.Items, FeedItem{Kind: "outcome", Author: "messenger", Text: text, At: at, State: kind, Verified: true})
 		}
 	}

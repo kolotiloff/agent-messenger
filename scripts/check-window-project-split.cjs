@@ -45,12 +45,12 @@ function reply(url,p,available){
     ]};
   }
   if(url.pathname==='/api/server')return {host:{addresses:[],devices:[]},member:{},peers:[
-    {...pc1,ready:{projects:['game','tools']}},
+    {...pc1,ready:{projects:['game','tools']},agents:[...agents,{agent:'cursor',models:['composer-2.5[effort=medium]']}]},
     {...pc2,ready:{projects:['game']}},
     {...linux,ready:{projects:['tools','site']},agents:[{agent:'codex',paused:true},{agent:'claude'}]},
     {id:'vps',name:'VPS-PC2',host:true,ready:{projects:[]},agents:[]}
   ].map(peer=>({age:0,version:'1.0.5',agents,...peer}))};
-  if(url.pathname==='/api/discovery')return {agents:[]};
+  if(url.pathname==='/api/discovery')return {agents:[{provider:'cursor',state:'not_found'}]};
   if(url.pathname==='/api/client-info')return {client:'running',outdated:false,window_version:'1.0.9'};
   if(url.pathname==='/api/self-update')return {installed_version:'1.0.9',state:'idle'};
   if(url.pathname==='/api/usage-stats'){
@@ -130,6 +130,34 @@ if (require.main === module) (async()=>{
   const chat=(page,name)=>page.locator('#thread').getByText('Сообщение из '+name);
   const total=async(page,n)=>page.waitForFunction(value=>document.querySelector('#stats-total-title').textContent.split(' токен')[0].replace(/[^0-9]/g,'')===value,n);
   try{
+    const limitsPage=await open(projects,{width:1200,height:800},'dark',(url,p)=>{
+      const fixture=reply(url,p,projects);
+      if(url.pathname==='/api/window')return {json:{...fixture,agents:[
+        {...agents[0],limit:{state:'ok',reported:'{"planType":"pro"}',windows:[
+          {window:'5h',used_percent:28,resets_at:iso(-185)},
+          {window:'7d',used_percent:72,resets_at:iso(60)}
+        ]}},
+        agents[1]
+      ]}};
+      if(url.pathname==='/api/server')return {json:{...fixture,peers:[{...fixture.peers[0],age:100,agents:[
+        {agent:'cursor',limit:{state:'ok',window:'7d',used_percent:0}}
+      ]}]}};
+    },true);
+    const limits=limitsPage.getByRole('dialog',{name:'Лимиты агентов'});
+    const limitsButton=limitsPage.getByRole('button',{name:'Лимиты агентов'});
+    await limitsButton.click();
+    await limits.getByText('· Pro',{exact:true}).waitFor();
+    await limits.getByText('ПК-1 · Устаревшие данные',{exact:true}).waitFor();
+    assert.deepEqual((await limits.locator('.am-agent-limits-percent').allTextContents()).map(x=>x.replace(/\s/g,'')),['28%','72%','0%']);
+    assert.deepEqual(await limits.locator('.am-agent-limits-fill').evaluateAll(nodes=>nodes.map(n=>n.dataset.level)),['good','stale','stale']);
+    assert.match(await limits.getByText(/^До сброса /).textContent(),/3 ч/);
+    await limits.getByText('Срок сброса прошёл',{exact:true}).waitFor();
+    assert.equal(await limits.getByText('Claude Code',{exact:true}).count(),0);
+    assert.ok((await limits.boundingBox()).y<(await limitsButton.boundingBox()).y);
+    await limitsPage.keyboard.press('Escape');
+    await limits.waitFor({state:'hidden'});
+    assert.equal(await limitsButton.evaluate(button=>button===document.activeElement),true);
+    await limitsPage.context().close();
     for(const theme of ['light','dark']){
       const page=await open(projects,{width:1200,height:800},theme,undefined,true);
       const machine=card(page,'local').locator('.am-machine-name').first();
@@ -158,6 +186,65 @@ if (require.main === module) (async()=>{
       assert.equal(await row.locator('td').first().evaluate(background),rowColor,theme+' keyboard focus');
       await page.context().close();
     }
+    let personal=makeTask('personal','game','claude','Личный чат',0,{keep_open:true});
+    let replyItems=[{kind:'text',at:iso(0),text:'Сообщение из game'}];
+    const personalPage=await open([projects[0]],{width:1200,height:800},'dark',url=>{
+      if(url.pathname==='/api/window'||url.pathname==='/api/project-activity'){
+        return {json:{...reply(url,'game',[projects[0]]),tasks:[personal]}};
+      }
+      if(url.pathname==='/api/task'&&url.searchParams.get('id')===personal.id){
+        const items=[{kind:'task',author:'owner',at:personal.created_at,text:personal.title},...replyItems];
+        return {json:{task:personal,items}};
+      }
+      if(url.pathname==='/api/task-archive'){
+        personal={...personal,archived:!personal.archived,keep_open:!!personal.archived,archive_version:(personal.archive_version||0)+1};
+        return {json:{ok:true}};
+      }
+    },true);
+    const personalThread=personalPage.locator('#thread');
+    const status=personalThread.getByText('Исполнитель работает',{exact:true});
+    await status.waitFor();
+    replyItems=[{kind:'text_delta',run:1,at:iso(0),text:'Первый'}];
+    await personalThread.getByText('Первый',{exact:true}).waitFor();
+    replyItems.push({kind:'text_delta',run:1,at:iso(0),text:' фрагмент'});
+    await personalThread.getByText('Первый фрагмент',{exact:true}).waitFor();
+    replyItems.push({kind:'text',run:1,at:iso(0),text:'Первый фрагмент готов'});
+    const completeText=personalThread.getByText('Первый фрагмент готов',{exact:true});
+    await completeText.waitFor();
+    assert.equal(await personalThread.getByText('Первый фрагмент',{exact:true}).count(),0);
+    personal={...personal,quiet:{final_at:iso(0)}};
+    replyItems.push({kind:'report',run:1,at:iso(0),state:'running',text:'Итоговый ответ'});
+    const reportText=personalThread.getByText('Итоговый ответ',{exact:true});
+    await reportText.waitFor();
+    const linger=personalThread.getByText('Ответ получен, исполнитель ещё завершает работу',{exact:true});
+    assert.equal(await linger.isVisible(),false);
+    assert.equal(await personalThread.getByText('Отчёт сохранён без подтверждения запуска').count(),0);
+    personal={...personal,quiet:{final_at:iso(2)}};
+    await linger.waitFor();
+    personal={...personal,state:'done',quiet:null,can_continue:true,finished_at:iso(0)};
+    replyItems.at(-1).verified=true;
+    replyItems.at(-1).state='finished';
+    await linger.waitFor({state:'hidden'});
+    await reportText.waitFor();
+    assert.equal(await personalThread.getByText('Задача завершена',{exact:true}).count(),0);
+    await personalPage.locator('#list-toggle').click();
+    const personalRow=personalPage.locator('#machines .am-sidebar-task').filter({hasText:'Личный чат'});
+    const personalArchive=personalPage.locator('#task-list .am-archive-task').filter({hasText:'Личный чат'});
+    await personalRow.waitFor();
+    assert.equal(await personalArchive.count(),0);
+    await personalRow.click({button:'right'});
+    const personalMenu=personalPage.locator('#device-menu');
+    await personalMenu.getByRole('menuitem',{name:'Отправить в архив',exact:true}).click();
+    await personalArchive.waitFor();
+    assert.equal(await personalRow.count(),0);
+    assert.equal(seen.filter(request=>request.path==='/api/task-archive').at(-1).body,
+      JSON.stringify({task:personal.id,action:'archive',version:0}));
+    await personalArchive.click({button:'right'});
+    await personalMenu.getByRole('menuitem',{name:'Восстановить из архива',exact:true}).click();
+    await personalRow.waitFor();
+    assert.equal(await personalArchive.count(),0);
+    await reportText.waitFor();
+    await personalPage.context().close();
     const hold=()=>{let release;const response=new Promise(resolve=>{release=resolve;});return {response,release};};
     const sameFeed=hold(),otherWindow=hold(),otherFeed=hold();
     let ownerQuestion,remoteLost=false;
@@ -216,6 +303,8 @@ if (require.main === module) (async()=>{
     assert((await tokenCount.boundingBox()).y>(await answerField.boundingBox()).y);
     const contextProgress=tokenCount.locator('#answer-context-progress');
     await contextProgress.waitFor();
+    assert.notEqual(await contextProgress.evaluate(ring=>getComputedStyle(ring).stroke),
+      await tokenCount.locator('.am-context-track').evaluate(ring=>getComputedStyle(ring).stroke));
     const [drawn,track]=(await contextProgress.getAttribute('stroke-dasharray')).split(' ').map(Number);
     assert.equal(track,100);
     assert(Math.abs(drawn-212/238*100)<0.01);
@@ -361,7 +450,18 @@ if (require.main === module) (async()=>{
       const footerCancel=pendingUpdate.locator('.am-side-footer').getByRole('button',{name:'Отменить обновление'});
       await footerCancel.waitFor();
       assert.equal(await footerCancel.getAttribute('data-request'),'upd-local');
-      await pendingUpdate.locator('#settings-open').click();
+      const cancelAppearance=button=>button.evaluate(async node=>{
+        await Promise.all(node.getAnimations().map(animation=>animation.finished));
+        const style=getComputedStyle(node);
+        return [style.width,style.height,style.borderRadius,style.backgroundColor];
+      });
+      const settingsButton=pendingUpdate.locator('#settings-open');
+      await settingsButton.hover();
+      const settingsAppearance=await cancelAppearance(settingsButton);
+      await footerCancel.hover();
+      assert.deepEqual(await cancelAppearance(footerCancel),settingsAppearance);
+      await settingsButton.click();
+      await pendingUpdate.locator('#settings-menu-open').click();
       await pendingUpdate.locator('#settings-dialog [data-tab=server]').click();
       assert.equal(await pendingUpdate.locator('#network-roster').count(),0);
     }finally{await pendingUpdate.close();}
@@ -387,10 +487,16 @@ if (require.main === module) (async()=>{
       }
       if(p==='game'&&url.pathname==='/api/task-history')return {json:{tasks:[]}};
       if(p==='tools'&&url.pathname==='/api/task-history')return {json:{tasks:[toolOlder]}};
+      if(url.pathname==='/api/server'){
+        const result=reply(url,p,projects);
+        const cursor=result.peers.find(peer=>peer.id==='pc1').agents.find(agent=>agent.agent==='cursor');
+        cursor.models.push(...Array.from({length:12},(_,index)=>'test-model-'+index));
+        return {json:result};
+      }
       if(url.pathname==='/api/self-update')return {json:{installed_version:'1.0.9',version:'1.0.10',state:'available'}};
       if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
       if(url.pathname==='/api/task-note')return {json:{ok:true}};
-      if(url.pathname==='/api/pick')return {json:{ok:true,path:'/fictional/project/notes.txt'}};
+      if(url.pathname==='/api/pick')return {json:{ok:true,path:'/fictional/project/notes.txt',attachments:[{path:'notes.txt',data:'AAH/'}]}};
       if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
         const at=iso(24*60+5);
         return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at},
@@ -420,11 +526,12 @@ if (require.main === module) (async()=>{
         const style=getComputedStyle(node);
         return [style.fontFamily,style.fontSize,style.fontWeight,style.lineHeight];
       });
+      assert.equal(await draftPage.locator('#am-concept').getAttribute('data-chat-font'),'inter');
       const replyModelStyle=await labelStyle(draftPage.locator('#answer-model'));
       const replyAccess=draftPage.locator('#answer-access');
-      await replyAccess.getByText('Любые команды',{exact:true}).waitFor();
+      await replyAccess.waitFor();
+      assert.equal(await replyAccess.getAttribute('aria-label'),'Любые команды');
       assert.equal(await local.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).locator('[data-elapsed-from]').textContent(),', 1 мин');
-      await expectCentered(replyAccess.locator('svg'),replyAccess.locator('span'));
       for(const theme of ['light','dark']){
         const colors=await replyAccess.evaluate((node,theme)=>{
           const root=document.documentElement,original=root.dataset.theme;
@@ -443,12 +550,13 @@ if (require.main === module) (async()=>{
         const [dark,light]=[luminance(colors.text),luminance(colors.bg)].sort((a,b)=>a-b);
         assert((light+.05)/(dark+.05)>=4.5,'readable access label in '+theme);
       }
-      const accessAbove=access=>access.evaluate(node=>{
-        const rect=node.getBoundingClientRect();
-        const field=node.nextElementSibling.getBoundingClientRect();
-        return rect.height>0&&rect.bottom<field.top&&rect.left===field.left&&rect.width<field.width;
+      const accessBelow=access=>access.evaluate(node=>{
+        const field=node.closest('.am-compose').querySelector('.am-compose-field').getBoundingClientRect();
+        const mode=node.getBoundingClientRect();
+        const model=node.previousElementSibling.getBoundingClientRect();
+        return mode.height>0&&mode.top>=field.bottom&&mode.left>=model.right&&mode.right<=field.right;
       });
-      assert.equal(await accessAbove(replyAccess),true);
+      assert.equal(await accessBelow(replyAccess),true);
       assert.deepEqual(await draftPage.locator('#compose .am-compose-field').evaluate(field=>{
         const stop=field.querySelector('#task-stop').getBoundingClientRect();
         const send=field.querySelector('#answer-send').getBoundingClientRect();
@@ -498,7 +606,7 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await plusGlyph.evaluate(icon=>{
         const style=getComputedStyle(icon.querySelector('path'));
         return [getComputedStyle(icon).width,style.stroke,style.strokeWidth];
-      }),['18px',await plus.evaluate(button=>getComputedStyle(button).color),'2px']);
+      }),['16px',await plus.evaluate(button=>getComputedStyle(button).color),'1.75px']);
       assert.equal(await nav.evaluate(node=>getComputedStyle(node).display),'contents');
       assert.equal(await nav.locator('[data-tab]:visible').count(),0);
       const footer=draftPage.locator('.am-side-footer');
@@ -513,7 +621,7 @@ if (require.main === module) (async()=>{
         }
       });
       await footer.getByText('v1.0.9',{exact:true}).waitFor();
-      const localUpdate=footer.getByRole('button',{name:'Обновить до v1.0.10'});
+      const localUpdate=footer.getByRole('button',{name:'Обновить версию'});
       await localUpdate.waitFor();
       const downloadBox=await localUpdate.boundingBox(),versionBox=await footer.locator('.am-version').boundingBox();
       assert.equal(versionBox.x-downloadBox.x-downloadBox.width,4);
@@ -523,18 +631,18 @@ if (require.main === module) (async()=>{
         const version=node.querySelector('.am-version'),box=version.getBoundingClientRect();
         return [icon.left-bounds.left,bounds.right-parseFloat(getComputedStyle(sidebar).borderRightWidth)-
           box.right+parseFloat(getComputedStyle(version).paddingInlineEnd)];
-      }),[17,17]);
+      }),[18,18]);
       const buttonShape=button=>button.evaluate(node=>{
         const style=getComputedStyle(node);
         return [style.width,style.height,style.borderRadius];
       });
-      const settings=footer.locator('#settings-open'),feedback=footer.locator('#fb-open');
-      const footerIcons=[settings,feedback,localUpdate];
+      const settings=footer.locator('#settings-open'),limits=footer.locator('#limits-open');
+      const footerIcons=[settings,limits,localUpdate];
       const hoverFills=[];
-      for(const button of footerIcons){
+      for(const [index,button] of footerIcons.entries()){
         assert.deepEqual(await buttonShape(button),['28px','28px','8px']);
         const art=await button.locator('svg').first().boundingBox();
-        assert.deepEqual([art.width,art.height],[18,18]);
+        assert.deepEqual([art.width,art.height],index===2?[18,18]:[16,16]);
         await button.hover();
         hoverFills.push(await button.evaluate(async node=>{
           await Promise.all(node.getAnimations().map(animation=>animation.finished));
@@ -545,7 +653,7 @@ if (require.main === module) (async()=>{
       await local.getByText('Мак, координатор',{exact:true}).waitFor();
       await card(draftPage,'vps').getByText('VPS-PC2, сервер',{exact:true}).waitFor();
       const roleWeights=await draftPage.locator('.am-machine-label .am-inline-role').evaluateAll(roles=>roles.map(role=>[getComputedStyle(role).fontWeight,getComputedStyle(role.parentElement).fontWeight]));
-      assert(roleWeights.length>=2 && roleWeights.every(([role,name])=>role==='400'&&Number(name)>400),JSON.stringify(roleWeights));
+      assert(roleWeights.length>=2 && roleWeights.every(([role,name])=>role==='400'&&name==='400'),JSON.stringify(roleWeights));
       const remote=card(draftPage,'pc1').locator('.am-machine-name');
       assert.equal(await remote.locator('.am-version,.am-update-icon').count(),0);
       await remote.hover();
@@ -571,7 +679,6 @@ if (require.main === module) (async()=>{
         });
         assert.deepEqual(base.slice(0,2),role.slice(0,2));
         assert.equal(role[2],'400');
-        assert(Number(base[2])>Number(role[2]));
         assert.notEqual(base[3],role[3]);
       }
       const message=draftPage.locator('#thread .am-message-group').first();
@@ -580,28 +687,38 @@ if (require.main === module) (async()=>{
       const workerActions=workerMessage.locator('.am-message-actions');
       const workerTimestamp=workerActions.locator('time');
       assert.equal(await workerTimestamp.textContent(),'5 минут назад');
+      await draftPage.mouse.move(0,0);
+      assert.equal(await workerActions.evaluate(node=>getComputedStyle(node).opacity),'0');
       for(const [time,outgoing] of [[timestamp,true],[workerTimestamp,false]]){
-        const layout=await time.evaluate(node=>{
+        await time.locator('xpath=../..').hover();
+        const sample=await draftPage.waitForFunction(outgoing=>{
+          const messages=document.querySelectorAll('#thread .am-message-group');
+          const messageGroup=messages[outgoing?0:messages.length-1];
+          const node=messageGroup?.querySelector('.am-message-actions time');
+          if(!node)return false;
           const actions=node.parentElement, body=actions.previousElementSibling;
+          if(getComputedStyle(actions).opacity!=='1')return false;
           const footer=actions.getBoundingClientRect(), message=body.getBoundingClientRect();
           return {
-            opacity:getComputedStyle(actions).opacity,fontSize:getComputedStyle(node).fontSize,
+            fontSize:getComputedStyle(node).fontSize,
             gap:footer.top-message.bottom,left:footer.left===message.left,right:footer.right===message.right,
             first:actions.firstElementChild===node,
           };
-        });
-        assert.equal(layout.opacity,'1');
+        },outgoing);
+        const layout=await sample.jsonValue();
         assert.equal(layout.fontSize,'12px');
         assert.equal(layout.gap,8);
         assert.equal(outgoing?layout.right:layout.left,true);
-        assert.equal(layout.first,outgoing);
+        assert.equal(layout.first,true);
         assert.match(await time.getAttribute('title'),/\d{2}:\d{2}$/);
       }
+      if(process.env.SCREENSHOT_DIR)await workerMessage.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'message-hover.png')});
       assert.equal(await workerMessage.evaluate(node=>node.getBoundingClientRect().top-node.previousElementSibling.getBoundingClientRect().bottom),24);
       const settingsDialog=draftPage.getByRole('dialog',{name:'Настройки программы'});
       const settingsOpen=draftPage.locator('#settings-open');
       const settingsNav=settingsDialog.getByRole('navigation',{name:'Разделы'});
       await settingsOpen.click();
+      await draftPage.locator('#settings-menu-open').click();
       const general=settingsDialog.locator('#settings-page');
       await general.waitFor();
       assert.deepEqual(await general.evaluate(screen=>{
@@ -662,6 +779,9 @@ if (require.main === module) (async()=>{
       assert.equal(standard.size,readable.size);
       assert.equal(readable.line,standard.line);
       assert.notEqual(readable.color,standard.color);
+      await select(draftPage,'chat-font-select','Inter');
+      assert.equal(await settingsNav.evaluate(node=>node.getBoundingClientRect().width/parseFloat(getComputedStyle(node).fontSize)),15);
+      if(process.env.SCREENSHOT_DIR)await settingsDialog.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'settings-inter.png')});
       assert.equal(await general.locator('.am-card h3').count(),0);
       const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
       const dialogHeaderHeight=await headerHeight('#settings-dialog .am-dialog-header');
@@ -715,7 +835,8 @@ if (require.main === module) (async()=>{
       await draftPage.keyboard.press('Escape');
       await settingsDialog.waitFor({state:'hidden'});
       await draftPage.waitForFunction(()=>document.activeElement?.id==='settings-open');
-      await feedback.click();
+      await settingsOpen.click();
+      await draftPage.locator('#fb-open').click();
       await draftPage.locator('#fb-dialog').waitFor();
       assert.equal(await headerHeight('#fb-dialog .am-dialog-header'),dialogHeaderHeight);
       await draftPage.locator('#fb-close').click();
@@ -783,8 +904,13 @@ if (require.main === module) (async()=>{
       assert.equal(await draftPage.locator('#stats-computer').inputValue(),'pc1');
       await standaloneStats.locator('#stats-close').click();
       await settingsOpen.click();
+      await draftPage.locator('#settings-menu-open').click();
       await settingsNav.locator('[data-tab=agents]').click();
       assert.equal(await draftPage.locator('#agents-computer').inputValue(),'local');
+      assert.deepEqual(await settingsDialog.locator('[data-agent-group=installed] .am-agent-card').evaluateAll(cards=>
+        cards.map(card=>card.dataset.provider)),['claude','codex']);
+      await settingsDialog.locator('[data-agent-group=available] .am-agent-card[data-provider=cursor]')
+        .getByRole('button',{name:'Установить',exact:true}).waitFor();
       const agentIcon=settingsDialog.locator('.am-provider-heading .am-provider-icon svg').first();
       assert.deepEqual(await agentIcon.evaluate(icon=>{
         const {width,height}=icon.getBoundingClientRect();
@@ -840,6 +966,14 @@ if (require.main === module) (async()=>{
       await draftPage.locator('#task-head').getByRole('heading',{name:'Новая задача',exact:true}).waitFor();
       assert.equal(await form.locator('.am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
       assert.equal(await draftPage.locator('#compose .am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
+      const balanced=field=>field.evaluate(node=>{
+        const text=node.querySelector('textarea');
+        const textLeft=text.getBoundingClientRect().left;
+        const leading=[...node.querySelectorAll('button:not([hidden]) svg')].map(icon=>icon.getBoundingClientRect()).filter(icon=>icon.right<textLeft);
+        const start=textLeft+parseFloat(getComputedStyle(text).paddingLeft);
+        return Math.abs((leading[0].left-node.getBoundingClientRect().left)-(start-leading.at(-1).right))<=1;
+      });
+      assert.equal(await balanced(form.locator('.am-compose-field')),true);
       const oneLineHeight=(await form.locator('textarea').boundingBox()).height;
       assert.equal(oneLineHeight,32);
       await form.locator('textarea').fill('Первая строка\nВторая строка\nТретья строка');
@@ -853,14 +987,14 @@ if (require.main === module) (async()=>{
       assert.equal(await plus.getAttribute('aria-expanded'),'false');
       assert(await draftPage.locator('#conversation-date').isVisible());
       assert.equal(await draftPage.locator('#task-head time').count(),0);
-      await select(draftPage,'project-select','Все');
+      await select(draftPage,'project-select','Все проекты');
       await plus.click();
       assert.equal(await draftPage.locator('#conversation-date').isVisible(),false);
       const modelTrigger=form.getByRole('button',{name:'Модель',exact:true});
       assert.equal(await modelTrigger.evaluate(node=>{
         const context=node.closest('.am-draft-options'),field=context.previousElementSibling;
-        const [plus,text,send]=Array.from(field.children,item=>item.getBoundingClientRect());
-        return plus.right<=text.left&&text.right<=send.left&&plus.top===text.top&&text.top===send.top&&
+        const [plus,shield,text,send]=Array.from(field.children,item=>item.getBoundingClientRect());
+        return plus.right<=shield.left&&shield.right<=text.left&&text.right<=send.left&&plus.top===shield.top&&shield.top===text.top&&text.top===send.top&&
           context.querySelectorAll('.am-select-trigger').length===3&&
           field.getBoundingClientRect().bottom<context.getBoundingClientRect().top;
       }),true);
@@ -870,47 +1004,116 @@ if (require.main === module) (async()=>{
       assert.equal(draftLabels.length,3);
       for(const label of draftLabels)assert.deepEqual(await labelStyle(label),replyModelStyle);
       await select(draftPage,'task-draft-project','Инструменты');
-      const pathMenu=draftPage.getByRole('dialog',{name:'Добавить путь',exact:true});
-      const addPath=form.getByRole('button',{name:'Добавить путь',exact:true});
+      const folderPick=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
+      await select(draftPage,'task-draft-project','Открыть папку…');
+      assert.deepEqual((await folderPick).postDataJSON(),{kind:'folder',current:''});
+      const folderDialog=draftPage.locator('#project-dialog');
+      await folderDialog.waitFor();
+      await draftPage.waitForFunction(()=>document.getElementById('project-folder').value==='/fictional/project/notes.txt');
+      await folderDialog.press('Escape');
+      assert.equal(await form.locator('#task-draft-project').inputValue(),'tools');
+      const pathMenu=draftPage.getByRole('dialog',{name:'Вложения',exact:true});
+      const addPath=form.getByRole('button',{name:'Вложения',exact:true});
       await addPath.hover();
       assert(await addPath.evaluate(async button=>{
         await Promise.all(button.getAnimations().map(animation=>animation.finished));
-        const style=getComputedStyle(button),field=getComputedStyle(button.closest('.am-compose-field'));
-        return parseFloat(style.borderRadius)===parseFloat(field.borderRadius)-4&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
+        const style=getComputedStyle(button),icon=getComputedStyle(button.querySelector('svg'));
+        return style.borderRadius==='8px'&&style.width==='32px'&&style.height==='32px'&&
+          icon.width==='16px'&&icon.height==='16px'&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
       }));
       await select(draftPage,'task-draft-computer','Мак');
-      assert.equal(await form.locator('#task-draft-access').textContent(),'Обычный доступ');
-      assert.equal(await accessAbove(form.locator('#task-draft-access')),true);
+      assert.equal(await form.locator('#task-draft-access').getAttribute('aria-label'),'Обычный доступ');
+      assert.equal(await form.locator('.am-compose-field > #task-draft-access').isVisible(),true);
+      const shield=form.locator('#task-draft-access');
+      await shield.press('Space');
+      const defaultAccess=draftPage.getByRole('menuitemradio',{name:'По настройкам исполнителя'});
+      await defaultAccess.waitFor();
+      assert.equal(await defaultAccess.getAttribute('aria-checked'),'true');
+      await defaultAccess.press('ArrowDown');
+      const standardAccess=draftPage.getByRole('menuitemradio',{name:'Обычный доступ'});
+      assert.equal(await standardAccess.evaluate(node=>node===document.activeElement),true);
+      await standardAccess.press('Escape');
+      assert.equal(await shield.evaluate(node=>node===document.activeElement),true);
       await addPath.click();
+      const folderGlyph=selector=>draftPage.locator(selector).evaluate(button=>{
+        const icon=button.querySelector('svg');
+        const style=getComputedStyle(icon);
+        return [icon.querySelector('path').getAttribute('d'),style.width,style.height,style.strokeWidth];
+      });
+      assert.deepEqual(
+        await folderGlyph('#task-draft-folder'),
+        await folderGlyph('[aria-controls="task-draft-project-menu"]'),
+      );
       const pickRequest=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
-      await pathMenu.getByRole('button',{name:'Выбрать файл…',exact:true}).click();
-      assert.deepEqual((await pickRequest).postDataJSON(),{kind:'file',current:''});
+      await pathMenu.getByRole('button',{name:'Добавить файл…',exact:true}).click();
+      assert.deepEqual((await pickRequest).postDataJSON(),{kind:'attach-file',current:''});
       await pathMenu.waitFor({state:'hidden'});
-      assert.equal(await form.locator('textarea').inputValue(),'/fictional/project/notes.txt');
-      await form.locator('textarea').fill('');
+      await form.getByRole('button',{name:'Убрать вложение notes.txt'}).waitFor();
+      assert.equal(await form.locator('textarea').inputValue(),'');
       await select(draftPage,'task-draft-computer','ПК-1');
-      assert.equal(await form.locator('#task-draft-access').textContent(),'Доступ задаётся на ПК-1');
+      await form.getByRole('button',{name:'Убрать вложение notes.txt'}).click();
+      assert.equal(await form.locator('#task-draft-access').getAttribute('aria-label'),'Доступ задаётся на ПК-1');
       await addPath.click();
-      assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
+      assert.equal(await pathMenu.getByRole('button',{name:'Добавить файл…'}).isVisible(),true);
       assert.equal(await pathMenu.getByRole('textbox').isVisible(),false);
       await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
       const remotePath=pathMenu.getByRole('textbox',{name:'Путь на компьютере исполнителя'});
       await remotePath.fill('docs/notes.md');
       await remotePath.press('Enter');
       await pathMenu.waitFor({state:'hidden'});
-      assert.equal(await form.locator('textarea').inputValue(),'docs/notes.md');
-      await form.locator('textarea').fill('');
-      await modelTrigger.click();
+      await form.getByRole('button',{name:'Убрать вложение notes.md'}).click();
+      await draftPage.locator('.am-chat-body').evaluate(chat=>{
+        const data=new DataTransfer();
+        data.items.add(new File([new Uint8Array([0,1,255])],'brief.dat',{type:'application/octet-stream'}));
+        chat.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:data}));
+        if(chat.querySelector('.am-attachment-drop').hidden)throw Error('File drop feedback is missing');
+        chat.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data}));
+      });
+      await form.getByRole('button',{name:'Убрать вложение brief.dat'}).waitFor();
+      await form.locator('textarea').fill('/mo');
+      await draftPage.getByRole('option',{name:/\/model/}).waitFor();
+      await form.locator('textarea').press('Enter');
       const modelMenu=draftPage.locator('#task-draft-model-menu');
       const draftSearch=modelMenu.getByRole('searchbox',{name:'Поиск моделей'});
       assert.equal(await draftSearch.evaluate(node=>node===document.activeElement),true);
       assert.deepEqual(await form.locator('#task-draft-model option').evaluateAll(nodes=>nodes.map(n=>n.value).filter(key=>key.startsWith('codex:'))),orderedCodex.map(id=>'codex:'+id));
+      const scrollBounds=await modelMenu.evaluate(menu=>{
+        const field=menu.querySelector('.am-model-search'),list=menu.querySelector('[role=listbox]');
+        const from=list.scrollTop;
+        list.scrollTop=list.scrollHeight;
+        const result=[getComputedStyle(menu).overflowY,list.scrollTop>from,
+          list.getBoundingClientRect().top>=field.getBoundingClientRect().bottom,
+          list.getBoundingClientRect().bottom<menu.getBoundingClientRect().bottom,menu.scrollTop];
+        list.scrollTop=from;
+        return result;
+      });
+      assert.deepEqual(scrollBounds,['hidden',true,true,true,0]);
       const checkedModel=modelMenu.locator('[aria-selected=true]');
-      assert.equal(await checkedModel.textContent(),'Codex Sol 6.2 Medium');
+      assert.equal(await checkedModel.textContent(),'Sol 6.2 Medium');
+      assert.deepEqual(await modelTrigger.locator('.am-select-value > span').allTextContents(),['Codex',' Sol 6.2 Medium']);
+      assert.equal(await modelTrigger.locator('.am-select-value').evaluate(node=>{
+        const [provider,model]=node.children;
+        return getComputedStyle(provider).color!==getComputedStyle(model).color;
+      }),true);
+      assert.deepEqual(await modelMenu.locator('.am-model-group-title').allTextContents(),['Claude Code','Codex','Cursor']);
+      assert.deepEqual(await modelMenu.getByRole('group').evaluateAll(groups=>groups.map(group=>[
+        getComputedStyle(group).paddingBlockStart,
+        getComputedStyle(group).paddingBlockEnd,
+        getComputedStyle(group.firstElementChild).paddingBlockStart,
+        getComputedStyle(group.firstElementChild).paddingBlockEnd
+      ])),Array.from({length:3},()=>Array(4).fill('4px')));
+      if(process.env.SCREENSHOT_DIR){
+        await draftPage.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'model-groups.png')});
+      }
       assert.equal(await checkedModel.locator('.am-select-check svg').count(),1);
       assert.equal(await checkedModel.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
       const [searchBox,optionBox]=await Promise.all([draftSearch.boundingBox(),checkedModel.boundingBox()]);
-      assert.deepEqual([searchBox.x,searchBox.width],[optionBox.x,optionBox.width]);
+      const gutter=await modelMenu.getByRole('listbox').evaluate(list=>list.offsetWidth-list.clientWidth);
+      assert.equal(searchBox.x,optionBox.x);
+      assert(Math.abs(searchBox.width-optionBox.width-gutter)<1);
+      await draftSearch.fill('cursor composer');
+      assert.equal(await modelMenu.getByRole('group',{name:'Cursor'}).count(),1);
+      assert.equal(await modelMenu.getByRole('group',{name:'Claude Code'}).count(),0);
       await draftSearch.fill('неизвестная модель');
       assert.equal(await modelMenu.getByRole('option').count(),0);
       assert.equal(await modelMenu.getByRole('status').textContent(),'Модели не найдены');
@@ -928,7 +1131,7 @@ if (require.main === module) (async()=>{
       await form.locator('textarea').press('Enter');
       const {op_id,...payload}=(await start).postDataJSON();
       assert.match(op_id,/^window-/);
-      assert.deepEqual(payload,{project:'tools',computer:'pc1',agent:'codex',model:'gpt-6.2-astra[effort=high]',text:directTask.title});
+      assert.deepEqual(payload,{project:'tools',computer:'pc1',agent:'codex',model:'gpt-6.2-astra[effort=high]',text:directTask.title,attachments:[{path:'brief.dat',data:'AAH/'}]});
       const ownerBubble=draftPage.locator('#thread .am-outgoing').filter({hasText:directTask.title});
       const conversation=draftPage.locator('#thread');
       await conversation.getByText('Настройки сохранены',{exact:true}).waitFor();
@@ -968,18 +1171,54 @@ if (require.main === module) (async()=>{
       await ownerMessage.getByRole('status').getByText('Скопировано',{exact:true}).waitFor();
       assert.equal(await draftPage.evaluate(()=>window.testCopiedMessage),directTask.title);
       await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
-      assert.equal(await draftPage.locator('#answer-access').textContent(),'Доступ задаётся на ПК-1');
-      assert.equal(await accessAbove(replyAccess),true);
+      assert.equal(await replyAccess.getAttribute('aria-label'),'Доступ на ПК-1');
+      assert.equal(await replyAccess.getAttribute('title'),'Доступ задаётся на ПК-1');
+      assert.equal(await accessBelow(replyAccess),true);
+      const footerCenters=await draftPage.locator('#answer-context').evaluate(async footer=>{
+        await document.fonts.ready;
+        const canvas=document.createElement('canvas').getContext('2d');
+        return [...footer.querySelectorAll('#answer-model,#answer-access > svg,#answer-tokens > svg')].map(node=>{
+          const bounds=node.getBoundingClientRect();
+          if(node instanceof SVGElement){
+            const graphic=node.getBBox();
+            return new DOMPoint(0,graphic.y+graphic.height/2).matrixTransform(node.getScreenCTM()).y;
+          }
+          const font=getComputedStyle(node);
+          canvas.font=font.fontWeight+' '+font.fontSize+' '+font.fontFamily;
+          const baseline=document.createElement('span');
+          baseline.style.cssText='display:inline-block;width:0;height:0';
+          node.prepend(baseline);
+          const center=baseline.getBoundingClientRect().top-canvas.measureText('Н').actualBoundingBoxAscent/2;
+          baseline.remove();
+          return center;
+        });
+      });
+      assert.equal(footerCenters.length,3);
+      assert(Math.max(...footerCenters)-Math.min(...footerCenters)<=0.5,JSON.stringify(footerCenters));
+      const viewportEnd=await draftPage.locator('#thread').evaluate(thread=>{
+        const field=document.querySelector('#compose .am-compose-field').getBoundingClientRect();
+        const footer=thread.parentElement.querySelector('.am-chat-footer').getBoundingClientRect();
+        return [thread.getBoundingClientRect().bottom,field.top,footer.top,getComputedStyle(thread).bottom];
+      });
+      assert(Math.abs(viewportEnd[0]-viewportEnd[1])<1,JSON.stringify(viewportEnd));
+      if(process.env.SCREENSHOT_DIR){
+        const field=await draftPage.locator('#compose .am-compose-field').boundingBox();
+        const foot=await draftPage.locator('#answer-context').boundingBox();
+        await draftPage.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'composer-access.png'),clip:{
+          x:field.x-12,y:field.y-220,width:field.width+24,height:foot.y+foot.height-field.y+232,
+        }});
+      }
       await draftPage.locator('#answer-add').click();
-      assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
+      assert.equal(await pathMenu.getByRole('button',{name:'Добавить файл…'}).isVisible(),false);
       await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
       await remotePath.fill('docs/reply.md');
       await remotePath.press('Enter');
-      assert.equal(await draftPage.locator('#answer-text').inputValue(),'Уточнение исполнителю\ndocs/reply.md');
+      await draftPage.getByRole('button',{name:'Убрать вложение reply.md'}).waitFor();
+      assert.equal(await draftPage.locator('#answer-text').inputValue(),'Уточнение исполнителю');
       const note=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-note');
       await draftPage.locator('#answer-send').click();
       const {task:noteTask,text:noteText}=(await note).postDataJSON();
-      assert.deepEqual([noteTask,noteText],[directTask.id,'Уточнение исполнителю\ndocs/reply.md']);
+      assert.deepEqual([noteTask,noteText],[directTask.id,'Уточнение исполнителю\n\ndocs/reply.md']);
       assert.equal(await form.isVisible(),false);
       const drawer=draftPage.locator('#list-toggle');
       assert.equal(await drawer.getAttribute('aria-label'),'Показать архив');
@@ -1050,6 +1289,20 @@ if (require.main === module) (async()=>{
       }),['0px','rgba(0, 0, 0, 0)','8px','4px','16px','16px']);
       const hides=()=>seen.filter(req=>['/api/task-hide','/api/task-hide-history'].includes(req.path)).length;
       const initialHides=hides();
+      let chromeStyle;
+      for(const [index,selector] of ['#archive-clear','#agent-filter + button','#project-select + button','#sidebar-group + button','#settings-open','#limits-open','#stats-open','#list-toggle'].entries()){
+        const control=draftPage.locator(selector);
+        await control.hover();
+        const style=await control.evaluate(async button=>{
+          await Promise.all(button.getAnimations().map(anim=>anim.finished));
+          const css=getComputedStyle(button),icon=button.querySelector('svg').getBoundingClientRect();
+          return [button.offsetWidth,button.offsetHeight,icon.width,icon.height,css.borderRadius,css.backgroundColor];
+        });
+        assert.deepEqual(style.slice(0,5),[28,28,16,16,'8px']);
+        if(index===0)chromeStyle=style;
+        else assert.deepEqual(style,chromeStyle);
+        if(process.env.SCREENSHOT_DIR&&index<2)await archive.locator('.am-queue-header').screenshot({path:path.join(process.env.SCREENSHOT_DIR,index?'filter-hover.png':'clear-hover.png')});
+      }
       await clearArchive.click();
       await draftPage.getByText('Очистить архив?',{exact:true}).waitFor();
       assert.deepEqual(await draftPage.locator('#confirm-dialog').evaluate(dialog=>{
@@ -1101,7 +1354,7 @@ if (require.main === module) (async()=>{
       const archiveReport=async()=>{
         await report.click({button:'right'});
         assert.equal(await action('Убрать из архива навсегда').count(),0);
-        await action('Архивировать задачу').click();
+        await action('Отправить в архив').click();
         await report.getByText(/В архиве/).waitFor();
       };
       await archiveReport();
@@ -1203,7 +1456,7 @@ if (require.main === module) (async()=>{
       await row.getByText('Звуки меню',{exact:true}).waitFor();
       assert.equal(await draftPage.locator('#project-count').textContent(),String(projects.length));
       assert.equal(await shared.count(),0);
-      await select(draftPage,'project-select','Все');
+      await select(draftPage,'project-select','Все проекты');
       await shared.click();
       await draftPage.locator('#thread').getByText('Общий результат',{exact:true}).waitFor();
     }finally{await draftPage.close();}
@@ -1373,9 +1626,31 @@ if (require.main === module) (async()=>{
       const offlineMark=card(browserPreview,'pc2').getByRole('img',{name:'Нет связи',exact:true});
       const group=mode=>select(browserPreview,'sidebar-group',mode);
       const machines=browserPreview.locator('#machines');
+      const checkGroupPlus=async header=>{
+        const plus=header.locator(':scope > .am-group-new');
+        await browserPreview.mouse.move(0,0);
+        assert.equal(await plus.evaluate(node=>getComputedStyle(node).opacity),'0');
+        await header.hover();
+        assert.equal(await plus.evaluate(node=>getComputedStyle(node).opacity),'1');
+        const rowFill=await header.evaluate(node=>getComputedStyle(node).backgroundColor);
+        await plus.hover();
+        assert.equal(await plus.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+        assert.equal(await header.evaluate(node=>getComputedStyle(node).backgroundColor),rowFill);
+        const aligned=await header.evaluate(row=>{
+          const edge=row.getBoundingClientRect();
+          const plus=row.querySelector('.am-group-new').getBoundingClientRect();
+          const padding=parseFloat(getComputedStyle(row).paddingInlineEnd);
+          return Math.abs(edge.right-plus.right-padding)<0.5&&
+            Math.abs(edge.top+edge.height/2-plus.top-plus.height/2)<0.5;
+        });
+        assert.equal(aligned,true);
+        await plus.click();
+      };
       await group('По проекту');
       const gameFolder=machines.locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       const gameButton=gameFolder.locator('.am-folder-heading');
+      await checkGroupPlus(gameFolder.locator('.am-folder-row'));
+      assert.equal(await browserPreview.locator('#task-draft-project').inputValue(),'game');
       assert.equal(await gameFolder.locator('.am-sidebar-task-title').filter({hasText:'Мак, Экран настроек'}).count(),1);
       await gameButton.click();
       assert.equal(await gameFolder.locator('.am-sidebar-task:visible').count(),0);
@@ -1386,7 +1661,8 @@ if (require.main === module) (async()=>{
       await gameButton.click({button:'right'});
       const projectMenu=browserPreview.locator('#device-menu');
       const projectSettings=projectMenu.getByRole('menuitem',{name:'Настройки проекта'});
-      assert.equal(await projectMenu.locator('.am-context-device').getAttribute('data-device'),'local');
+      assert.equal(await projectMenu.locator('.am-context-device').count(),0);
+      assert.equal(await projectMenu.getByRole('menuitem').count(),2);
       await projectSettings.click();
       await browserPreview.locator('#settings-dialog #project-page-title').waitFor();
       await browserPreview.locator('#settings-close').click();
@@ -1394,10 +1670,22 @@ if (require.main === module) (async()=>{
       await projectMenu.getByRole('menuitem',{name:'Удалить локальный проект'}).click();
       await browserPreview.locator('#confirm-dialog').getByText('Удалить проект «Игра»?').waitFor();
       await browserPreview.locator('#confirm-cancel').click();
-      await group('По компьютеру, затем по проекту');
+      await browserPreview.locator('[aria-controls="sidebar-group-menu"]').click();
+      const groupingMenu=browserPreview.locator('#sidebar-group-menu');
+      const combined=groupingMenu.getByRole('option',{name:'По компьютеру и проекту',exact:true});
+      assert.equal(await combined.locator(':scope > span').first().evaluate(label=>
+        Math.round(label.getBoundingClientRect().height)===Math.round(parseFloat(getComputedStyle(label).lineHeight))),true);
+      if(process.env.SCREENSHOT_DIR)await groupingMenu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'task-grouping.png')});
+      await combined.click();
       const localGame=card(browserPreview,'local').locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       assert.equal(await localGame.getByText('Экран настроек',{exact:true}).count(),1);
       const localFolderButton=localGame.locator('.am-folder-heading');
+      assert.equal(await localGame.locator('.am-group-new').count(),0);
+      await localFolderButton.press('Shift+F10');
+      await projectMenu.waitFor();
+      assert.equal(await projectMenu.locator('.am-context-device').count(),0);
+      assert.equal(await projectMenu.getByRole('menuitem').count(),2);
+      await projectMenu.getByRole('menuitem').first().press('Escape');
       const machineHeader=card(browserPreview,'local').locator('.am-machine-name');
       assert.equal((await localFolderButton.boundingBox()).height,(await machineHeader.boundingBox()).height);
       assert.equal((await localMark.locator('svg').boundingBox()).width,16);
@@ -1427,11 +1715,50 @@ if (require.main === module) (async()=>{
       assert(treeGaps.every(gap=>Math.abs(gap-4)<0.1),JSON.stringify(treeGaps));
       await localGame.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await browserPreview.locator('#task-head').getByText('Экран настроек',{exact:true}).waitFor();
+      await group('По проекту и компьютеру');
+      const reverseGame=machines.locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
+      const reverseLocal=reverseGame.locator('[data-computer=local]');
+      const reversePC=reverseGame.locator('[data-computer=pc1]');
+      assert.equal(await reversePC.locator('.am-group-new').count(),0);
+      await reverseGame.locator('.am-folder-heading').click({button:'right'});
+      assert.equal(await projectMenu.locator('.am-context-device').count(),0);
+      await projectMenu.getByRole('menuitem').first().press('Escape');
+      await reversePC.locator('.am-machine-name').click({button:'right'});
+      await projectMenu.getByText('v1.0.5',{exact:true}).waitFor();
+      await projectMenu.getByRole('menuitem',{name:'Обновить версию'}).waitFor();
+      await projectMenu.getByRole('menuitem').first().press('Escape');
+      await reverseLocal.getByText('Экран настроек',{exact:true}).waitFor();
+      await reversePC.getByText('Проверка навигации',{exact:true}).waitFor();
+      await reverseLocal.locator('.am-sidebar-disclosure').click();
+      assert.equal(await reverseLocal.locator('.am-sidebar-tasks').getAttribute('inert'),'');
+      assert.equal(await reversePC.locator('.am-sidebar-tasks').getAttribute('inert'),null);
+      await reverseLocal.locator('.am-sidebar-disclosure').click();
+      if(process.env.SCREENSHOT_DIR)await machines.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'project-computer.png')});
       await group('По компьютеру');
+      await checkGroupPlus(card(browserPreview,'pc1').locator('.am-machine-name'));
+      assert.equal(await browserPreview.locator('#task-draft-computer').inputValue(),'pc1');
+      await card(browserPreview,'local').locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');
       const computerMenu=browserPreview.locator('#device-menu');
       await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
-      const peerUpdate=computerMenu.getByRole('button',{name:'Обновить до v1.0.9'});
+      const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить версию'});
+      await peerUpdate.hover();
+      const spacing=await peerUpdate.evaluate(async row=>{
+        await Promise.all(row.getAnimations().map(animation=>animation.finished));
+        const style=getComputedStyle(row),bounds=row.getBoundingClientRect();
+        const menu=row.closest('.am-context-menu');
+        const footer=menu.querySelector('.am-context-device').getBoundingClientRect();
+        return {rowPadding:[style.paddingBlockStart,style.paddingBlockEnd],highlight:style.backgroundColor,
+          beforeDivider:footer.top-bounds.bottom,menuPadding:getComputedStyle(menu).paddingBlockStart};
+      });
+      assert.deepEqual(spacing.rowPadding,['4px','4px']);
+      assert.notEqual(spacing.highlight,'rgba(0, 0, 0, 0)');
+      assert.equal(spacing.beforeDivider,4);
+      assert.equal(spacing.menuPadding,'8px');
+      if(process.env.SCREENSHOT_DIR){
+        await computerMenu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'update-menu.png')});
+        console.log('Update menu:',spacing);
+      }
       await peerUpdate.click();
       await browserPreview.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
       await browserPreview.locator('#confirm-cancel').click();
@@ -1469,8 +1796,14 @@ if (require.main === module) (async()=>{
       assert.equal((await narrowArchive.boundingBox()).y,toolbar.y+toolbar.height);
     }finally{await browserPreview.close();}
 
+    let addedProject=null;
     const compactPreview=await open(projects,{width:450,height:720},'light',(url,p)=>{
-      if(url.pathname==='/api/window')return {json:{...reply(url,p,projects),coordinator_link:{
+      if(url.pathname==='/api/pick')return {json:{ok:true,path:'/Проекты/Черновики'}};
+      if(url.pathname==='/api/project-create'){
+        addedProject=JSON.parse(seen.at(-1).body);
+        return {json:{ok:true}};
+      }
+      if(url.pathname==='/api/window')return {json:{...reply(url,p,addedProject?[...projects,addedProject]:projects),coordinator_link:{
         state:'unknown',detail:'Файл настроек проекта недоступен. Проверьте разрешения на папку проекта и попробуйте подключиться ещё раз.',
       }}};
     },true);
@@ -1483,6 +1816,7 @@ if (require.main === module) (async()=>{
       await compactPreview.locator('#task-draft-text').waitFor();
       await compactPreview.locator('#task-draft-text').fill('Черновик');
       await compactPreview.locator('#settings-open').click();
+      await compactPreview.locator('#settings-menu-open').click();
       await compactPreview.waitForFunction(()=>document.activeElement.id==='settings-title');
       const closeSettings=compactPreview.locator('#settings-close');
       assert.equal(await closeSettings.evaluate(n=>n.matches(':hover,:focus-visible')),false);
@@ -1499,7 +1833,7 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await modal.locator('.am-settings-nav [data-tab] > svg').evaluateAll(icons=>icons.map(icon=>{
         const {width,height}=icon.getBoundingClientRect();
         return [width,height,icon.getAttribute('aria-hidden')];
-      })),Array(4).fill([18,18,'true']));
+      })),Array(4).fill([16,16,'true']));
       await modal.locator('[data-tab=server]').click();
       const name=modal.getByRole('textbox',{name:'Имя в сети',exact:true});
       const nameLabel=modal.locator('label[for=computer-name] > span');
@@ -1519,6 +1853,15 @@ if (require.main === module) (async()=>{
       await total(compactPreview,'103578');
       await statisticsDialog.locator('#stats-close').click();
       assert.equal(await compactPreview.locator('#task-draft-text').inputValue(),'Черновик');
+      await select(compactPreview,'task-draft-project','Открыть папку…');
+      await compactPreview.waitForFunction(()=>document.getElementById('project-folder').value==='/Проекты/Черновики');
+      await compactPreview.locator('#project-name').fill('Черновики');
+      await compactPreview.locator('#project-save').click();
+      await compactPreview.locator('#project-dialog').waitFor({state:'hidden'});
+      await compactPreview.waitForFunction(()=>document.getElementById('task-draft-project').value==='Черновики');
+      assert.deepEqual(addedProject,{name:'Черновики',folder:'/Проекты/Черновики'});
+      assert.equal(await compactPreview.locator('#task-draft-text').inputValue(),'Черновик');
+      assert.equal(await compactPreview.locator('#task-draft-send').isEnabled(),true);
     }finally{await compactPreview.close();}
 
     const single=await open(projects.slice(0,1),{width:1100,height:706},'light');
@@ -1642,13 +1985,13 @@ if (require.main === module) (async()=>{
     assert.equal(await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).count(),1);
     assert.equal(await cells(page,'pc1').nth(0).locator('.am-machine-version').count(),0);
     assert.equal(await cells(page,'pc1').nth(1).getByText('v1.0.5',{exact:true}).count(),1);
-    await cells(page,'pc1').nth(1).getByRole('button',{name:'Обновить до v1.0.9'}).click();
+    await cells(page,'pc1').nth(1).getByRole('button',{name:'Обновить версию'}).click();
     await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
     await page.locator('#confirm-cancel').click();
     await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).click({button:'right'});
     const peerMenu=page.locator('#device-menu');
     await peerMenu.getByText('v1.0.5',{exact:true}).waitFor();
-    await peerMenu.getByRole('button',{name:'Обновить до v1.0.9'}).click();
+    await peerMenu.getByRole('menuitem',{name:'Обновить версию'}).click();
     await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
     await page.locator('#confirm-cancel').click();
     assert.equal(await cells(page,'pc1').nth(1).getAttribute('aria-pressed'),'false');

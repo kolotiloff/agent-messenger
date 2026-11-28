@@ -43,6 +43,7 @@ type SharedTask struct {
 	Model         string `json:"model,omitempty"`
 	FinishedAt    string `json:"finished_at,omitempty"`
 	Archived      bool   `json:"archived,omitempty"`
+	KeepOpen      bool   `json:"keep_open,omitempty"`
 	// Report is the beginning of the worker's report.
 	Report string `json:"report,omitempty"`
 	Tokens int64  `json:"tokens,omitempty"`
@@ -206,6 +207,19 @@ func PostSharedTasks(ctx context.Context, c Connection, tasks []SharedTask) ([]P
 	var out sharedResponse
 	client := pinnedClient(c.Fingerprint)
 	code, err := call(ctx, client, http.MethodPost, c.Address, "/v1/tasks", c.DeviceKey, sharedRequest{Tasks: tasks}, &out)
+	if err == nil && code == http.StatusBadRequest && validSharedTasks(tasks) {
+		for _, t := range tasks {
+			if t.KeepOpen {
+				tasks = append([]SharedTask(nil), tasks...)
+				for i := range tasks {
+					tasks[i].KeepOpen = false
+				}
+				out = sharedResponse{}
+				code, err = call(ctx, client, http.MethodPost, c.Address, "/v1/tasks", c.DeviceKey, sharedRequest{Tasks: tasks}, &out)
+				break
+			}
+		}
+	}
 	if err == nil && code == http.StatusBadRequest && validSharedTasks(tasks) {
 		for _, t := range tasks {
 			if t.PendingLaunch {

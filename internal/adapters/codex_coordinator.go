@@ -386,8 +386,8 @@ func classifyCodexConfig(name, raw, messenger, root, project string) (string, []
 	if enabledFalse {
 		return LinkOff, nil, nil
 	}
-	if !sameTrustPath(command, messenger) {
-		if !managedCoordinatorProgram(command, messenger, root) {
+	if !sameCoordinatorProgram(command, messenger) {
+		if !managedCoordinatorProgram(command, root) {
 			return LinkOther, nil, nil
 		}
 		return LinkStale, kept, nil

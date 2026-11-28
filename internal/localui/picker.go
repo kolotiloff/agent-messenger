@@ -148,7 +148,9 @@ var pickBusy sync.Mutex
 
 func servePick(w http.ResponseWriter, r *http.Request, decoder *json.Decoder, pick func(context.Context, string, string) (string, error)) {
 	var req pickRequest
-	if err := decoder.Decode(&req); err != nil || (req.Kind != "file" && req.Kind != "folder") || len(req.Current) > 4096 {
+	err := decoder.Decode(&req)
+	kind, attach := strings.CutPrefix(req.Kind, "attach-")
+	if err != nil || (kind != "file" && kind != "folder") || len(req.Current) > 4096 {
 		http.Error(w, "invalid request", 400)
 		return
 	}
@@ -158,7 +160,7 @@ func servePick(w http.ResponseWriter, r *http.Request, decoder *json.Decoder, pi
 		return
 	}
 	defer pickBusy.Unlock()
-	path, err := pick(r.Context(), req.Kind, pickStart(req.Current))
+	path, err := pick(r.Context(), kind, pickStart(req.Current))
 	if errors.Is(err, errNoPicker) {
 		w.WriteHeader(http.StatusNotImplemented)
 		writeJSON(w, map[string]any{"ok": false, "detail": "На этом компьютере нет окна выбора файлов. Вставьте путь вручную."})
@@ -167,6 +169,21 @@ func servePick(w http.ResponseWriter, r *http.Request, decoder *json.Decoder, pi
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSON(w, map[string]any{"ok": false, "detail": "Окно выбора не открылось. Вставьте путь вручную."})
+		return
+	}
+	if attach && path != "" {
+		files, err := readPickedAttachments(path)
+		if err != nil {
+			var pathErr *os.PathError
+			detail := err.Error()
+			if errors.As(err, &pathErr) {
+				detail = "Не удалось прочитать выбранные вложения."
+			}
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			writeJSON(w, map[string]any{"ok": false, "detail": detail})
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "attachments": files})
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "path": path})

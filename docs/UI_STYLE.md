@@ -27,6 +27,8 @@ Expanded efficiency details start 16 px inside the parent row and share its trai
 
 The sidebar action and project filter, statistics periods and filter controls use the same 8 px control gap. Compact list rows keep their 4 px gap. The first computer begins 8 px below the Mac project filter. Settings section headings sit above the first card with the section gap. Computer, Archive and Statistics task rows share the list hover fill. Statistics tasks have the same 4 px gap as archived tasks. Dropdown options have 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window). The Projects divider aligns with the full-width task toolbar. The Archive header starts below the toolbar. The quiet Clear Archive icon sits beside the count and opens a confirmation dialog. The footer aligns the visible icon and version text edges by applying the icon's internal inset to the version text.
 
+The reply footer aligns the cap-height center of its selected-font labels with the shield and context meter. The model uses the primary text color. The 16 px meter glyph sits in the standard 28 px compact button with the 8 px radius. Its measured portion uses the accent color.
+
 Buttons that belong together go in one container: `.am-actions` (a row) or `.am-actions-stack` (a column). Do not space them with margins.
 
 ## Radii
@@ -42,14 +44,14 @@ In the wide task window, Projects and Archive use the section inset (`--am-gap-s
 
 The composer keeps its surface radius (16 px) at every height. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
 
-The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane.
+The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane and ends at the footer. In an existing conversation the access shield and model sit below the reply field.
 
-Message actions and the timestamp share a visible row one control gap (8 px) below the message. The executor's row starts at the text edge, with the timestamp after the actions. An outgoing row ends at the bubble edge, with the timestamp before the actions. The next message group starts one region gap (24 px) below the row.
+Message actions and the timestamp share a visible row one control gap (8 px) below the message. The executor's timestamp starts at the text edge, followed by the actions. An outgoing row ends at the bubble edge, with the timestamp before the actions. The next message group starts one region gap (24 px) below the row.
 
 ## Sizes
 
 - Controls: `--am-control` 32 (composer controls and drop-down options), `--am-control-compact` 28 (ordinary one-line fields, buttons, tabs and select triggers in the current layout), `--am-control-chip` 24 (buttons inside an error chip).
-- Text: 12 labels and meta, 13 secondary text, 14 body, 16 section and dialog titles (`h3`), 18 page titles (`h2`). Computer names, task names in the list and statistics use 14 px, weight 500, with a 21 px line height. Sidebar agent rows and task card metadata use 12 px. Chat content and input use 14 px regular system text with a 21 px line height.
+- Text: 12 labels and meta, 13 secondary text, 14 body, 16 section and dialog titles (`h3`), 18 page titles (`h2`). In the task sidebar, computer names and task titles use 14 px at weight 400 and section headings use weight 500. Statistics task titles use weight 500. Sidebar agent rows and task card metadata use 12 px. Chat content and input use 14 px regular system text with a 21 px line height.
 - Use `--am-list-row-hover` for hover and keyboard focus on sidebar computer headers, task rows, Archive rows and interactive Statistics rows.
 - Colors and shadows are tokens too (`--am-shadow-s` for chips and the composer, `--am-shadow-l` for menus and dialogs).
 
@@ -58,6 +60,9 @@ Message actions and the timestamp share a visible row one control gap (8 px) bel
 - `.am-card` is the one card look (agent cards, server sections); `.am-card-head` holds a title and a `.am-badge`.
 - `.am-field` is a label with a field under it.
 - Notes about a screen (what works, what does not yet) go in a side column, not between the cards: `.am-server-layout` with `.am-server-aside`. In a window narrower than 1000 px the column moves above the cards.
+- `.am-chrome-icon` shares the 28 px square, 16 px glyph box, 8 px corner radius and hover fill for standalone main-window controls.
+- Task provider marks use 12 px. The chat author, access and context icons, inline tool actions, computer and folder icons, and agent settings marks use 16 px. Provider logos in the Archive filter use the same 16 px box. Drop layout illustrations use 32 px. The Windows caption uses 14 px glyphs in system-style controls. The existing updater glyph retains its 18 px drawing box.
+- The reply footer centers the model, access shield and context ring on the same line. The shield carries the current permission in its accessible label. The draft shield opens the permission menu. Attachment chips sit above the compose field, with the slash menu opening above the chips. In the draft model menu, scroll the option list within the menu insets and keep search above it.
 - `.am-icon-btn` is a square compact button; `.am-primary` the main action; `.am-danger` a destructive action.
 - Status texts: `.am-status-good/-bad/-run/-wait`; dots: `.am-dot-run/-idle/-offline`.
 
@@ -71,6 +76,6 @@ Standard dialogs share the 44 px header with 4 px vertical and 16 px horizontal 
 
 Text in a control is centred by eye, not by the line box: system fonts leave more room below the text than above it, so buttons, tabs, select fields and inputs get `--am-text-nudge` (4) as their top padding and none at the bottom. Measured: 11 px above the capitals and 11 below in a 32 px button.
 
-The task sidebar uses a 4 px gap between New Task, Projects and the computer list. Projects starts on the icon column. A collapsed computer or project folder shows its current task total after its label, using the same muted numeral as the heading counts. Expanded groups omit the numeral. Each task highlight starts at its nesting level. Task and archive buttons share 4 px vertical and 12 px horizontal padding. Both filters use an 18 px horizontal sliders icon in a compact button. The layers button groups tasks by computer, by project, or by computer then project. Folders in both states and computers use the same 16 px box, drawing bounds and stroke weight. Both folder states share the tab. In the open state the rounded front lip projects beyond the rear wall. Online computers use a muted server glyph. A slash and an accessible offline label identify disconnected computers.
+The task sidebar uses a 4 px gap between New Task, Projects and the computer list. Projects starts on the icon column. A collapsed computer or project folder shows its current task total after its label, using the same muted numeral as the heading counts. Expanded groups omit the numeral. Only outermost groups have a new task shortcut. The plus uses the row padding at the trailing edge and has a transparent hit area and appears on row hover or keyboard focus. Show it by default when hover is unavailable. Each task highlight starts at its nesting level. Task and archive buttons share 4 px vertical and 12 px horizontal padding. Both filters use a 16 px horizontal sliders icon in a compact button. The layers button groups tasks by computer, by project, by computer then project, or by project then computer. Folders in both states and computers use the same 16 px box, drawing bounds and stroke weight. Both folder states share the tab. In the open state the rounded front lip projects beyond the rear wall. Online computers use a muted server glyph. A slash and an accessible offline label identify disconnected computers.
 
 Mutually exclusive settings pages can use `.am-segmented-tabs` with equal-width segments and a single inset indicator on a soft track. Only the indicator moves, over 160 ms after user input. Reduced motion switches it immediately. Use tab and tabpanel semantics, arrow-key navigation and a visible keyboard focus ring. Navigating between tabs changes the view only.

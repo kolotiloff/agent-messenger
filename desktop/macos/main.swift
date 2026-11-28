@@ -9,6 +9,38 @@ import Darwin
 final class TitlebarWebView: WKWebView {
     var dragZones: [NSRect] = []
     var dragHoles: [NSRect] = []
+    var fileDropZones: [NSRect] = []
+    var fileDropDraft: Int?
+    private let attachmentQueue = DispatchQueue(label: "Kotel file drop")
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let local = convert(sender.draggingLocation, from: nil)
+        let point = NSPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
+        guard fileDropZones.contains(where: { $0.contains(point) }) else { return super.performDragOperation(sender) }
+        let items = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        guard !items.isEmpty else { return super.performDragOperation(sender) }
+        if let draft = fileDropDraft {
+            let urls = Array(items.prefix(17))
+            attachmentQueue.async { [weak self] in
+                var result: [String: Any]
+                do {
+                    result = ["groups": try DraftDrop.items(urls)]
+                } catch {
+                    result = ["error": (error as? DraftDrop)?.rawValue ?? DraftDrop.unreadable.rawValue]
+                }
+                guard let data = try? JSONSerialization.data(withJSONObject: result),
+                      let json = String(data: data, encoding: .utf8) else { return }
+                DispatchQueue.main.async { [weak self] in
+                    self?.evaluateJavaScript("window.messengerDropAttachments?.(\(json), \(draft), \(point.x), \(point.y))")
+                }
+            }
+            return true
+        }
+        let paths = items.prefix(17).map(\.path)
+        guard let data = try? JSONSerialization.data(withJSONObject: paths),
+              let json = String(data: data, encoding: .utf8) else { return false }
+        evaluateJavaScript("window.messengerDropFiles?.(\(json), \(point.x), \(point.y))")
+        return true
+    }
     override func mouseDown(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
         let point = NSPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
@@ -28,6 +60,55 @@ final class TitlebarWebView: WKWebView {
     }
 }
 
+// Read only URLs supplied by the owner's native drop. Limit allocation and
+// reject special files without opening them as streams.
+private enum DraftDrop: String, Error {
+    case limit
+    case unreadable
+
+    static func items(_ urls: [URL]) throws -> [[String: Any]] {
+        guard urls.count <= 16 else { throw DraftDrop.limit }
+        var remaining = 112 * 1024
+        var count = 0
+        let manager = FileManager.default
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]
+        return try urls.map { url in
+            var files = [[String: Any]]()
+            func read(_ entry: URL, _ relative: String) throws {
+                count += 1
+                guard count <= 64 else { throw DraftDrop.limit }
+                let values = try entry.resourceValues(forKeys: Set(keys))
+                guard values.isSymbolicLink != true else { throw DraftDrop.unreadable }
+                if values.isDirectory == true {
+                    files.append(["path": relative, "dir": true])
+                    for child in try manager.contentsOfDirectory(at: entry, includingPropertiesForKeys: keys) {
+                        try read(child, relative + "/" + child.lastPathComponent)
+                    }
+                } else if values.isRegularFile == true {
+                    let fd = Darwin.open(entry.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+                    guard fd >= 0 else { throw DraftDrop.unreadable }
+                    let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+                    defer { try? handle.close() }
+                    var statInfo = stat()
+                    guard fstat(fd, &statInfo) == 0, statInfo.st_mode & S_IFMT == S_IFREG else {
+                        throw DraftDrop.unreadable
+                    }
+                    guard statInfo.st_size <= remaining else { throw DraftDrop.limit }
+                    let data = try handle.read(upToCount: remaining + 1) ?? Data()
+                    guard data.count <= remaining else { throw DraftDrop.limit }
+                    remaining -= data.count
+                    files.append(["path": relative, "data": data.base64EncodedString()])
+                } else {
+                    throw DraftDrop.unreadable
+                }
+            }
+            let name = url.lastPathComponent
+            try read(url, name)
+            return ["name": name, "files": files]
+        }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var web: WKWebView!
@@ -44,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     lazy var updates = DesktopUpdater()
     let dictation = ComposerDictation()
     var statusItem: NSStatusItem?
+    private var reportWindows: [NSWindow] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let renamed = BundleName.migrate(Bundle.main.bundleURL) {
@@ -78,8 +160,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             } else { fatalLaunch("Другое окно Kotel уже запускается. Откройте его через Dock.") }
             return
         }
-        // Use the bundle icon with the same system framing as the application list.
-        NSApp.applicationIconImage = NSWorkspace.shared.icon(forFile: Bundle.main.bundleURL.resolvingSymlinksInPath().path)
+        // Read the installed resource directly after an in-place update.
+        if let resource = Bundle.main.url(forResource: "KotelIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: resource) {
+            NSApp.applicationIconImage = icon
+        }
         applyTheme(UserDefaults.standard.string(forKey: "appearance") ?? "system")
         buildMenu()
         let config = WKWebViewConfiguration()
@@ -93,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         config.userContentController.add(self, name: "titlebar")
         config.userContentController.add(self, name: "composerDictation")
         config.userContentController.add(self, name: "reportFileSave")
+        config.userContentController.add(self, name: "reportFileWindow")
         dictation.onEvent = { [weak self] id, event, text in
             let payload = ["id": id, "event": event, "text": text ?? ""]
             guard let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -213,8 +299,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     @objc func showWindow() {
         if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
         if window?.isMiniaturized == true { window?.deminiaturize(nil) }
-        window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        positionWindowButtons()
+        NSApp.activate(ignoringOtherApps: true)
     }
+    // Keep the native controls on the web toolbar's 44-point row.
+    private func positionWindowButtons() {
+        guard let window, let content = window.contentView, !window.styleMask.contains(.fullScreen) else { return }
+        let controls: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        for (index, type) in controls.enumerated() {
+            guard let button = window.standardWindowButton(type), let bar = button.superview else { continue }
+            let center = NSPoint(x: 24 + CGFloat(index) * 23, y: content.isFlipped ? 22 : content.bounds.maxY - 22)
+            let point = bar.convert(center, from: content)
+            button.setFrameOrigin(NSPoint(x: point.x - button.frame.width / 2, y: point.y - button.frame.height / 2))
+        }
+    }
+    func windowDidResize(_ notification: Notification) { positionWindowButtons() }
+    func windowDidBecomeKey(_ notification: Notification) { positionWindowButtons() }
+    func windowDidExitFullScreen(_ notification: Notification) { positionWindowButtons() }
+
     @objc func chooseData() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.allowsMultipleSelection = false; panel.canCreateDirectories = false
@@ -340,8 +443,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let defaults = UserDefaults.standard
         let savedTheme = defaults.string(forKey: "appearance") ?? "system"
         let theme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
-        let savedFont = defaults.string(forKey: "chatFont") ?? "system"
-        let font = Self.chatFonts.contains(savedFont) ? savedFont : "system"
+        let savedFont = defaults.string(forKey: "chatFont") ?? "inter"
+        let font = Self.chatFonts.contains(savedFont) ? savedFont : "inter"
         controller.removeAllUserScripts()
         let source = "window.messengerInitialTheme = '\(theme)'; window.messengerInitialChatFont = '\(font)'; window.amMacTitlebar = true"
         let preferences = defaults.dictionary(forKey: preferencesKey) as? [String: String] ?? [:]
@@ -375,6 +478,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             catch { finish("failed") }
         }
     }
+    private func openReportWindow(_ body: [String: Any]) {
+        guard let name = body["name"] as? String, !name.isEmpty, name.utf8.count <= 1024,
+              let text = body["text"] as? String, text.utf8.count <= 1_048_576,
+              window.isKeyWindow else { return }
+        let preview = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 680),
+                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                               backing: .buffered, defer: false)
+        preview.title = name
+        preview.isReleasedWhenClosed = false
+        preview.minSize = NSSize(width: 340, height: 240)
+        let scroll = NSTextView.scrollableTextView()
+        guard let content = scroll.documentView as? NSTextView else { return }
+        content.isEditable = false
+        content.textContainerInset = NSSize(width: 16, height: 16)
+        content.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        content.string = text
+        preview.contentView = scroll
+        reportWindows.removeAll { !$0.isVisible && !$0.isMiniaturized }
+        reportWindows.append(preview)
+        preview.center()
+        preview.makeKeyAndOrderFront(nil)
+        if let line = body["line"] as? Int, line > 0 {
+            let source = text as NSString
+            var start = 0
+            for _ in 1..<line {
+                if start >= source.length { return }
+                start = NSMaxRange(source.lineRange(for: NSRange(location: start, length: 0)))
+            }
+            if start < source.length {
+                let range = source.lineRange(for: NSRange(location: start, length: 0))
+                content.setSelectedRange(range)
+                content.scrollRangeToVisible(range)
+            }
+        }
+    }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame,
               let page = message.frameInfo.request.url, let origin = origin,
@@ -382,6 +520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if message.name == "updates", message.body as? String == "check" { updates.check() }
         if message.name == "updates", message.body as? String == "install" { updates.install() }
         if message.name == "folder", message.body as? String == "pick" { pickProjectFolder() }
+        if message.name == "reportFileWindow", let body = message.body as? [String: Any] { openReportWindow(body) }
         if message.name == "reportFileSave", let body = message.body as? [String: String] { saveReportFile(body) }
         if message.name == "composerDictation", let body = message.body as? [String: String],
            let id = body["id"], UUID(uuidString: id) != nil {
@@ -418,6 +557,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if message.name == "titlebar", let body = message.body as? [String: Any], let view = web as? TitlebarWebView {
             view.dragZones = rects(body["zones"])
             view.dragHoles = rects(body["holes"])
+            view.fileDropZones = rects(body["fileDrop"])
+            view.fileDropDraft = body["fileDropDraft"] as? Int
         }
     }
 

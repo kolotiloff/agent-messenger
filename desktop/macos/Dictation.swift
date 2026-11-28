@@ -65,12 +65,24 @@ final class ComposerDictation {
                 guard let self, self.id == id else { return }
                 if let result { self.transcript = result.bestTranscription.formattedString }
                 if result?.isFinal == true || error != nil {
-                    self.finishTranscript(id, fallback: error == nil || self.finishing ? "empty" : "failed")
+                    self.finishTranscript(id, fallback: self.fallbackEvent(for: error))
                 }
             }
         }
         onEvent?(id, "recording", nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in self?.stop(id) }
+    }
+
+    private func fallbackEvent(for error: Error?) -> String {
+        var underlying = error.map { $0 as NSError }
+        while let current = underlying {
+            // Apple documents this error for disabled Siri or Dictation.
+            if current.domain == "kLSRErrorDomain", current.code == 201 {
+                return "dictation-disabled"
+            }
+            underlying = current.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return error == nil || finishing ? "empty" : "failed"
     }
 
     func stop(_ id: String) {

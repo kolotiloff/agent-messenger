@@ -131,6 +131,7 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		{"remote_task_items", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_outputs", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_images", "task_id IN (SELECT id FROM snapshot.tasks)"},
+		{"task_attachments", "task_id IN (SELECT id FROM snapshot.tasks)"},
 	}
 	if withDelivery {
 		tables = append(tables, struct{ name, where string }{

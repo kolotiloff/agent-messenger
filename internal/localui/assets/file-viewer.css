@@ -11,12 +11,30 @@
   overflow-wrap: anywhere;
   cursor: pointer;
 }
-#am-concept .am-file-link:hover { text-decoration-style: solid; }
-#am-concept .am-file-viewer[open] {
-  display: flex;
-  flex-direction: column;
-  width: min(56rem, calc(100% - var(--am-space-6)));
-  height: min(44rem, calc(100% - var(--am-space-6)));
+#am-concept button.am-file-link:hover:enabled { text-decoration-style: solid; background: transparent; box-shadow: none; outline: none; }
+#am-concept .am-file-viewer { display:flex; flex-direction:column; min-inline-size:0; min-block-size:0; overflow:hidden; }
+#am-concept .am-file-content { min-block-size:0; overflow:auto; }
+#am-concept .am-file-tabs { flex:0 1 auto; }
+#am-concept .am-task-toolbar:has(> .am-file-tabs:not([hidden])) > .am-chat-head { flex:0 1 auto; max-inline-size:50%; }
+#am-concept .am-task-toolbar > .am-file-tabs { flex:1; }
+#am-concept .am-file-tabs .am-pane-tab, #am-concept .am-file-tabs .am-pane-tab > [role=tab] { cursor:pointer; }
+#am-concept.am-task-sidebar-preview #task-layout:has(> .am-file-viewer:not([hidden])) {
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+}
+#am-concept.am-task-sidebar-preview #task-layout:has(> .am-file-viewer:not([hidden])):not(.am-queue-collapsed) {
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) min(var(--am-queue),30%);
+}
+#am-concept.am-task-sidebar-preview #task-layout:has(> .am-file-viewer:not([hidden])) > .am-queue-panel { grid-column:3; }
+#am-concept.am-task-sidebar-preview #task-layout > .am-file-viewer {
+  grid-column:2; grid-row:2; border-inline-start:1px solid var(--am-line);
+  padding-block-start:var(--am-space-2);
+}
+@media (max-width:760px) {
+  #am-concept.am-task-sidebar-preview #task-layout.am-chat-layout:has(> .am-file-viewer:not([hidden])) {
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto minmax(0,1fr) minmax(0,1fr);
+  }
+  #am-concept.am-task-sidebar-preview #task-layout > .am-file-viewer { grid-column:1; grid-row:3; border-inline-start:0; border-block-start:1px solid var(--am-line); }
 }
 #am-concept .am-file-path {
   margin: var(--am-space-2) var(--am-space-4);

@@ -143,7 +143,7 @@ func TestRemoteTaskContinueRefused(t *testing.T) {
 	p.carry(t, true)
 	m := p.mirror(t, id)
 	p.carry(t, false)
-	// It failed on b before any conversation was recorded.
+	// It was stopped on b before any conversation was recorded.
 	if _, err := p.b.st.CancelTask(m.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -151,22 +151,60 @@ func TestRemoteTaskContinueRefused(t *testing.T) {
 	if task, _ := p.a.st.TaskByID(id); task.State != "cancelled" {
 		t.Fatalf("cancelled mirror is reported as %s", task.State)
 	}
-	if err := p.a.st.ContinueTask(id, "c1", "more", AudienceCoordinator); !errors.Is(err, ErrRejected) {
-		t.Fatalf("continued a cancelled task: %v", err)
-	}
-	// Make the task look failed on a, so the follow-up is sent and b refuses.
-	if _, err := p.a.st.db.Exec(`UPDATE tasks SET state='failed' WHERE id=?`, id); err != nil {
-		t.Fatal(err)
-	}
-	if err := p.a.st.ContinueTask(id, "c2", "more", AudienceCoordinator); err != nil {
+	if err := p.a.st.ContinueTask(id, "c1", "more", AudienceCoordinator); err != nil {
 		t.Fatal(err)
 	}
 	p.carry(t, true)
 	p.carry(t, false)
 	task, _ := p.a.st.TaskByID(id)
 	events := p.a.events(t, AudienceCoordinator, 0)
-	if task.State != "failed" || events[len(events)-1].Kind != "continue_refused" || !strings.Contains(events[len(events)-1].Text, "Ноутбук did not continue") {
+	if task.State != "cancelled" || events[len(events)-1].Kind != "continue_refused" || !strings.Contains(events[len(events)-1].Text, "Ноутбук did not continue") {
 		t.Fatalf("refused %+v %+v", task, events)
+	}
+}
+
+func TestRemoteResumeAndStopAgain(t *testing.T) {
+	p := newNetPair(t)
+	peer := NetPeer{ID: "dev-b", Name: "Worker", Age: 1, Agents: []NetAgent{{Agent: "codex"}}, Version: "1.0.16"}
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{peer}); err != nil {
+		t.Fatal(err)
+	}
+	id := p.startRemote(t, "start", "codex", "Build the level")
+	p.carry(t, true)
+	m := p.mirror(t, id)
+	p.carry(t, false)
+	session := "019a0000-0000-7000-8000-0000000000b1"
+	run := p.b.launch(t, m.ID, session)
+	for turn := 0; turn < 2; turn++ {
+		p.carry(t, false)
+		if state, err := p.a.st.CancelTask(id); err != nil || state != "cancelling" {
+			t.Fatalf("stop turn %d: %s %v", turn, state, err)
+		}
+		p.carry(t, true)
+		runs, err := p.b.st.CancelRequestedRuns()
+		if err != nil || len(runs) != 1 || runs[0].ID != run.ID {
+			t.Fatalf("expected stop for turn %d, got %+v %v", turn, runs, err)
+		}
+		exit := cleanExit
+		exit.Cancelled = true
+		if state, err := p.b.st.FinishTaskRun(run.ID, exit); err != nil || state != "cancelled" {
+			t.Fatalf("finish stopped turn %d: %s %v", turn, state, err)
+		}
+		p.carry(t, false)
+		task, err := p.a.st.TaskByID(id)
+		if err != nil || task.State != "cancelled" || task.CancelRequested {
+			t.Fatalf("unconfirmed stop on turn %d: %+v %v", turn, task, err)
+		}
+		if turn == 0 {
+			if err := p.a.st.AddOwnerNote(id, "follow-up", "Continue"); err != nil {
+				t.Fatal(err)
+			}
+			p.carry(t, true)
+			run = p.b.launch(t, m.ID, session)
+			if run.Kind != "continue" {
+				t.Fatalf("expected a follow-up, got %+v", run)
+			}
+		}
 	}
 }
 

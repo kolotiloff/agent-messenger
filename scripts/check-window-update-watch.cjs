@@ -14,7 +14,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     page.setDefaultTimeout(5000);
     let cursor = 1, mark, wake, releaseCancel, downloadProgress;
     const cancellations=[];
+    const updateRequests=[];
     let cancelResponse='ok';
+    let published='1.0.1-preview.104';
     function publish(state, version, id = 'upd-fixture') {
       mark = {id, state, version, at: Date.now() / 1000};
       cursor++;
@@ -34,7 +36,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           if (body.cursor === String(cursor)) await new Promise(resolve => {wake = resolve;});
           return route.fulfill({json:{ok:true,result:{broker:'fixture', self:'host', cursor:String(cursor), marks:mark?{'dev-pc':mark}:{}}}});
         }
-        if (body.action === 'update') publish('waiting');
+        if (body.action === 'update') {
+          updateRequests.push(body.device);
+          publish('waiting');
+        }
         if (body.action === 'cancel-update') {
           cancellations.push(body);
           if(cancelResponse==='refused')return route.fulfill({status:400,json:{detail:'Компьютер сейчас не на связи.'}});
@@ -47,7 +52,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const fixtures = {
         '/api/window':{projects:[{name:'Проект'}],project:'Проект',computer_name:'Мак',agents:[],tasks:[task],coordinator:{},folder:'/fixture'},
         '/api/client-info':{client:'running',client_version:'1.0.0-preview.104'},
-        '/api/self-update':{installed_version:'1.0.0-preview.104'},
+        '/api/self-update':{installed_version:'1.0.1-preview.104'},
+        '/api/update-check':{ok:true,installed_version:'1.0.1-preview.104',version:published},
         '/api/update-progress':downloadProgress,
         '/api/server':server,
         '/api/task':{task,items:[]},
@@ -62,6 +68,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const card = page.locator('.am-peer-card[data-peer="dev-pc"]');
     async function refreshServer() {
       await page.locator('#settings-open').click();
+      await page.locator('#settings-menu-open').click();
       await page.locator('#settings-close').click();
     }
     async function shot(name) {
@@ -69,7 +76,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await fs.mkdir(process.env.SCREENSHOT_DIR,{recursive:true});
       await card.screenshot({path:path.join(process.env.SCREENSHOT_DIR,name+'.png')});
     }
-    const arrow=card.getByRole('button',{name:/Обновить до/});
+    const arrow=card.getByRole('button',{name:/Обновить версию/});
     await arrow.waitFor();
     assert.equal(await page.locator('#notices .am-notice-bad').count(),0,'previous update errors and timeouts must stay quiet on startup');
     const pending={computer:peer.id,request_id:'previous-pending',state:'waiting',updated_at:previousTime};
@@ -84,7 +91,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     server.updates=[];
     await refreshServer();
     await arrow.waitFor();
-    assert.match(await arrow.getAttribute('title'),/^Обновить до v/);
+    assert.match(await arrow.getAttribute('title'),/^Обновить версию/);
     assert.deepEqual(await arrow.locator('svg').evaluate(svg=>{
       const box=svg.getBoundingClientRect(),head=svg.closest('.am-machine-name').getBoundingClientRect();
       return [box.width,box.height,Math.abs(box.top+box.height/2-head.top-head.height/2)<0.5];
@@ -95,6 +102,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await row.locator('.am-task-status').evaluate(e=>getComputedStyle(e).color),'rgb(206, 178, 113)');
     assert.match(await arrow.locator('path').getAttribute('d'),/M3 15v4/);
     await shot('available');
+    const menu=page.locator('#device-menu');
+    await card.locator('.am-machine-name').click({button:'right'});
+    const menuOffer=menu.getByRole('menuitem',{name:/Обновить версию/});
+    await menuOffer.hover();
+    assert.equal(await menuOffer.locator('svg').count(),0);
+    if(process.env.SCREENSHOT_DIR)await menu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'menu-available.png')});
+    await page.keyboard.press('Escape');
     if(process.env.SCREENSHOT_DIR)await row.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'task-waiting.png')});
     publish('queued', undefined, '');
     const waiting=card.getByRole('img',{name:'Ждёт обновления'});
@@ -118,11 +132,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await cancelUpdate.locator('svg').last().evaluate(e=>getComputedStyle(e).color),'rgb(242, 139, 130)');
     await shot('cancel');
     await card.locator('.am-machine-name').click({button:'right'});
-    const menu=page.locator('#device-menu');
-    const menuCancel=menu.getByRole('button',{name:'Отменить обновление'});
+    await menu.locator('.am-version').hover();
+    await page.mouse.move(0,0);
+    await menu.waitFor({state:'hidden'});
+    await card.locator('.am-machine-name').click({button:'right'});
+    const menuCancel=menu.getByRole('menuitem',{name:'Отменить обновление'});
+    await menuCancel.hover();
+    if(process.env.SCREENSHOT_DIR)await menu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'menu-cancel.png')});
     const target=await menuCancel.boundingBox();
     await menuCancel.click();
-    await menu.getByRole('img',{name:'Отправляем запрос на отмену…'}).waitFor();
+    await card.locator('.am-machine-name').click({button:'right'});
+    await menu.getByText('Отправляем запрос на отмену…',{exact:true}).waitFor();
     assert.equal(await menu.locator('.am-version').textContent(),'v1.0');
     publish('queued');
     await page.mouse.dblclick(target.x+target.width/2,target.y+target.height/2);
@@ -167,7 +187,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const length=arc.getTotalLength();
       const radiusError=Math.max(...Array.from({length:24},(_,index)=>{
         const point=arc.getPointAtLength(index*length/23);
-        return Math.abs(Math.hypot(point.x-12,point.y-12)-9);
+        return Math.abs(Math.hypot(point.x-12,point.y-12)-8);
       }));
       const control=svg.parentElement.getBoundingClientRect();
       const animation=svg.getAnimations()[0];
@@ -237,13 +257,70 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await failure.count(),0,'opening the window again must not replay the latest failure');
     reply('done','1.0.1-preview.104','fixture-success');
     await page.locator('#settings-open').click();
+    await page.locator('#settings-menu-open').click();
     await page.locator('#settings-close').click();
-    const success=page.locator('.am-chat #notices .am-notice-good').filter({hasText:'ПК-1 обновлён до v1.0.1'});
+    const success=page.locator('.am-window > #notices .am-notice-good').filter({hasText:'ПК-1 обновлён до v1.0.1'});
     await success.waitFor();
-    if(process.env.SCREENSHOT_DIR)await success.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'update-notice.png')});
+    if(process.env.SCREENSHOT_DIR){
+      const clip=await success.boundingBox();
+      if(clip)await page.screenshot({clip,path:path.join(process.env.SCREENSHOT_DIR,'update-notice.png')});
+    }
     assert.equal(await success.locator('.am-notice-timer').count(),0);
     await success.getByRole('button',{name:'Закрыть'}).click();
     server.updates=[];
+    publish('done','1.0.1-preview.104','fixture-success');
+    peer.version='1.0.1-preview.104';
+    peer.update_pending=false;
+    await page.locator('#settings-open').click();
+    await page.locator('#settings-menu-open').click();
+    assert.equal(await page.locator('#settings-program-version').textContent(),'v1.0.1');
+    const networkCheck=page.locator('#settings-network-update-check');
+    assert(await networkCheck.isVisible());
+    assert.equal(await networkCheck.textContent(),await page.locator('#settings-update-check').textContent());
+    assert.equal(await page.locator('.am-program-version + #settings-network-update-row').count(),1);
+    const localCheckBox=await page.locator('#settings-update-check').boundingBox();
+    const networkCheckBox=await networkCheck.boundingBox();
+    assert.equal(localCheckBox.x+localCheckBox.width,networkCheckBox.x+networkCheckBox.width);
+    const networkLabel=await page.locator('#settings-network-update-label').boundingBox();
+    assert(Math.abs(networkLabel.y+networkLabel.height/2-networkCheckBox.y-networkCheckBox.height/2)<1);
+    await page.locator('#settings-update-check').click();
+    const checked=page.locator('#notices').getByText('Установлена последняя версия.',{exact:true});
+    await checked.waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-local-current.png')});
+    await page.locator('#settings-close').click();
+    await checked.waitFor();
+    await page.locator('#settings-open').click();
+    const gearRows=page.locator('#settings-menu .am-select-option span');
+    const gearHeights=await gearRows.evaluateAll(rows=>rows.map(row=>row.getBoundingClientRect().height));
+    assert(gearHeights.every(height=>height===gearHeights[0]),'gear menu labels should each occupy one line');
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'settings-menu.png')});
+    const gearCheck=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/update-check');
+    await page.locator('#settings-menu-update').click();
+    await gearCheck;
+    await checked.waitFor();
+    await page.locator('#notices .am-notice').filter({hasText:'Установлена последняя версия.'}).getByRole('button',{name:'Закрыть'}).click();
+    published='1.0.7-preview.110';
+    const priorRequests=updateRequests.length;
+    await card.locator('.am-machine-name').click({button:'right'});
+    await menu.getByRole('menuitem',{name:'Проверить обновления'}).click();
+    await page.locator('#notices').getByText('Опубликована v1.0.7',{exact:true}).waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-peer-available.png')});
+    assert.equal(updateRequests.length,priorRequests,'checking a release must not request an update');
+    server.peers.push({id:'offline',name:'ПК без связи',age:99,version:'1.0.0-preview.103'});
+    await page.locator('#settings-open').click();
+    await page.locator('#settings-menu-open').click();
+    await networkCheck.click();
+    const review=page.locator('#network-update-dialog');
+    await review.waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-network-review.png')});
+    assert.equal(await review.locator('li').filter({hasText:'ПК без связи'}).getByText('Не в сети',{exact:true}).count(),1);
+    assert.equal(updateRequests.length,priorRequests,'review must precede any update requests');
+    await review.getByRole('button',{name:'Обновить компьютеры'}).click();
+    await review.getByText('Запрос отправлен',{exact:true}).waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-network-requested.png')});
+    assert.deepEqual(updateRequests.slice(priorRequests),[peer.id]);
+    await review.getByRole('button',{name:'Закрыть',exact:true}).click();
+    await page.locator('#settings-close').click();
     // Use the actual window with simulated macOS updater callbacks.
     await page.emulateMedia({reducedMotion:'no-preference'});
     await page.evaluate(()=>{

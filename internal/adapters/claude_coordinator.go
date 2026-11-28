@@ -60,11 +60,36 @@ func coordinatorProgramAlias(command, current string) bool {
 	return false
 }
 
-// An arbitrary executable taking coordinator-shaped arguments may be a custom wrapper.
-func managedCoordinatorProgram(command, current, root string) bool {
+// The macOS migration leaves the old bundle name as a relative link. A
+// coordinator using that path still starts the installed program after updates.
+func sameCoordinatorProgram(command, current string) bool {
 	if sameTrustPath(command, current) || coordinatorProgramAlias(command, current) {
 		return true
 	}
+	const resources = "Contents/Resources"
+	bundle := filepath.Dir(filepath.Dir(filepath.Dir(current)))
+	if !filepath.IsAbs(current) || filepath.Base(bundle) != "Kotel.app" ||
+		!sameTrustPath(current, filepath.Join(bundle, resources, "kotel")) {
+		return false
+	}
+	legacy := filepath.Join(filepath.Dir(bundle), "Agent Messenger.app")
+	name := filepath.Base(command)
+	if (name != "kotel" && name != "messenger") || !sameTrustPath(command, filepath.Join(legacy, resources, name)) {
+		return false
+	}
+	target, err := os.Readlink(legacy)
+	if err != nil || target != "./Kotel.app" {
+		return false
+	}
+	if name == "messenger" {
+		return coordinatorProgramAlias(filepath.Join(bundle, resources, name), current)
+	}
+	fi, err := os.Lstat(current)
+	return err == nil && fi.Mode().IsRegular()
+}
+
+// An arbitrary executable taking coordinator-shaped arguments may be a custom wrapper.
+func managedCoordinatorProgram(command, root string) bool {
 	if !filepath.IsAbs(command) {
 		return false
 	}
@@ -221,10 +246,10 @@ func claudeLocalEntryState(entry json.RawMessage, messenger, root, project strin
 		!slices.Equal(server.Args, CoordinatorArgs(root, project)) || server.Command == "" {
 		return LinkOther
 	}
-	if sameTrustPath(server.Command, messenger) || coordinatorProgramAlias(server.Command, messenger) {
+	if sameCoordinatorProgram(server.Command, messenger) {
 		return LinkConnected
 	}
-	if !managedCoordinatorProgram(server.Command, messenger, root) {
+	if !managedCoordinatorProgram(server.Command, root) {
 		return LinkOther
 	}
 	// Removing and adding a server with custom options would lose them.

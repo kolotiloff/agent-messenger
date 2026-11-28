@@ -279,7 +279,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,agent_version,start_task,review_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,update_messenger,cancel_messenger_update" {
+	if strings.Join(names, ",") != "list_agents,agent_version,start_task,review_task,wait,tasks,answer,continue_task,archive_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,update_messenger,cancel_messenger_update" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -290,6 +290,37 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	}
 	if text, ok := c.tool("start_task", map[string]any{"op_id": "o1", "agent": "claude", "text": "x", "path": "/etc"}, nil); ok {
 		t.Fatalf("unknown argument accepted: %s", text)
+	}
+}
+
+func TestCoordinatorArchivesItsFinishedTasks(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	id := startTasks(t, c, 1, "archive")[0]
+	args := map[string]any{"task_id": id, "archive_version": 0}
+	if _, ok := c.tool("archive_task", args, nil); ok {
+		t.Fatal("archived a running task")
+	}
+	finishRun(t, st, id, core.DispositionReport, "Done")
+	var result struct {
+		Tasks []coordinatorTask `json:"tasks"`
+	}
+	if text, ok := c.tool("tasks", map[string]any{"state": "done"}, &result); !ok || len(result.Tasks) != 1 ||
+		result.Tasks[0].ArchiveVersion == nil || *result.Tasks[0].ArchiveVersion != 0 {
+		t.Fatalf("missing archive version: %+v, %s", result.Tasks, text)
+	}
+	for i := 0; i < 2; i++ {
+		if text, ok := c.tool("archive_task", args, nil); !ok {
+			t.Fatalf("archive %d: %s", i, text)
+		}
+	}
+	personal, _, err := st.StartTask(core.StartTaskRequest{Project: "Game", Provider: "codex", OpID: "personal-archive", Text: "Personal chat", ByOwner: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finishRun(t, st, personal, core.DispositionReport, "Reply")
+	if _, ok := c.tool("archive_task", map[string]any{"task_id": personal, "archive_version": 0}, nil); ok {
+		t.Fatal("coordinator archived a personal chat")
 	}
 }
 

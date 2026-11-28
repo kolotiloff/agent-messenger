@@ -101,7 +101,7 @@ const coordinatorInstructions = `Kotel: start tasks for worker agents in this pr
 - A computer marked reconnecting was in the network a moment ago and has not reported since a restart: a task for it is accepted and waits on the server until it is back. models_note and limit_note explain an empty models list or a missing limit.
 - list_agents shows each agent's limit when one is known: state ok, warning (close to the limit) or exhausted, used_percent when known, resets_at and observed_at. With source "check", Kotel read it from the agent's account outside any task (Codex, every 10 minutes, without a model call): windows then lists every window with its used_percent and resets_at, such as a five-hour and a weekly one, and the fields above repeat the one used the most. Without source, it is what the agent said at the end of its last run, not a live reading. reset_passed (on the limit or on a window) means that reset time has passed, so it is likely available again; a run that completed on that computer since clears exhausted to ok. A limit is shared by every use of the same account, this chat included. Before choosing where to start a task, look at the limits: prefer an agent whose limit is not exhausted and that has the most left; spread a long queue (an overnight one) so no agent runs out while another sits idle, and give big tasks to an agent with room in its weekly window too. Tell the owner when the one they asked for is close to or at its limit, before or instead of starting it. start_task adds limit_note when the chosen agent's last limit is close or exhausted.
 - To add something to a task that is still running (a forgotten detail, a change of plan), use note_task, on this computer or another one of the network that runs Kotel 0.67 or newer; if that computer does not take it, you get note_refused with the reason; it does not stop the worker. Do not use it to hurry a worker or to repeat the task.
-- To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Kotel checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. A done or failed task of another computer of this network can be continued the same way when that computer runs Kotel 0.60 or newer, and an interrupted one (that computer died or restarted while it ran) when it runs 0.75 or newer: that computer closes the interrupted run only when its worker is certainly gone. If it refuses (older version, not in the network, no conversation), you get continue_refused with the reason: then start a new task that names what is already done.
+- To follow up in a saved worker conversation, use continue_task instead of start_task. Read task_messages first and send what is already done and the next instruction. Finished and stopped tasks can resume if the provider still has the conversation. After an interruption or a blockage, the executor must confirm the old worker has exited before starting another turn. A refusal explains what needs to happen before continuing.
 - Kotel already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
 - Feedback about Kotel itself: whenever Kotel does something wrong or unclear (an error you cannot explain, a lost or late event, a refusal that makes no sense, a missing feature you needed, or the owner complains about the program), record it at once with report_feedback: what happened, what you expected, the task and computer. Do not wait to be asked. When the owner asks for the feedback, the remarks or the journal, call export_feedback and give them the file's path; it holds this project's remarks from the owner and coordinator that were in no earlier export (all of this project's remarks when none is new). When the owner says they passed the file on and asks to clear the journal, call clear_feedback: it deletes the exported remarks and keeps any written after the export. Never clear it on your own.
@@ -148,7 +148,7 @@ type coordinator struct {
 }
 
 // acting tools make this chat the project's coordinator (T-090).
-var actingTools = map[string]bool{"wait": true, "start_task": true, "review_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true, "cancel_messenger_update": true}
+var actingTools = map[string]bool{"wait": true, "start_task": true, "review_task": true, "answer": true, "continue_task": true, "note_task": true, "archive_task": true, "cancel": true, "update_messenger": true, "cancel_messenger_update": true}
 
 // claim makes this chat the active coordinator of its project. The new chat
 // is told it replaced another only while that chat's process still runs:
@@ -451,13 +451,18 @@ func coordinatorTools() []map[string]any {
 				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 				"coordinator_model": str("optional: your current model, only if known"),
 			}, "task_id", "question_id", "op_id", "text")},
-		{"name": "continue_task", "description": "Give a finished task (done or failed), here or on another computer of the network, or an interrupted task here or on another computer a follow-up (an interrupted one only once the computer that ran it confirms its worker is certainly gone): the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
+		{"name": "continue_task", "description": "Continue a saved worker conversation after it finished, stopped, or was interrupted or blocked. The executor checks that any previous worker is gone and resumes the same session with your text. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id":           str("task id"),
 				"op_id":             str("unique id of this operation"),
 				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 				"coordinator_model": str("optional: your current model, only if known"),
 			}, "task_id", "op_id", "text")},
+		{"name": "archive_task", "description": "Move a finished task from this project's coordinator to the archive, keeping its conversation. Use archive_version from tasks. Personal chats are archived by their owner.",
+			"inputSchema": obj(map[string]any{
+				"task_id":         str("task id"),
+				"archive_version": map[string]any{"type": "integer", "minimum": 0},
+			}, "task_id", "archive_version")},
 		{"name": "note_task", "description": "Write to a worker while its task runs, on this computer or another one of the network, without stopping it: it reads your text only when its current run ends and goes on in the same conversation. A worker CLI takes no input while it works, so this can be many minutes; to stop a worker now, use cancel. A report it was about to send waits until it has read your text. For a worker that asked you, use answer instead. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id":           str("task id"),
@@ -713,6 +718,31 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question.", "waiting": c.waitingInstructions()}, nil
+	case "archive_task":
+		var a struct {
+			TaskID  string `json:"task_id"`
+			Version *int64 `json:"archive_version"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		if a.Version == nil || *a.Version < 0 {
+			return nil, errors.New("archive_version from tasks is required")
+		}
+		if err := c.ownTask(a.TaskID); err != nil {
+			return nil, err
+		}
+		task, err := c.store.TaskByID(a.TaskID)
+		if err != nil {
+			return nil, err
+		}
+		if task.SenderAgent == core.AudienceOwner {
+			return nil, errors.New("the owner archives personal chats in the window")
+		}
+		if err := c.store.SetTaskArchive(a.TaskID, "archive", *a.Version); err != nil {
+			return nil, err
+		}
+		return map[string]bool{"archived": true}, nil
 	case "note_task":
 		var a struct {
 			TaskID      string `json:"task_id"`
@@ -906,10 +936,12 @@ type coordinatorTask struct {
 	Detail   string             `json:"detail,omitempty"`
 	Question *core.TaskQuestion `json:"question,omitempty"`
 	// T-034: why a failed task failed, and when a usage limit resets.
-	FailureReason string `json:"failure_reason,omitempty"`
-	FailureReset  string `json:"failure_reset,omitempty"`
-	CreatedAt     string `json:"created_at"`
-	FinishedAt    string `json:"finished_at,omitempty"`
+	FailureReason  string `json:"failure_reason,omitempty"`
+	FailureReset   string `json:"failure_reset,omitempty"`
+	CreatedAt      string `json:"created_at"`
+	FinishedAt     string `json:"finished_at,omitempty"`
+	Archived       bool   `json:"archived,omitempty"`
+	ArchiveVersion *int64 `json:"archive_version,omitempty"`
 	// T-071: the worker's last action of an open task and when it was,
 	// and the tokens the task used so far.
 	LastActivity   string `json:"last_activity,omitempty"`
@@ -1003,6 +1035,10 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			break
 		}
 		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, State: t.State, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess, taskModelInfo: describeTaskModel(t.Model, t.RanModel)}
+		if closedTaskStates[t.State] && t.SenderAgent != core.AudienceOwner {
+			archived, version := t.Archive()
+			item.Archived, item.ArchiveVersion = archived, &version
+		}
 		// A verified task's detail is the same verification line every
 		// time; only unfinished or unsuccessful ones explain something.
 		if t.State != "done" {

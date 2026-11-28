@@ -17,6 +17,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/kolotiloff/agent-messenger/internal/core"
 )
 
 const SocketName = "control.sock"
@@ -27,18 +29,19 @@ const SocketName = "control.sock"
 const MaxRequestBytes = 4 << 20
 
 type Request struct {
-	Access       string   `json:"access,omitempty"`
-	Cmd          string   `json:"cmd"`
-	Alias        string   `json:"alias,omitempty"`
-	MessageID    string   `json:"message_id,omitempty"`
-	Sender       string   `json:"sender,omitempty"`
-	Text         string   `json:"text,omitempty"`
-	Action       string   `json:"action,omitempty"`
-	Confirmation string   `json:"confirmation,omitempty"`
-	Provider     string   `json:"provider,omitempty"`
-	Project      string   `json:"project,omitempty"`
-	Projects     []string `json:"projects,omitempty"`
-	Computer     string   `json:"computer,omitempty"`
+	Attachments  []core.TaskAttachment `json:"attachments,omitempty"`
+	Access       string                `json:"access,omitempty"`
+	Cmd          string                `json:"cmd"`
+	Alias        string                `json:"alias,omitempty"`
+	MessageID    string                `json:"message_id,omitempty"`
+	Sender       string                `json:"sender,omitempty"`
+	Text         string                `json:"text,omitempty"`
+	Action       string                `json:"action,omitempty"`
+	Confirmation string                `json:"confirmation,omitempty"`
+	Provider     string                `json:"provider,omitempty"`
+	Project      string                `json:"project,omitempty"`
+	Projects     []string              `json:"projects,omitempty"`
+	Computer     string                `json:"computer,omitempty"`
 	// Model selects the worker model or limits statistics to one model.
 	Model          string `json:"model,omitempty"`
 	Environment    string `json:"environment,omitempty"`
@@ -194,6 +197,15 @@ func dispatch(handler Handler, request Request) Response {
 
 func dispatchContext(ctx context.Context, handler Handler, request Request) Response {
 	switch request.Cmd {
+	case "codex-account-limits":
+		h, ok := handler.(interface{ RefreshCodexLimits(context.Context) error })
+		if !ok {
+			return Response{Error: "неизвестная команда"}
+		}
+		if err := h.RefreshCodexLimits(ctx); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "authorize-setup":
 		h, ok := handler.(interface{ AuthorizeSetup(string) error })
 		if !ok || request.Confirmation != "allow-model-calls" {
@@ -471,6 +483,18 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "task-owner-start-with-attachments":
+		h, ok := handler.(interface {
+			OwnerStartTaskWithAttachments(project, computer, provider, model, op, text, access string, files []core.TaskAttachment) (string, error)
+		})
+		if !ok {
+			return Response{Error: "sending attachments requires an updated background client"}
+		}
+		id, err := h.OwnerStartTaskWithAttachments(request.Project, request.Computer, request.Provider, request.Model, request.Confirmation, request.Text, request.Access, request.Attachments)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true, Overview: json.RawMessage(strconv.Quote(id))}
 	case "task-owner-start", "task-owner-start-with-access":
 		h, ok := handler.(interface {
 			OwnerStartTask(project, computer, provider, model, op, text, access string) (string, error)
@@ -675,6 +699,20 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "sleep-mode":
+		h, ok := handler.(interface{ SleepMode(string) (any, error) })
+		if !ok {
+			return Response{Error: "неизвестная команда"}
+		}
+		value, err := h.SleepMode(request.Action)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "не удалось прочитать режим сна"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "server":
 		h, ok := handler.(interface {
 			Server(context.Context, string, json.RawMessage) (any, error)

@@ -920,6 +920,8 @@ The owner approved the rounded golden tile with a black pot, tilted lid raised o
 
 Build 116 preserves the existing integrations so installed clients can update. The owner wants the old names retired from the active product, including existing MCP coordinators. Migrate app-managed entries on reconnect, preserve permissions and conversation identity, and resolve custom entries or name collisions with their owner. Verify one tool namespace and successful calls for each actual coordinator before removing its old aliases. Apply the same acceptance to the CLI, installers, services, paths and current downloads. Retire an alias when every dependent installation and offline profile has migrated. Preserve Git history, previously signed releases and the user's existing messages.
 
+The directory move is a separate step in the signed transition. Fresh profiles use the new Kotel directory. Existing profiles keep one physical data directory and one supervisor lock shared by both paths. Move the complete directory on the same volume, including SQLite and its sidecar files, device keys, the pending event queue and the untouched run registry. Quiesce the old desktop app, services and MCP sessions before the move, hold the migration lock across the handoff and defer while a run is active or blocked. A restart must distinguish a completed move from two conflicting directories. Keep the old path as a temporary alias and check the previous signed build, the new build and rollback against the same data. Verify device identity, project access, chat history and pending events on a pilot before enabling the move across the fleet. Change the GitHub address and retire aliases only after the installed clients can resolve the signed update and their coordinator connections have been verified, including computers that were offline during the rollout.
+
 ## D-249 — Worker reply actions and default archive width
 
 The owner wants a worker reply to offer the same timestamp and full-message copy action as an outgoing message. Place the controls below the reply on the worker's side. Archive and Projects start at equal widths and retain their own saved widths. The revised Mac header remains a proposal.
@@ -986,3 +988,66 @@ The computer that created a task writes its display title to the task record. Th
 ## D-265 — Open concurrent task views inside the main window
 
 Use tabs for switching and closing task views. Use Open alongside to keep concurrent conversations visible in the same workspace, with side-by-side, stacked and grid layouts. Every pane addresses an existing task and keeps its own draft and scroll position. See T-372.
+
+## D-266 — Stop a turn and keep the conversation available
+
+The owner or coordinator can send another message in the same saved worker conversation after a completed, failed, stopped or interrupted turn. Resuming a blocked or interrupted turn requires proof that its previous worker can no longer run. A local close on an unreachable computer needs a terminal acknowledgement before that conversation can resume. Nothing retries automatically. A new turn clears the previous stop request and can be stopped independently. See T-373.
+
+## D-267 — Project reference tabs
+
+A project file link opens a tab in the existing task toolbar and a reader alongside the conversation. Explicit separate windows display a read-only text preview. File resolution continues to use the executor task and its registered local workspace. Relative references inside a document use that document's folder. A remote reference shows which computer holds the file.
+
+## D-268 — Keep permission details beside the model in an existing conversation
+
+The new task composer keeps its access choice. An existing conversation shows its access mode or executor computer beside the model below the reply field. Its scrolling viewport ends at the footer. Stop ends a turn and adds an unboxed system event. The original conversation can accept a follow-up when its recorded continuation capability allows it. See T-375.
+
+## D-269 — Recognize a coordinator registration through the installed bundle link
+
+A registration pointing to the migrated macOS bundle remains connected when the installer’s relative link leads to the current executable and the coordinator arguments match. This preserves the server name and configuration. A different target remains a conflict. See T-376.
+
+
+## D-270 — Group tasks in either order and choose a folder from a draft
+
+Offer project-then-computer alongside the previous grouping modes. Remember a computer's disclosure state separately inside each project. A task draft can open a folder through the system picker and create its project using the existing form. The task remains scoped to a registered project and a computer that can execute it.
+
+## D-271 — Keep version and update actions in computer menus
+
+The version footer and update actions in context menus belong to the selected computer. Project folder menus contain only project actions in every sidebar grouping. This updates the project menu behavior in T-365 and T-374.
+
+## D-272 — Keep the composer editable while stopping a turn
+
+The task owner can draft the next message while a stop is pending and after the turn ends. The send control respects the stop state and the saved continuation capability. Closing a stuck task remains an explicit recovery action with the existing process checks. See T-381.
+
+## D-273 — Optional first-run setup
+
+Offer a short setup on a new installation and let users close or skip it at any step. Use the same settings for language and appearance, agent and model, optional workspace, network and coordinator, and notifications. Direct chat is available after skipping. Keep the dismissal on that installation and reopen setup from Settings. Upgrades and migrated installations retain their existing configuration and do not trigger setup. See T-384.
+
+## D-274 — Keep personal chats open after a reply
+
+Keep an owner-initiated conversation in Projects until its owner archives it. Archive and restore preserve the conversation and its continuation capability. Coordinators can archive their own finished tasks through the project-scoped MCP action. Existing coordinator task history keeps its automatic placement.
+
+Show turn activity while waiting for public text and use partial text when the provider supplies it. Keep process ownership and verification independent of the displayed reply. Show a process warning only if the recorded final event is at least one minute old and the run is still active. See T-385 and T-386.
+
+## D-275 — Task shortcuts and composer inputs
+
+A computer heading opens a draft for that computer. A project heading opens a draft for that project. Show the shortcut only on the outermost groups in the current sidebar grouping. Reveal it on row hover or keyboard focus and use the row highlight. Use the standard row inset. Keep it visible on devices without hover. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
+
+Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Use 16 px provider artwork in window controls and retain the compact metadata marks.
+
+The composer can add selected paths and UTF-8 browser drops as removable draft inputs. The selected or dropped local path is a reference for the executor on that computer. A path on another computer must be supplied explicitly. The slash picker runs supported window actions. Provider-native commands and opaque attachment transfer are tracked by T-388 and T-389.
+
+## D-276 — Agent limits in the sidebar
+
+Show measured usage windows in a popover beside App settings. Group snapshots by the reporting computer and display a subscription only when the provider reports it. Opening the popover reads the window's existing snapshots. Mark disconnected computers and passed reset times so an old measurement cannot read as a confirmed refill. See T-390.
+
+## D-277 — Update checks and window notices
+
+Expose a manual check in General settings, the window menu and a computer’s context menu. A selected computer’s menu displays its version without repeating its name. Review the list of eligible connected computers before requesting a network update. Each target verifies that its own signed artifact is compatible. Keep update feedback in the window’s notification area across navigation. See T-391.
+
+## D-278 — Sleep modes
+
+Expose system sleep, awake while a local agent runs, and always awake next to Settings. Persist the selected mode locally and release the operating system assertion when its condition ends. See T-392.
+
+## D-279 — Composer capabilities
+
+Offer a provider-native action only when the chosen provider and route can execute it. Keep the local Codex usage action backed by the provider’s account limits request. Send binary attachments with a new task only after explicit selection, require a compatible remote executor, and expose an isolated copy through the receipt-scoped worker tool. Follow-up binary uploads require their own transport. See T-388 and T-389.

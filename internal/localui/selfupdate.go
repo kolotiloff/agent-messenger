@@ -30,10 +30,18 @@ type SelfUpdate struct {
 
 // Desktop is what the window launcher enables besides the page itself.
 type Desktop struct {
-	setupRoot  string // Set only by RunWindow, or an isolated test.
-	Channel    *updatefeed.Channel
-	Restart    Restarter
-	SelfUpdate *SelfUpdate
+	setupRoot    string // Set only by RunWindow, or an isolated test.
+	Channel      *updatefeed.Channel
+	CheckChannel *updatefeed.Channel
+	Restart      Restarter
+	SelfUpdate   *SelfUpdate
+}
+
+func (d Desktop) updateCheckChannel() *updatefeed.Channel {
+	if d.CheckChannel != nil {
+		return d.CheckChannel
+	}
+	return d.Channel
 }
 
 // selfUpdateDownloadDeadline bounds the window's one-button update: the
@@ -47,6 +55,30 @@ const selfUpdateDeadline = 60 * time.Second
 func selfUpdateStatus(u *SelfUpdate) map[string]any {
 	s := u.Updater.Status()
 	return map[string]any{"ok": true, "state": s.State, "version": s.Version, "error": s.Error, "installed_version": buildinfo.Version}
+}
+
+// A manual check reads signed release metadata. Downloading and installing
+// still use the existing updater and its task and process checks.
+func serveUpdateCheck(w http.ResponseWriter, r *http.Request, decoder *json.Decoder, channel *updatefeed.Channel) {
+	var input *struct{}
+	if err := decoder.Decode(&input); err != nil || input == nil || decoder.Decode(new(any)) != io.EOF {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if channel == nil || channel.PublicKey == "" {
+		reject(w, http.StatusServiceUnavailable, "unavailable", "Проверка обновлений недоступна в этой сборке.")
+		return
+	}
+	result, err := channel.FindGitHub(r.Context(), 0)
+	if err != nil {
+		reject(w, http.StatusBadGateway, "check_failed", "Не удалось проверить обновления.")
+		return
+	}
+	if result.Version == "" {
+		reject(w, http.StatusNotFound, "no_release", "Опубликованная версия не найдена.")
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "version": result.Version, "installed_version": buildinfo.Version})
 }
 
 // serveSelfUpdate answers POST /api/self-update. "check" starts a check in

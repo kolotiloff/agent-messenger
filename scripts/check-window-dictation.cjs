@@ -41,14 +41,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const answer = page.locator('#answer-text');
     const mic = page.locator('#compose .am-dictation-button');
     await answer.fill('До после');
+    const field = page.locator('#compose .am-compose-field');
+    const fieldAtRest = await field.boundingBox();
     await answer.evaluate(input => input.setSelectionRange(3,3));
     await mic.click();
     const first = await last();
     assert.equal(first.action,'start');
     assert.equal(first.language,'ru');
     await emit(first.id,'recording');
+    assert.deepEqual(await field.boundingBox(),fieldAtRest);
     await answer.press('Enter');
     assert.equal((await last()).action,'stop');
+    assert.deepEqual(await field.boundingBox(),fieldAtRest);
     assert.equal(await answer.inputValue(),'До после');
     await emit(first.id,'text','середина');
     assert.equal(await answer.inputValue(),'До середина после');
@@ -59,11 +63,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     for (const [event,message] of [
       ['microphone-denied','Разрешите Kotel доступ к микрофону'],
       ['speech-denied','Разрешите Kotel распознавание речи'],
+      ['dictation-disabled','Служба распознавания Apple недоступна'],
       ['unavailable','Для языка интерфейса недоступно распознавание'],
     ]) {
       await mic.click();
       await emit((await last()).id,event);
       await page.locator('#compose').getByRole('status').getByText(message).waitFor();
+      assert.deepEqual(await field.boundingBox(),fieldAtRest);
       assert.equal(await answer.inputValue(),'До середина после!');
     }
 
@@ -83,9 +89,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await emit(oldChat.id,'text','Чужой черновик');
     assert.equal(await draft.inputValue(),'');
     const draftMic = page.locator('#task-draft .am-dictation-button');
+    const draftField = page.locator('#task-draft .am-compose-field');
+    const draftAtRest = await draftField.boundingBox();
     await draftMic.click();
     const draftRecording = await last();
     await emit(draftRecording.id,'recording');
+    assert.deepEqual(await draftField.boundingBox(),draftAtRest);
+    const draftAccess = await page.locator('#task-draft-access').boundingBox();
+    const draftStatus = await page.locator('#task-draft .am-dictation-status').boundingBox();
+    assert(draftStatus.y+draftStatus.height<=draftAccess.y);
     await draftMic.click();
     assert.deepEqual(await last(),{...draftRecording,action:'stop'});
     await emit(draftRecording.id,'text','Новая задача');

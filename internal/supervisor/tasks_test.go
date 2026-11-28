@@ -135,6 +135,8 @@ type loggedRun struct {
 	Args      []string `json:"args"`
 	Cwd       string   `json:"cwd"`
 	WorkerRun string   `json:"worker_run"`
+	Sandbox   string   `json:"sandbox"`
+	Resumed   string   `json:"resumed"`
 }
 
 func (h *taskHarness) runs() []loggedRun {
@@ -229,6 +231,55 @@ func TestCodexWorkerReportsItsDefaultModel(t *testing.T) {
 	h.stop()
 }
 
+func TestCodexTaskStreamsBeforeCompletion(t *testing.T) {
+	h := newTaskHarness(t, "stream", AdapterLauncher{AllowTasks: true})
+	defer h.stop()
+	cli, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.SetComputerAgent("codex", cli, "", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	id := h.startTask("stream", "codex", "Report")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		feed, err := h.st.TaskFeed(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(feed.Items) > 2 {
+			if len(feed.Items) != 3 || feed.Items[1].Kind != "text_delta" || feed.Items[1].Text != "Первый " ||
+				feed.Items[2].Kind != "text_delta" || feed.Items[2].Text != "ответ" {
+				t.Fatalf("expected only the two public fragments, got %+v", feed.Items)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no public fragment before the worker completed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := os.WriteFile(filepath.Join(h.logDir, "finish-stream"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	h.waitState(id, "done")
+	feed, err := h.st.TaskFeed(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fullText string
+	for _, item := range feed.Items {
+		if item.Kind == "text" {
+			fullText = item.Text
+		}
+	}
+	if fullText != "Первый ответ" {
+		t.Fatalf("missing final text: %+v", feed.Items)
+	}
+	waitNoTaskReservations(t)
+}
+
 func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
 	for _, provider := range []string{"claude", "codex", "cursor"} {
 		t.Run(provider, func(t *testing.T) {
@@ -269,7 +320,7 @@ func TestRequestedTaskAccessReachesWorkerProcess(t *testing.T) {
 		standard, full []string
 	}{
 		{"claude", []string{"--permission-mode", "acceptEdits"}, []string{"--permission-mode", "bypassPermissions"}},
-		{"codex", []string{"--sandbox", "workspace-write"}, []string{"--dangerously-bypass-approvals-and-sandbox"}},
+		{"codex", []string{"workspace-write"}, []string{"danger-full-access"}},
 		{"cursor", []string{"--sandbox", "enabled"}, []string{"--sandbox", "disabled"}},
 	} {
 		t.Run(provider.name, func(t *testing.T) {
@@ -300,7 +351,14 @@ func TestRequestedTaskAccessReachesWorkerProcess(t *testing.T) {
 				}
 				h.waitState(id, "done")
 				runs := h.runs()
-				if len(runs) != index+1 || !hasArgs(runs[index].Args, test.want...) {
+				if len(runs) != index+1 {
+					t.Fatalf("expected %d runs, got %d", index+1, len(runs))
+				}
+				if provider.name == "codex" {
+					if runs[index].Sandbox != test.want[0] {
+						t.Fatalf("access %q, full allowed %t: sandbox %q, want %q", test.access, test.allowFull, runs[index].Sandbox, test.want[0])
+					}
+				} else if !hasArgs(runs[index].Args, test.want...) {
 					t.Fatalf("access %q, full allowed %t: missing worker flags %v", test.access, test.allowFull, test.want)
 				}
 			}
@@ -320,9 +378,22 @@ func TestTaskOutputIsReadToTheEnd(t *testing.T) {
 }
 
 func TestTaskQuestionResumesTheSameConversation(t *testing.T) {
-	for _, provider := range []string{"claude", "codex", "cursor"} {
-		t.Run(provider, func(t *testing.T) {
+	for _, test := range []struct{ provider, profile string }{
+		{"claude", "messenger-only"}, {"codex", "messenger-only"}, {"codex", "worker"}, {"cursor", "messenger-only"},
+	} {
+		provider := test.provider
+		t.Run(provider+"/"+test.profile, func(t *testing.T) {
 			h := newTaskHarness(t, "ask-then-report", AdapterLauncher{AllowTasks: true})
+			defer h.stop()
+			if test.profile == "worker" {
+				cli, err := os.Executable()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := h.st.SetComputerAgent(provider, cli, "", test.profile); err != nil {
+					t.Fatal(err)
+				}
+			}
 			id := h.startTask("op-1", provider, "Build level")
 			task := h.waitState(id, "waiting_coordinator")
 			if task.OpenQuestion == nil || task.OpenQuestion.Text != "Which level?" {
@@ -355,10 +426,13 @@ func TestTaskQuestionResumesTheSameConversation(t *testing.T) {
 			case "cursor":
 				resumeFlag = []string{"--resume=" + done.SessionID}
 			}
-			if !hasArgs(runs[1].Args, resumeFlag...) {
+			if test.profile == "worker" {
+				if runs[1].Resumed != task.SessionID || done.SessionID != task.SessionID {
+					t.Fatalf("worker did not resume the same conversation")
+				}
+			} else if !hasArgs(runs[1].Args, resumeFlag...) {
 				t.Fatalf("second run did not resume the same conversation: %v", runs[1].Args)
 			}
-			h.stop()
 		})
 	}
 }
@@ -831,19 +905,32 @@ func TestCodexQuietAdvisorySkipsCommandsAndRearmsOnOutput(t *testing.T) {
 }
 
 func TestCancelStopsARunningTask(t *testing.T) {
-	h := newTaskHarness(t, "slow", AdapterLauncher{AllowTasks: true})
-	id := h.startTask("op-1", "claude", "x")
-	h.waitState(id, "running")
-	deadline := time.Now().Add(5 * time.Second)
-	for len(h.runs()) == 0 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
+	for _, provider := range []string{"claude", "codex"} {
+		t.Run(provider, func(t *testing.T) {
+			h := newTaskHarness(t, "slow", AdapterLauncher{AllowTasks: true})
+			if provider == "codex" {
+				cli, err := os.Executable()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := h.st.SetComputerAgent(provider, cli, "", "worker"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			id := h.startTask("op-1", provider, "x")
+			h.waitState(id, "running")
+			deadline := time.Now().Add(5 * time.Second)
+			for len(h.runs()) == 0 && time.Now().Before(deadline) {
+				time.Sleep(20 * time.Millisecond)
+			}
+			if state, err := h.st.CancelTask(id); err != nil || (state != "cancelling" && state != "cancelled") {
+				t.Fatalf("cancel %s %v", state, err)
+			}
+			h.waitState(id, "cancelled")
+			waitNoTaskReservations(t)
+			h.stop()
+		})
 	}
-	if state, err := h.st.CancelTask(id); err != nil || (state != "cancelling" && state != "cancelled") {
-		t.Fatalf("cancel %s %v", state, err)
-	}
-	h.waitState(id, "cancelled")
-	waitNoTaskReservations(t)
-	h.stop()
 }
 
 func TestTasksNeedPermissionAndAnOpenQueue(t *testing.T) {
@@ -870,27 +957,40 @@ func TestTasksNeedPermissionAndAnOpenQueue(t *testing.T) {
 }
 
 func TestRestartInterruptsARunningTask(t *testing.T) {
-	h := newTaskHarness(t, "slow", AdapterLauncher{AllowTasks: true})
-	id := h.startTask("op-1", "claude", "x")
-	deadline := time.Now().Add(5 * time.Second)
-	for len(h.runs()) == 0 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
+	for _, provider := range []string{"claude", "codex"} {
+		t.Run(provider, func(t *testing.T) {
+			h := newTaskHarness(t, "slow", AdapterLauncher{AllowTasks: true})
+			if provider == "codex" {
+				cli, err := os.Executable()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := h.st.SetComputerAgent(provider, cli, "", "worker"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			id := h.startTask("op-1", provider, "x")
+			deadline := time.Now().Add(5 * time.Second)
+			for len(h.runs()) == 0 && time.Now().Before(deadline) {
+				time.Sleep(20 * time.Millisecond)
+			}
+			time.Sleep(200 * time.Millisecond)
+			h.stop()
+			h.start(AdapterLauncher{AllowTasks: true})
+			task := h.waitState(id, "interrupted")
+			time.Sleep(300 * time.Millisecond)
+			if len(h.runs()) != 1 {
+				t.Fatal("interrupted task relaunched")
+			}
+			reservations := taskReservations(t)
+			if len(reservations) != 1 {
+				t.Fatalf("reservation of an interrupted run removed: %+v", reservations)
+			}
+			_ = platform.SignalGroup(reservations[0].PGID)
+			_ = task
+			h.stop()
+		})
 	}
-	time.Sleep(200 * time.Millisecond)
-	h.stop()
-	h.start(AdapterLauncher{AllowTasks: true})
-	task := h.waitState(id, "interrupted")
-	time.Sleep(300 * time.Millisecond)
-	if len(h.runs()) != 1 {
-		t.Fatal("interrupted task relaunched")
-	}
-	reservations := taskReservations(t)
-	if len(reservations) != 1 {
-		t.Fatalf("reservation of an interrupted run removed: %+v", reservations)
-	}
-	_ = platform.SignalGroup(reservations[0].PGID)
-	_ = task
-	h.stop()
 }
 
 // End to end on one computer: the coordinator's MCP server records a task,
