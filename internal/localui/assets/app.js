@@ -4513,19 +4513,10 @@
       catch(error){showError(error);}
     });
   }
-  let agentComputer='local';
   function renderAgents(){
     renderAgentSetupActions();
     const live=$('agents'),cards=live.cloneNode(false);
-    if(taskSidebarPreview){
-      const options=computerOptions();
-      if(view?.computer_name)options[0][1]+=' ('+tr('Этот компьютер').toLocaleLowerCase(amLocale)+')';
-      if(!options.some(([id])=>id===agentComputer))agentComputer='local';
-      projectOptions($('agents-computer'),options,agentComputer);
-      $('agents-computer-filter').hidden=false;
-      syncSelects();
-    }
-    const computer=taskSidebarPreview?agentComputer:computerFilter;
+    const computer=taskSidebarPreview?'':computerFilter;
     if(computer&&computer!=='local'){delete live.dataset.localGroups;renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
     const groups=new Map([
       ['installed',[tr('Установлено'),[]]],
@@ -4645,7 +4636,7 @@
   }
   // T-056: one «Любые команды» switch for every agent of this computer.
   function renderAccessBar(){
-    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length||(taskSidebarPreview&&agentComputer!=='local');
+    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length||(!taskSidebarPreview&&!!computerFilter&&computerFilter!=='local');
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
     $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
@@ -6716,7 +6707,7 @@
   }
   $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'),false,sidebarFilterIcon);enhanceSelect($('project-select-second'));enhanceSelect($('agent-filter'),false,sidebarFilterIcon);enhanceSelect($('stats-project'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   if(taskSidebarPreview){
-    enhanceSelect($('stats-computer'));enhanceSelect($('agents-computer'));
+    enhanceSelect($('stats-computer'));
     const draftContextIcons={
       'task-draft-project':folderIconPaths,
       'task-draft-computer':serverIconPaths
@@ -6745,7 +6736,6 @@
     $('task-draft-text').addEventListener('keydown',event=>{
       if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('task-draft').requestSubmit();}
     });
-    $('agents-computer').addEventListener('change',()=>{agentComputer=$('agents-computer').value;renderAgents();});
   }
   function setupComposerDictation(){
     const bridge=window.webkit?.messageHandlers?.composerDictation;

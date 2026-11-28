@@ -215,7 +215,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-end-actions > .am-danger:not(.am-alone) { margin-right:auto; }
 /* The «Любые команды» switches above the agent cards (T-056, D-109). */
 #am-concept .am-access-bar { display:flex; flex-direction:column; gap:var(--am-gap-content); margin-bottom:var(--am-gap-content); padding:var(--am-gap-section); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
-#am-concept #agents-computer-filter { margin-bottom:var(--am-gap-section); }
+#am-concept #agents-settings-title { margin-bottom:var(--am-gap-section); }
 #am-concept .am-access-row { display:flex; align-items:center; gap:var(--am-gap-section); }
 #am-concept .am-access-text { flex:1; min-width:0; display:grid; gap:var(--am-space-1); }
 #am-concept .am-access-text p { margin:0; }
@@ -778,7 +778,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-lost-bar button { flex-shrink:0; }
 #am-concept #project-status:empty { display:none; }
 #am-concept .am-compose label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-#am-concept .am-compose-field { position:relative; display:flex; align-items:flex-end; gap:var(--am-space-1); padding:var(--am-space-1); border:1px solid var(--am-line); border-radius:var(--am-radius-l); background:var(--am-composer); box-shadow:var(--am-shadow-s); }
+#am-concept .am-compose-field { position:relative; display:flex; align-items:flex-end; gap:var(--am-gap-control); padding:var(--am-space-2); border:1px solid var(--am-line); border-radius:var(--am-radius-l); background:var(--am-composer); box-shadow:var(--am-shadow-s); }
 #am-concept.am-task-sidebar-preview .am-compose-field { --am-quiet-hover:var(--am-field-hover); }
 #am-concept.am-task-sidebar-preview .am-compose-field button[aria-expanded=true] { background:var(--am-quiet-hover); }
 #am-concept .am-compose textarea { display:block; flex:1; min-width:0; width:100%; height:var(--am-control); min-height:var(--am-control); max-height:140px; padding:calc((var(--am-control) - 1lh) / 2) var(--am-space-3); border:0; background:transparent; color:var(--am-text); outline:none; box-shadow:none; overflow:hidden; resize:none; }
@@ -799,7 +799,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* T-124: stop and send light up the same way on hover, with a gap between. */
 #am-concept .am-stop-btn { position:relative; width:var(--am-control); height:var(--am-control); padding:0; flex-shrink:0; border-radius:var(--am-radius-m); background:transparent; }
 #am-concept .am-stop-square { width:var(--am-action-icon-size); height:var(--am-action-icon-size); fill:currentColor; }
-#am-concept .am-compose-field :is(.am-send-icon,.am-stop-btn) { border-radius:var(--am-radius-s); }
 #am-concept .am-compose-field :is(.am-send-icon,.am-stop-btn) > svg { width:var(--am-action-icon-size); height:var(--am-action-icon-size); stroke-width:var(--am-action-icon-stroke); }
 #am-concept .am-tip { position:absolute; top:50%; right:calc(100% + var(--am-space-2)); transform:translateY(-50%); display:none; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-composer); color:var(--am-text); white-space:nowrap; box-shadow:var(--am-shadow-s); pointer-events:none; }
 #am-concept .am-tip kbd { font:inherit; color:var(--am-muted); }
