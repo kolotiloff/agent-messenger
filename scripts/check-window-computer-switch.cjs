@@ -62,7 +62,7 @@ const shots = process.env.SCREENSHOT_DIR;
         };
         if (url.pathname.startsWith('/api/')) return route.fulfill({json: fixtures[url.pathname] || {ok: true}});
         const filename = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-        if (!['index.html', 'app.js', 'app.css', 'i18n.js'].includes(filename)) return route.fulfill({status: 404, body: ''});
+        if (!['index.html', 'app.js', 'app.css', 'i18n.js', 'file-viewer.js', 'file-viewer.css'].includes(filename)) return route.fulfill({status: 404, body: ''});
         await route.fulfill({body: await fs.readFile(path.join(assets, filename)), contentType:
           filename.endsWith('.js') ? 'text/javascript' : filename.endsWith('.css') ? 'text/css' : 'text/html'});
       });

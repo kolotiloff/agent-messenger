@@ -238,6 +238,8 @@ type Task struct {
 	RequestedAccess string
 	Version         int
 	OpenQuestion    *TaskQuestion
+	archiveState    string
+	archiveVersion  int64
 }
 
 // TaskQuestion is a question that a verified run asked.
@@ -703,6 +705,64 @@ func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question s
 	return forwardTaskEvent(tx, *link.origin, task, sent, kind, text, question)
 }
 
+// RenameTask edits the title on the originating computer. Its next shared
+// snapshot carries the new title while task and conversation IDs stay stable.
+func (s *Store) RenameTask(id, previous, title string) error {
+	title = strings.TrimSpace(title)
+	if !validTaskTitle(title) {
+		return fmt.Errorf("%w: название задачи должно занимать одну строку до %d символов", ErrRejected, MaxTaskTitle)
+	}
+	return s.taskTx(id, func(_ *sql.Tx, tx *sql.Tx) error {
+		var current, project string
+		var version int64
+		if err := tx.QueryRow(`SELECT title,version,project FROM tasks WHERE id=? AND origin_peer IS NULL`, id).Scan(&current, &version, &project); errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: название можно изменить на компьютере, который создал задачу", ErrRejected)
+		} else if err != nil {
+			return err
+		}
+		if current == title {
+			return nil
+		}
+		if current != previous {
+			return fmt.Errorf("%w: название задачи уже изменилось", ErrRejected)
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET title=?,version=version+1 WHERE id=?`, title, id); err != nil {
+			return err
+		}
+		if err := advanceTaskHistoryEdit(tx, project); err != nil {
+			return err
+		}
+		links, err := taskLink(tx, id)
+		if err != nil || links.remote == nil {
+			return err
+		}
+		remote := links.remote
+		return enqueueNet(tx, remote.broker, remote.peer, fmt.Sprintf("rename.%s.%d", id, version+1), id,
+			netBody{Kind: "rename_task", Task: id, Title: title, TitleVersion: version + 1})
+	})
+}
+
+func validTaskTitle(title string) bool {
+	return title != "" && utf8.ValidString(title) && utf8.RuneCountInString(title) <= MaxTaskTitle && strings.IndexFunc(title, unicode.IsControl) < 0
+}
+
+func applyTaskTitle(tx *sql.Tx, from netLink, body netBody) error {
+	if body.TitleVersion <= 0 || body.Title != strings.TrimSpace(body.Title) || !validTaskTitle(body.Title) {
+		return nil
+	}
+	var project string
+	err := tx.QueryRow(`UPDATE tasks SET title=?,origin_title_version=?,version=version+1
+ WHERE origin_broker=? AND origin_peer=? AND origin_task=? AND origin_title_version<? RETURNING project`,
+		body.Title, body.TitleVersion, from.broker, from.peer, from.task, body.TitleVersion).Scan(&project)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return advanceTaskHistoryEdit(tx, project)
+}
+
 func taskTitle(title, text string) string {
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -1018,12 +1078,12 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, sen
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model,requested_access`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model,requested_access,archive_state,archive_version`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel, origin, full int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel, &t.RequestedAccess)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel, &t.RequestedAccess, &t.archiveState, &t.archiveVersion)
 	t.CancelRequested, t.FromNetwork, t.FullAccess = cancel != 0, origin != 0, full != 0
 	return t, err
 }
@@ -1240,13 +1300,14 @@ func setTaskState(tx *sql.Tx, task, state, detail string) error {
 		}
 	}
 	finished := sql.NullString{}
-	if state == "done" || state == "failed" || state == "cancelled" {
+	if finishedTask(state) {
 		finished = sql.NullString{String: now(), Valid: true}
 	}
 	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at),failure_reason=NULL,failure_reset=NULL,
 context_snapshot=CASE WHEN state<>'running' AND ?='running' AND context_snapshot IS NOT NULL
  THEN json_object('ordinal',json_extract(context_snapshot,'$.ordinal')+1,'sequence',0) ELSE context_snapshot END,
-remote_live_tokens=CASE WHEN ?='running' THEN remote_live_tokens END WHERE id=?`, state, detail, now(), nullString(finished), state, state, task)
+remote_live_tokens=CASE WHEN ?='running' THEN remote_live_tokens END,
+hidden_at=CASE WHEN archive_state='removed' THEN COALESCE(hidden_at,?) ELSE hidden_at END WHERE id=?`, state, detail, now(), nullString(finished), state, state, nullString(finished), task)
 	return err
 }
 
@@ -2151,6 +2212,9 @@ func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGon
 		return err
 	}
 	interrupted := t.State == "interrupted" && gone != nil
+	if t.archiveState == archiveRemoved || (!fromNet && t.archiveState == archiveStored) {
+		return fmt.Errorf("%w: продолжить можно после восстановления задачи из архива", ErrRejected)
+	}
 	if t.State != "done" && t.State != "failed" && !interrupted {
 		return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one can be continued; this one is %s", ErrRejected, t.State)
 	}

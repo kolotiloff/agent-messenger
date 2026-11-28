@@ -15,6 +15,8 @@ const files = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/i18n.js', ['i18n.js', 'text/javascript; charset=utf-8']],
   ['/app.css', ['app.css', 'text/css; charset=utf-8']],
+  ['/file-viewer.js', ['file-viewer.js', 'text/javascript; charset=utf-8']],
+  ['/file-viewer.css', ['file-viewer.css', 'text/css; charset=utf-8']],
   ['/icon.svg', ['icon.svg', 'image/svg+xml']],
   ['/fonts/Inter.woff2', ['fonts/Inter.woff2', 'font/woff2']],
   ['/fonts/SourceSans3.woff2', ['fonts/SourceSans3.woff2', 'font/woff2']],

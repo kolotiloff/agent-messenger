@@ -64,6 +64,9 @@ func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, 
 	if err != nil {
 		return err
 	}
+	if t.archiveState != "" {
+		return fmt.Errorf("%w: продолжить можно после восстановления задачи из архива", ErrRejected)
+	}
 	if t.State != "done" && t.State != "failed" && t.State != "interrupted" {
 		return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one of another computer can be continued; this one is %s", ErrRejected, t.State)
 	}

@@ -120,8 +120,7 @@ const (
 	// of an earlier version (T-117). It is replaced.
 	LinkStale   = "stale"
 	LinkUnknown = "unknown" // the settings file could not be read
-	// LinkOff is this Messenger's own entry with enabled = false. The owner
-	// turned it off; Messenger does not turn it back on.
+	// LinkOff means the owner explicitly disabled this coordinator.
 	LinkOff = "off"
 )
 
@@ -135,25 +134,32 @@ func CoordinatorLink(config, folder, messenger, root, project string) (string, e
 // ClaudeCoordinatorEntry identifies the local entry used by this project.
 func ClaudeCoordinatorEntry(config, folder, messenger, root, project string) (string, string, error) {
 	raw, err := os.ReadFile(config)
-	if errors.Is(err, os.ErrNotExist) {
-		return LinkMissing, CoordinatorServerName, nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return LinkUnknown, "", err
 	}
 	var settings struct {
-		Projects map[string]struct {
-			MCPServers json.RawMessage `json:"mcpServers"`
+		MCPServers json.RawMessage `json:"mcpServers"`
+		Projects   map[string]struct {
+			MCPServers         json.RawMessage `json:"mcpServers"`
+			DisabledMCPServers json.RawMessage `json:"disabledMcpServers"`
 		} `json:"projects"`
 	}
-	if err := json.Unmarshal(raw, &settings); err != nil {
+	if err == nil && json.Unmarshal(raw, &settings) != nil {
 		return LinkUnknown, "", errors.New("Claude settings are not valid JSON")
 	}
-	found := ""
-	state := LinkConnected
+	var found string
+	var entry json.RawMessage
+	var disabled []string
 	for key, p := range settings.Projects {
 		if !sameFolder(key, folder) {
 			continue
+		}
+		if p.DisabledMCPServers != nil {
+			var names []string
+			if json.Unmarshal(p.DisabledMCPServers, &names) != nil {
+				return LinkUnknown, "", errors.New("Claude disabled MCP servers are not a list")
+			}
+			disabled = append(disabled, names...)
 		}
 		if p.MCPServers == nil {
 			continue
@@ -168,55 +174,129 @@ func ClaudeCoordinatorEntry(config, folder, messenger, root, project string) (st
 		if err != nil {
 			return LinkOther, "", err
 		}
-		entry, ok := servers[name]
+		candidate, ok := servers[name]
 		if !ok {
 			continue
 		}
 		if found != "" {
 			return LinkUnknown, "", errors.New("multiple Claude project entries match this folder")
 		}
-		found = name
-		var server struct {
-			Type    string   `json:"type"`
-			Command string   `json:"command"`
-			Args    []string `json:"args"`
-		}
-		if json.Unmarshal(entry, &server) != nil || (server.Type != "" && server.Type != "stdio") ||
-			!slices.Equal(server.Args, CoordinatorArgs(root, project)) {
-			return LinkOther, name, nil
-		}
-		if server.Command == "" {
-			return LinkOther, name, nil
-		}
-		if !sameTrustPath(server.Command, messenger) && !coordinatorProgramAlias(server.Command, messenger) {
-			if !managedCoordinatorProgram(server.Command, messenger, root) {
-				return LinkOther, name, nil
-			}
-			// Claude replaces entries by removing and adding them. This
-			// would discard a manually added environment or other options.
-			fields, err := mcpConfigObject(entry)
-			if err != nil {
-				return LinkUnknown, name, err
-			}
-			for key, value := range fields {
-				switch key {
-				case "type", "command", "args":
-				case "env":
-					var env map[string]string
-					if json.Unmarshal(value, &env) != nil || len(env) != 0 {
-						return LinkOther, name, nil
-					}
-				default:
-					return LinkOther, name, nil
-				}
-			}
-			state = LinkStale
-		}
+		found, entry = name, candidate
 	}
 	if found != "" {
-		return state, found, nil
+		state := claudeLocalEntryState(entry, messenger, root, project)
+		if state == LinkOther {
+			return state, found, nil
+		}
+		if slices.Contains(disabled, found) {
+			return LinkOff, found, nil
+		}
+		if state == LinkConnected {
+			return state, found, nil
+		}
+	} else {
+		found = CoordinatorServerName
+		for _, name := range []string{CoordinatorServerName, legacyCoordinatorName} {
+			if slices.Contains(disabled, name) {
+				return LinkOff, name, nil
+			}
+		}
 	}
-	return LinkMissing, CoordinatorServerName, nil
+	if state, err := claudeOtherScope(settings.MCPServers, folder); err != nil {
+		return state, found, err
+	}
+	if entry == nil {
+		return LinkMissing, found, nil
+	}
+	return LinkStale, found, nil
+}
+
+func claudeLocalEntryState(entry json.RawMessage, messenger, root, project string) string {
+	var server struct {
+		Type    string   `json:"type"`
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
+	}
+	if json.Unmarshal(entry, &server) != nil || (server.Type != "" && server.Type != "stdio") ||
+		!slices.Equal(server.Args, CoordinatorArgs(root, project)) || server.Command == "" {
+		return LinkOther
+	}
+	if sameTrustPath(server.Command, messenger) || coordinatorProgramAlias(server.Command, messenger) {
+		return LinkConnected
+	}
+	if !managedCoordinatorProgram(server.Command, messenger, root) {
+		return LinkOther
+	}
+	// Removing and adding a server with custom options would lose them.
+	fields, err := mcpConfigObject(entry)
+	if err != nil {
+		return LinkOther
+	}
+	for key, value := range fields {
+		switch key {
+		case "type", "command", "args":
+		case "env":
+			var env map[string]string
+			if json.Unmarshal(value, &env) != nil || len(env) != 0 {
+				return LinkOther
+			}
+		default:
+			return LinkOther
+		}
+	}
+	return LinkStale
+}
+
+// A local registration overrides the project and user scopes. Do not hide a
+// custom server or introduce a second coordinator during a registration.
+func claudeOtherScope(userServers json.RawMessage, folder string) (string, error) {
+	hasCoordinator := func(raw json.RawMessage) (bool, error) {
+		if raw == nil {
+			return false, nil
+		}
+		servers, err := mcpConfigObject(raw)
+		_, current := servers[CoordinatorServerName]
+		_, legacy := servers[legacyCoordinatorName]
+		return current || legacy, err
+	}
+	if found, err := hasCoordinator(userServers); err != nil {
+		return LinkUnknown, errors.New("Claude user-scope MCP configuration is invalid")
+	} else if found {
+		return LinkOther, errors.New("Claude already has a user-scope kotel or messenger server")
+	}
+	dir, err := filepath.EvalSymlinks(folder)
+	if err != nil {
+		return LinkUnknown, err
+	}
+	for {
+		path := filepath.Join(dir, ".mcp.json")
+		info, err := os.Lstat(path)
+		if err == nil {
+			if !info.Mode().IsRegular() {
+				return LinkUnknown, errors.New("Claude project-scope MCP configuration is not a regular file")
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return LinkUnknown, err
+			}
+			config, err := mcpConfigObject(raw)
+			if err != nil {
+				return LinkUnknown, errors.New("Claude project-scope MCP configuration is invalid")
+			}
+			if found, err := hasCoordinator(config["mcpServers"]); err != nil {
+				return LinkUnknown, errors.New("Claude project-scope MCP configuration is invalid")
+			} else if found {
+				return LinkOther, errors.New("Claude already has a project-scope kotel or messenger server")
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return LinkUnknown, err
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", nil
+		}
+		dir = parent
+	}
 }
 
 // sameFolder compares a folder key of Claude's settings with a project

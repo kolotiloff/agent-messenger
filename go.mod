@@ -5,6 +5,7 @@ go 1.22.2
 require (
 	filippo.io/edwards25519 v1.1.0
 	github.com/ebitengine/purego v0.10.0
+	github.com/google/safeopen v0.0.0-20260327150837-43626d6f4685
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	golang.org/x/sys v0.22.0
 	modernc.org/sqlite v1.34.5

@@ -17,6 +17,10 @@ Accept the workflow with a completed task report that has a legacy Files entry w
 - **Change summary acceptance.** Check a completed task with more than three changed files, one with exactly three, and one with changed files but unavailable line counts. Verify that a documentation-only edit produces a card and that a read-only task or a task with no verified changed files leaves the final answer on its own. Verify that the header and per-file totals reflect the task's verified data, that keyboard users can expand and collapse the list, and that reopening the task preserves the summary.
 - **Project folders.** Consider a pin action that keeps a project accessible when it has no active jobs. Keep local project removal explicit and confirmed.
 
+## macOS name in the next desktop update
+
+Upgrade a stock build 118 installation whose bundle is still named Agent Messenger.app. After the update, verify a single Kotel application in Finder and search, the Kotel tooltip and relaunch from the pinned Dock item, the same profile and task history, and successful installation of a second signed update. Preserve existing executable entry points while they have consumers and keep active tasks working through the transition.
+
 ## Published 1.0.14 fixes
 
 [Build 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117) passed all five native update checks and public channel verification.

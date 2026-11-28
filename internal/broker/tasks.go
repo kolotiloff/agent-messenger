@@ -42,6 +42,7 @@ type SharedTask struct {
 	WaitsForLock  string `json:"waits_for_lock,omitempty"`
 	Model         string `json:"model,omitempty"`
 	FinishedAt    string `json:"finished_at,omitempty"`
+	Archived      bool   `json:"archived,omitempty"`
 	// Report is the beginning of the worker's report.
 	Report string `json:"report,omitempty"`
 	Tokens int64  `json:"tokens,omitempty"`

@@ -22,7 +22,7 @@ func isProjectResponse(kind string) bool {
 
 func isProjectRequest(kind string) bool {
 	switch kind {
-	case "answer", "continue", "note", "cancel":
+	case "answer", "continue", "note", "cancel", "rename_task", "archive_task":
 		return true
 	default:
 		return false
@@ -52,6 +52,8 @@ func applyProjectRequestTx(machine, tx *sql.Tx, from netLink, m NetIncoming, bod
 		return applyNote(machine, tx, from, body)
 	case "cancel":
 		return applyCancel(machine, tx, from, gone)
+	case "rename_task", "archive_task":
+		return applyTaskMetadata(tx, from, body)
 	default:
 		return fmt.Errorf("%w: the delivery is not a task request", ErrRejected)
 	}
@@ -81,9 +83,12 @@ func applySplitProjectMessage(ctx context.Context, computer *sql.DB, openProject
 		return err
 	}
 	defer common.Rollback()
-	apply, err := claimNetDelivery(common, broker, m)
-	if err != nil {
-		return err
+	apply := true
+	if !taskMetadataUpdate(body.Kind) {
+		apply, err = claimNetDelivery(common, broker, m)
+		if err != nil {
+			return err
+		}
 	}
 	if apply {
 		var task, project, file string
@@ -96,7 +101,7 @@ func applySplitProjectMessage(ctx context.Context, computer *sql.DB, openProject
  FROM task_storage_routes r JOIN project_storage_stage s ON s.project=r.project WHERE `+where, body.Task, broker, m.From).Scan(&task, &project, &file)
 		}
 		err := resolve()
-		if errors.Is(err, sql.ErrNoRows) && validComputer(body.Computer) != "" {
+		if errors.Is(err, sql.ErrNoRows) && !taskMetadataUpdate(body.Kind) && validComputer(body.Computer) != "" {
 			if err := rebindSplitPeer(ctx, common, openProject, broker, NetPeer{ID: m.From, Computer: body.Computer}); err != nil {
 				return err
 			}
@@ -151,9 +156,12 @@ func commitProjectDelivery(ctx context.Context, common *sql.Tx, db *sql.DB, task
 		// message rather than stall the inbox (D-188).
 		return nil
 	}
-	apply, err := claimNetDelivery(tx, from.broker, m)
-	if err != nil {
-		return err
+	apply := true
+	if !taskMetadataUpdate(body.Kind) {
+		apply, err = claimNetDelivery(tx, from.broker, m)
+		if err != nil {
+			return err
+		}
 	}
 	if apply {
 		if isProjectRequest(body.Kind) {

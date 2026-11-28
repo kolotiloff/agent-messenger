@@ -38,6 +38,9 @@ jobs:
             BROWSER_ENGINE="$engine" node scripts/check-window-project-split.cjs
             BROWSER_ENGINE="$engine" node scripts/check-window-stability.cjs
             BROWSER_ENGINE="$engine" node scripts/check-window-pictures.cjs
+            BROWSER_ENGINE="$engine" node scripts/check-window-task-files.cjs
+            BROWSER_ENGINE="$engine" node scripts/check-window-dictation.cjs
+            BROWSER_ENGINE="$engine" node scripts/check-window-task-panes.cjs
           done
 
   native:

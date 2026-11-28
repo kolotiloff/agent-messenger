@@ -138,10 +138,12 @@ type WindowTask struct {
 	Model         string         `json:"model,omitempty"`
 	// RanModel is the model the worker's CLI reported at its last start
 	// (T-108); Model is the one the coordinator asked for.
-	RanModel   string `json:"ran_model,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
-	FinishedAt string `json:"finished_at,omitempty"`
+	RanModel       string `json:"ran_model,omitempty"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+	FinishedAt     string `json:"finished_at,omitempty"`
+	Archived       bool   `json:"archived,omitempty"`
+	ArchiveVersion int64  `json:"archive_version,omitempty"`
 	// OwnerQuestion is set while the worker waits for the owner.
 	OwnerQuestion *TaskQuestion `json:"owner_question,omitempty"`
 	// PendingLaunch is set while the task's latest run is recorded but not
@@ -593,6 +595,7 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 	out := make([]WindowTask, 0, len(tasks))
 	for _, t := range tasks {
 		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
+		w.Archived, w.ArchiveVersion = t.archiveState == archiveStored && finishedTask(t.State), t.archiveVersion
 		// The row shows the model the worker started on (T-202).
 		w.RanModel = s.ranModel(t.ID)
 		if t.State == "waiting_owner" || (t.State == "waiting_coordinator" && t.SenderAgent == AudienceOwner) {
@@ -611,7 +614,7 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 		if err := s.fillWindowLaunch(&w); err != nil {
 			return nil, err
 		}
-		w.CanContinue = canWindowContinue(w, t.SessionID)
+		w.CanContinue = t.archiveState == "" && canWindowContinue(w, t.SessionID)
 		if w.Usage, err = s.taskUsage(t.ID); err != nil {
 			return nil, err
 		}
@@ -660,6 +663,7 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 		return f, t, err
 	}
 	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: t.RanModel, FullAccess: t.FullAccess}
+	f.Task.Archived, f.Task.ArchiveVersion = t.archiveState == archiveStored && finishedTask(t.State), t.archiveVersion
 	if t.OpenQuestion != nil && (t.OpenQuestion.Audience == AudienceOwner || t.SenderAgent == AudienceOwner) {
 		f.Task.State = "waiting_owner"
 		f.Task.OwnerQuestion = t.OpenQuestion
@@ -675,7 +679,7 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 		return f, t, err
 	}
 	f.Task.ContextWindow = snapshot.Window
-	f.Task.CanContinue = canWindowContinue(f.Task, t.SessionID)
+	f.Task.CanContinue = t.archiveState == "" && canWindowContinue(f.Task, t.SessionID)
 	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
 		return f, t, err
 	}

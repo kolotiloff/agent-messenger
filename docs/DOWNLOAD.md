@@ -74,7 +74,7 @@ For Cursor, enable the project's `kotel` connection in its MCP settings if the n
 3. If two computers cannot find each other by six digits, try the long `am1:…` invitation with a server address the other computer can reach. Six-digit discovery needs UDP 47100 on the local network, and the connection itself uses the chosen TCP port (47100 by default). Check Windows Firewall on the server computer and make sure the systems are on the intended network. Guest Wi-Fi isolation can block discovery.
 4. On each worker computer, set its project folder and check **Accept tasks from other computers**.
 
-The **My network** section shows each computer’s status and version. You can request updates for Windows and Linux computers from this list.
+The sidebar shows each computer’s status. Right-click its name to see its installed version and request an available Windows or Linux update.
 
 For computers in different networks, use a reachable address in **Интернет** (Internet) mode and the long invitation, or a shared VPN. A home router or a VPS firewall may need an inbound TCP rule for the server port. [Network and invitation details](BROKER.md#computers-in-different-places)
 

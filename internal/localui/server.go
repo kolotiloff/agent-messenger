@@ -148,7 +148,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-install" || r.URL.Path == "/api/agent-find" || r.URL.Path == "/api/agent-setup-finish" || r.URL.Path == "/api/agent-page" || r.URL.Path == "/api/agent-uninstall" || r.URL.Path == "/api/agent-trust" || taskMutation(r.URL.Path) ||
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-install" || r.URL.Path == "/api/agent-find" || r.URL.Path == "/api/agent-setup-finish" || r.URL.Path == "/api/agent-page" || r.URL.Path == "/api/agent-uninstall" || r.URL.Path == "/api/agent-trust" || r.URL.Path == taskFileRoute || taskMutation(r.URL.Path) ||
 			((r.URL.Path == "/api/self-update" || r.URL.Path == machineOrderRoute) && r.Method != http.MethodGet)
 		method := http.MethodGet
 		if mutation {
@@ -162,6 +162,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			files := map[string]string{
 				"/": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg",
+				"/file-viewer.js": "file-viewer.js", "/file-viewer.css": "file-viewer.css",
 				"/fonts/Inter.woff2": "fonts/Inter.woff2", "/fonts/SourceSans3.woff2": "fonts/SourceSans3.woff2",
 			}
 			name, ok := files[r.URL.Path]
@@ -194,6 +195,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		}
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+token)) != 1 {
 			http.Error(w, "access denied", http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == taskFileRoute {
+			serveTaskFile(w, r, call)
 			return
 		}
 		if r.Method == http.MethodGet && r.URL.Path == "/api/model-catalog" {
@@ -690,7 +695,7 @@ func taskMutation(path string) bool {
 	switch path {
 	case "/api/usage-export":
 		return true
-	case "/api/project-create", "/api/project-folder", "/api/task-start", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/task-hide-history", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
+	case "/api/project-create", "/api/project-folder", "/api/task-start", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/task-rename", "/api/task-archive", "/api/task-hide-history", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
 		return true
 	}
 	return false
@@ -871,6 +876,24 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "task-hide-history", Alias: in.Project, Provider: in.Agent, Text: in.Computer}, true
+	case "/api/task-rename":
+		var in struct{ Task, Previous, Title string }
+		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 || len(in.Previous) > 4*core.MaxTaskTitle || len(in.Title) > 4*core.MaxTaskTitle {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "task-rename", MessageID: in.Task, Alias: in.Previous, Text: in.Title}, true
+	case "/api/task-archive":
+		var in struct {
+			Task, Action string
+			Version      int64
+		}
+		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 || in.Version < 0 {
+			return control.Request{}, false
+		}
+		if in.Action != "archive" && in.Action != "restore" && in.Action != "remove" {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "task-archive", MessageID: in.Task, Action: in.Action, ArchiveVersion: in.Version}, true
 	case "/api/task-hide":
 		var in struct {
 			Peer string `json:"peer"`

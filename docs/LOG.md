@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-338 and T-361 through T-372 desktop integration
+
+The release branch combines provider compatibility, the macOS bundle path migration, on-device draft dictation, file previews, verified change summaries and simultaneous conversations. The signed-install harness now exercises the old managed commands through two bundle replacements. Native microphone input and the owner’s Dock item still require observation on an installed Mac.
+
+## 2026-11-27 — T-370 and T-338 release integration
+
+Codex moved the offline timestamp into the computer row, compacted Statistics, moved Efficiency counts into expanded details, and integrated relative chat timestamps and provider-specific MCP compatibility.
+
 ## 2026-11-27 — T-370 through T-372 Task window review
 
 Codex refined the Statistics insets, matched Efficiency row spacing to Archive, widened Settings navigation, aligned context details, and added last-contact information for offline computers. [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) carries the window changes. T-371 and T-372 specify shared task naming and lifecycle, and simultaneous task conversations.
@@ -19,6 +27,14 @@ Codex recorded the owner's reference for the task summary in [PR #253](https://g
 ## 2026-11-27 — T-364 through T-366 Dock label, update actions, notices and response fonts
 
 Codex confirmed that build 118 declares Kotel and an upgraded bundle can still have the original app path and Dock label. Recorded the remaining naming migration. Removed the duplicate roster from Settings and put update notices above the content in the upper-right corner. Added version and update actions to the remote computer menu. Local project folders offer project settings and removal with confirmation. General offers four response fonts with a fixed 14 px sample. T-361 through T-363 define clickable report paths, file actions, work progress and per-task change summaries. The published Dock tile dimensions remain the reference.
+
+## 2026-11-27 — T-338 provider migration, T-364 macOS name and T-368 message time
+
+Codex verified the isolated Claude and Cursor CLI permission behavior with fresh profiles and no model calls. Reconnect retains their existing server names. The macOS signed-install probe passed from stock 117 to public 118 with the same MCP project, computer and both executable entry points. The next-update acceptance now requires the Kotel name in the Dock and application search. The signed upgraded bundle still needs an end-to-end rename and second-update check. Chromium and WebKit passed the chat footer layout, relative time and keyboard copy checks.
+
+## 2026-11-27 — T-367 GitHub README header
+
+Codex paired the current icon with the Kotel name for both GitHub themes. The approved tagline and coordinator explanation sit above the platform downloads.
 
 ## 2026-11-27 — T-358 Build 118 publication and GitHub overview
 

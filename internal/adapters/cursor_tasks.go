@@ -257,6 +257,13 @@ func cursorFeedEntries(e map[string]any) []FeedEntry {
 		return out
 	case "tool_call":
 		key, call := cursorToolCall(e)
+		if e["subtype"] == "completed" && key == "writeToolCall" {
+			result, _ := call["result"].(map[string]any)
+			success, _ := result["success"].(map[string]any)
+			if path, _ := success["path"].(string); path != "" {
+				return []FeedEntry{{Kind: "tool", Title: "applied_file_change", Text: path}}
+			}
+		}
 		if e["subtype"] == "completed" && key == "shellToolCall" {
 			return appendCommandEvent(nil, "command_end", e["call_id"])
 		}

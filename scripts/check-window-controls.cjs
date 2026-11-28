@@ -21,6 +21,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let created = false, registered = false, connected = false, trusted = false;
       let windowReadFails = true;
       let coordinatorActive = false, hostRunning = false;
+      let cursorServerName = 'kotel';
       let machineOrder = null, machinePeers = undefined, peerLasting = true;
       let setupStates = [], installed = false;
       let updates = [];
@@ -80,7 +81,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             folder: created ? '/fictional/project' : '', messenger: '/fictional/messenger', data_root: '/fictional/data',
             agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
             coordinator: {connected, client: 'cursor-vscode', active: coordinatorActive},
-            cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder'},
+            cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder', ...(connected ? {server_name: cursorServerName} : {})},
             computer_name: 'Theme test', tasks_enabled: true},
           '/api/agent-setup-status': setupStates,
           '/api/model-catalog': {models: [{model:'gpt-6.2-sol[effort=medium]',name:'GPT-6.2 Sol Medium'}],limit:12},
@@ -92,7 +93,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
         const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
-        if (!['index.html', 'app.js', 'app.css', 'i18n.js'].includes(filename)) return route.fulfill({status: 404, body: ''});
+        if (!['index.html', 'app.js', 'app.css', 'i18n.js', 'file-viewer.js', 'file-viewer.css'].includes(filename)) return route.fulfill({status: 404, body: ''});
         await route.fulfill({body: await fs.readFile(path.join(assets, filename)), contentType:
           filename.endsWith('.js') ? 'text/javascript' : filename.endsWith('.css') ? 'text/css' : 'text/html'});
       });
@@ -230,6 +231,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.deepEqual(writes.filter(write => write.path === '/api/coordinator-connect'),
         [{path: '/api/coordinator-connect', body: {project: 'Welcome test', agent: 'cursor'}}]);
       await page.setViewportSize({width:1100,height:850});
+      await page.locator('[data-tab=project]').click();
+      const coordinator = page.locator('#coord-box');
+      await coordinator.getByText('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Kotel', {exact: true}).waitFor();
+      cursorServerName = 'messenger';
+      await page.evaluate(() => window.messengerRefresh());
+      await coordinator.getByText('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.', {exact: true}).waitFor();
+      await page.locator('[data-tab=tasks]').click();
       const projects = page.locator('[aria-controls="project-select-menu"]');
       await projects.click();
       const projectMenu = page.locator('#project-select-menu');
@@ -926,12 +934,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const cohortHeader=page.locator('#stats-efficiency-grid .am-efficiency-cohort th').first();
       assert.equal(await tableHeader.evaluate(node=>getComputedStyle(node).paddingBottom),
         await cohortHeader.evaluate(node=>getComputedStyle(node).paddingTop),'efficiency headers share the vertical inset around the rule');
-      const acceptedRate=compared.locator('.am-efficiency-rate').first();
-      const firstPassRate=compared.locator('.am-efficiency-rate').last();
+      const acceptedRate=compared.locator('td').nth(0);
+      const firstPassRate=compared.locator('td').nth(1);
       assert.equal(await acceptedRate.innerText(),'75%');
       assert.equal(await firstPassRate.innerText(),'50%');
       await acceptedRate.hover();
-      await acceptedRate.getByRole('tooltip').getByText('3/4',{exact:true}).waitFor();
+      assert.equal(await compared.getByRole('tooltip').count(),0);
       assert.equal(await compared.locator('td').nth(2).innerText(),'125 тыс.');
       const more=compared.getByRole('button',{name:'Codex Sol 6.2 High, 5 задач'}),efficiencyDetails=page.locator('#stats-efficiency-detail-0');
       const modelName=more.locator('.am-efficiency-model-name'),groupCount=more.getByText(', 5 задач',{exact:true});
@@ -943,9 +951,6 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(modelAndCount[0].top,modelAndCount[1].top,'model and count share a line');
       assert.notEqual(modelAndCount[0].color,modelAndCount[1].color,'the count is muted');
       await page.mouse.move(0,0);
-      await more.press('Tab');
-      await acceptedRate.press('Tab');
-      await firstPassRate.getByRole('tooltip').getByText('2/4',{exact:true}).waitFor();
       assert.equal(await more.locator('svg').count(),0,'the model row has no disclosure arrow');
       const cohortLabel=compared.locator('xpath=preceding-sibling::tr[contains(@class,"am-efficiency-cohort")]').first().locator('th');
       const cohortTextLeft=await cohortLabel.evaluate(node=>{
@@ -962,6 +967,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await more.press('Enter');
       assert.equal(await more.getAttribute('aria-expanded'),'true');
       await efficiencyDetails.getByText('150 тыс.',{exact:true}).waitFor();
+      await efficiencyDetails.getByText('Принято: 3/4, С первого раза: 2/4',{exact:false}).waitFor();
       await efficiencyDetails.getByRole('columnheader',{name:'Порог для 90%'}).waitFor();
       for (const width of [1100,600]) {
         await page.setViewportSize({width,height:600});
@@ -1290,8 +1296,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await stopStatus.isVisible(),false);
       await remoteList.click({button:'right'});
       assert.equal(await stopAction.count(),0);
-      await removeAction.waitFor();
-      assert.equal(await removeAction.isEnabled(),true);
+      const archiveAction=menu.getByRole('menuitem',{name:'Архивировать задачу'});
+      await archiveAction.waitFor();
+      assert.equal(await archiveAction.isEnabled(),true);
+      assert.equal(await removeAction.count(),0);
       await page.keyboard.press('Escape');
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
@@ -1314,6 +1322,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await stopStatus.isVisible(),false);
       localRow=localTask;
       await page.locator('#task-head').getByText(/Работает/).waitFor();
+      // After a reboot the owner can close a different task from its row.
+      remoteRow={...remoteTask,state:'interrupted'};
+      await page.evaluate(()=>window.messengerRefresh());
+      await remoteList.click({button:'right'});
+      await menu.getByRole('menuitem',{name:'Закрыть задачу',exact:true}).click();
+      assert.equal(await page.locator('#task-head h3').innerText(),localTask.title);
+      assert.match(await page.locator('#confirm-text').innerText(),/прервано/);
+      const requestsBeforeClose=stopRequests.length;
+      await page.locator('#confirm-go').click();
+      await page.waitForFunction(()=>!document.querySelector('#confirm-dialog').open);
+      assert.deepEqual(stopRequests.slice(requestsBeforeClose),[{task:remoteTask.id}]);
+      remoteRow=remoteTask;
       // Owner, 2026-11-15: one button removes every finished task from the list.
       await page.locator('.am-task-shared',{hasText:'Old 1'}).click({button:'right'});
       await removeAction.waitFor();

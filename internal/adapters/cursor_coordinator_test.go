@@ -13,7 +13,7 @@ func TestCursorCoordinatorKeepsSettings(t *testing.T) {
 	path := CursorProjectConfig(t.TempDir())
 	root := filepath.Join(t.TempDir(), "data")
 	messenger := filepath.Join(root, "runtimes", strings.Repeat("a", 64), "messenger")
-	if state, err := CursorCoordinatorLink(path, messenger, root, "Game"); err != nil || state != LinkMissing {
+	if state, _, err := CursorCoordinatorLink(path, messenger, root, "Game"); err != nil || state != LinkMissing {
 		t.Fatal(state, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -32,8 +32,8 @@ func TestCursorCoordinatorKeepsSettings(t *testing.T) {
 			t.Fatal("lost another setting")
 		}
 	}
-	if state, err := CursorCoordinatorLink(path, messenger, root, "Game"); err != nil || state != LinkConnected {
-		t.Fatal(state, err)
+	if state, name, err := CursorCoordinatorLink(path, messenger, root, "Game"); err != nil || state != LinkConnected || name != CoordinatorServerName {
+		t.Fatal(state, name, err)
 	}
 	if err := EnsureCursorCoordinator(path, messenger, root, "Game"); err != nil {
 		t.Fatal(err)
@@ -58,13 +58,13 @@ func TestCursorCoordinatorKeepsSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	newer := filepath.Join(t.TempDir(), "new-messenger")
-	if state, _ := CursorCoordinatorLink(path, newer, root, "Game"); state != LinkStale {
+	if state, _, _ := CursorCoordinatorLink(path, newer, root, "Game"); state != LinkStale {
 		t.Fatal(state)
 	}
 	if err := EnsureCursorCoordinator(path, newer, root, "Game"); err != nil {
 		t.Fatal(err)
 	}
-	if state, err := CursorCoordinatorLink(path, newer, root, "Game"); err != nil || state != LinkConnected {
+	if state, _, err := CursorCoordinatorLink(path, newer, root, "Game"); err != nil || state != LinkConnected {
 		t.Fatal(state, err)
 	}
 	if after, _ := os.ReadFile(path); !strings.Contains(string(after), "CUSTOM") {
@@ -88,7 +88,7 @@ func TestCursorCoordinatorRefusesAmbiguousOrForeignSettings(t *testing.T) {
 			os.MkdirAll(filepath.Dir(path), 0o700)
 			os.WriteFile(path, raw, 0o600)
 			// Disabled old versions must not be repaired either.
-			if state, err := CursorCoordinatorLink(path, messenger+"-new", root, "Game"); err != nil || state != LinkOff {
+			if state, _, err := CursorCoordinatorLink(path, messenger+"-new", root, "Game"); err != nil || state != LinkOff {
 				t.Fatal(state, err)
 			}
 			if err := EnsureCursorCoordinator(path, messenger+"-new", root, "Game"); err != nil {
@@ -113,7 +113,7 @@ func TestCursorCoordinatorRefusesAmbiguousOrForeignSettings(t *testing.T) {
 			path := CursorProjectConfig(t.TempDir())
 			os.MkdirAll(filepath.Dir(path), 0o700)
 			os.WriteFile(path, []byte(tc.raw), 0o600)
-			state, err := CursorCoordinatorLink(path, messenger, root, "Game")
+			state, _, err := CursorCoordinatorLink(path, messenger, root, "Game")
 			if state != tc.state || (tc.state == LinkUnknown) != (err != nil) {
 				t.Fatal(state, err)
 			}
@@ -148,7 +148,7 @@ func TestCursorCoordinatorRefusesSymlinks(t *testing.T) {
 				t.Skipf("symlinks unavailable: %v", err)
 			}
 			messenger := filepath.Join(folder, "messenger")
-			if state, err := CursorCoordinatorLink(path, messenger, folder, "Game"); state != LinkUnknown || err == nil {
+			if state, _, err := CursorCoordinatorLink(path, messenger, folder, "Game"); state != LinkUnknown || err == nil {
 				t.Fatal(state, err)
 			}
 			if err := EnsureCursorCoordinator(path, messenger, folder, "Game"); err == nil {
@@ -168,7 +168,7 @@ func TestCursorCoordinatorNameCollisionDoesNotWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	program := filepath.Join(t.TempDir(), "kotel")
-	if state, _ := CursorCoordinatorLink(path, program, "/data", "Game"); state != LinkOther {
+	if state, _, _ := CursorCoordinatorLink(path, program, "/data", "Game"); state != LinkOther {
 		t.Fatal(state)
 	}
 	if err := EnsureCursorCoordinator(path, program, "/data", "Game"); err == nil {
@@ -176,5 +176,46 @@ func TestCursorCoordinatorNameCollisionDoesNotWrite(t *testing.T) {
 	}
 	if got, err := os.ReadFile(path); err != nil || string(got) != before {
 		t.Fatal("collision changed the file", err)
+	}
+}
+
+func TestCursorCoordinatorKeepsLegacyApprovalConfiguration(t *testing.T) {
+	root := t.TempDir()
+	program := filepath.Join(root, "kotel")
+	legacy := filepath.Join(root, "messenger")
+	if err := os.WriteFile(program, nil, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(program), legacy); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	path := CursorProjectConfig(t.TempDir())
+	if err := os.Mkdir(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	before, err := json.Marshal(map[string]any{
+		"mcpServers": map[string]any{
+			"messenger": map[string]any{
+				"type":    "stdio",
+				"command": legacy,
+				"args":    CoordinatorArgs(root, "Game"),
+				"env":     map[string]string{WorkerRunVariable: "${env:" + WorkerRunVariable + "}"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, name, err := CursorCoordinatorLink(path, program, root, "Game"); err != nil || state != LinkConnected || name != legacyCoordinatorName {
+		t.Fatal(state, name, err)
+	}
+	if err := EnsureCursorCoordinator(path, program, root, "Game"); err != nil {
+		t.Fatal(err)
+	}
+	if after, err := os.ReadFile(path); err != nil || string(after) != string(before) {
+		t.Fatal("the approved server name and transport must remain byte-for-byte", err)
 	}
 }

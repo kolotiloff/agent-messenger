@@ -14,7 +14,7 @@ bash scripts/fetch-sparkle.sh "$sparkle"
 public_key="$(cat desktop/macos/update-public-key.txt)"
 [[ "$public_key" =~ ^[A-Za-z0-9/+]{43}=$ ]] || { echo 'Invalid update public key' >&2; exit 1; }
 CGO_ENABLED=0 "$go_bin" build -trimpath -buildvcs=false -ldflags "-X github.com/kolotiloff/agent-messenger/internal/buildinfo.Version=$version -X github.com/kolotiloff/agent-messenger/internal/buildinfo.Revision=$revision -X github.com/kolotiloff/agent-messenger/internal/buildinfo.UpdatePublicKey=$public_key" -o "$app/Contents/Resources/kotel" ./cmd/messenger
-xcrun swiftc -target "$(uname -m)-apple-macos15.0" -swift-version 5 -O -F "$sparkle" -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks -framework AppKit -framework WebKit desktop/macos/main.swift desktop/macos/Updater.swift -o "$app/Contents/MacOS/AgentMessenger"
+xcrun swiftc -target "$(uname -m)-apple-macos15.0" -swift-version 5 -O -F "$sparkle" -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks -framework AppKit -framework WebKit desktop/macos/main.swift desktop/macos/Updater.swift desktop/macos/BundleName.swift desktop/macos/Dictation.swift -o "$app/Contents/MacOS/AgentMessenger"
 cp desktop/macos/Info.plist "$app/Contents/Info.plist"
 mkdir -p "$app/Contents/Frameworks"
 ditto "$sparkle/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framework"
@@ -41,7 +41,7 @@ xcrun swiftc -swift-version 5 desktop/macos/icon.swift -o "$out/icon-generator"
 iconutil -c icns "$out/AppIcon.iconset" -o "$app/Contents/Resources/KotelIcon.icns"
 codesign --force --sign - "$app/Contents/Resources/kotel"
 ln -s kotel "$app/Contents/Resources/messenger"
-codesign --force --sign - "$app"
+codesign --force --sign - --entitlements desktop/macos/Entitlements.plist "$app"
 codesign --verify --deep --strict "$app"
 "$app/Contents/Resources/kotel" version
 /usr/bin/ditto -c -k --keepParent "$app" "$out/Agent-Messenger-mac.zip"

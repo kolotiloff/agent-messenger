@@ -110,6 +110,77 @@ func TestClaudeCoordinatorNameCollision(t *testing.T) {
 	}
 }
 
+func TestClaudeCoordinatorRespectsOtherScopesAndDisabledServers(t *testing.T) {
+	tests := []struct {
+		name     string
+		user     string
+		shared   string
+		disabled []string
+		managed  bool
+		want     string
+	}{
+		{name: "fresh", want: LinkMissing},
+		{name: "unrelated user server", user: `{"another":{"command":"custom"}}`, want: LinkMissing},
+		{name: "user-scope current name", user: `{"kotel":{"command":"custom"}}`, want: LinkOther},
+		{name: "user-scope legacy name", user: `{"messenger":{"command":"custom"}}`, want: LinkOther},
+		{name: "project-scope current name", shared: `{"mcpServers":{"kotel":{"command":"custom"}}}`, want: LinkOther},
+		{name: "project-scope legacy name", shared: `{"mcpServers":{"messenger":{"command":"custom"}}}`, want: LinkOther},
+		{name: "duplicate shared map", shared: `{"mcpServers":{"kotel":{}}, "mcpServers":{}}`, want: LinkUnknown},
+		{name: "disabled current name", disabled: []string{"kotel"}, want: LinkOff},
+		{name: "disabled legacy name without local entry", disabled: []string{"messenger"}, want: LinkOff},
+		{name: "disabled legacy managed entry", disabled: []string{"messenger"}, managed: true, want: LinkOff},
+		{name: "unrelated disabled entry", disabled: []string{"other"}, managed: true, want: LinkStale},
+		{name: "avoid exposing shadowed server during repair", managed: true, user: `{"messenger":{"command":"custom"}}`, want: LinkOther},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			folder := filepath.Join(dir, "project", "nested")
+			if err := os.MkdirAll(folder, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			root := filepath.Join(dir, "data")
+			app := filepath.Join(dir, "kotel")
+			userConfig := filepath.Join(dir, ".claude.json")
+			projectSettings := map[string]any{}
+			if tc.disabled != nil {
+				projectSettings["disabledMcpServers"] = tc.disabled
+			}
+			if tc.managed {
+				projectSettings["mcpServers"] = map[string]any{
+					"messenger": map[string]any{
+						"command": filepath.Join(root, "runtimes", strings.Repeat("a", 64), "messenger"),
+						"args":    CoordinatorArgs(root, "Game"),
+					},
+				}
+			}
+			settings := map[string]any{"projects": map[string]any{folder: projectSettings}}
+			if tc.user != "" {
+				settings["mcpServers"] = json.RawMessage(tc.user)
+			}
+			raw, err := json.Marshal(settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Claude also sees project-scope servers from ancestor folders. The
+			// user config may be absent when a shared server is already present.
+			if tc.user != "" || len(projectSettings) > 0 {
+				if err := os.WriteFile(userConfig, raw, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.shared != "" {
+				if err := os.WriteFile(filepath.Join(filepath.Dir(folder), ".mcp.json"), []byte(tc.shared), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got, _, err := ClaudeCoordinatorEntry(userConfig, folder, app, root, "Game"); got != tc.want {
+				t.Fatalf("state=%s, want %s, detail=%v", got, tc.want, err)
+			}
+		})
+	}
+}
+
 func TestCoordinatorProgramAliasRequiresInstallerLink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the Mac and Linux packages use sibling symlinks")
