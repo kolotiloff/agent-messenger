@@ -704,7 +704,7 @@ if (require.main === module) (async()=>{
       assert.equal(await remote.evaluate(node=>node.getBoundingClientRect().height),29);
       assert.match(await draftPage.locator('#thread .am-meta-author').last().textContent(),/, исполнитель$/);
       const authorWeights=await draftPage.locator('#thread .am-meta-author .am-inline-role').evaluateAll(roles=>roles.map(role=>[getComputedStyle(role).fontWeight,getComputedStyle(role.parentElement).fontWeight]));
-      assert(authorWeights.length&&authorWeights.every(([role,author])=>role==='400'&&Number(author)>400),JSON.stringify(authorWeights));
+      assert(authorWeights.length&&authorWeights.every(([role,author])=>role==='400'&&author==='400'),JSON.stringify(authorWeights));
       assert.equal(await draftPage.locator('#thread .am-role').count(),0);
       for(const panel of [local.locator('.am-machine-label'),...await draftPage.locator('#thread .am-meta-author').all()]){
         const [base,role]=await panel.evaluate(node=>{
@@ -1359,7 +1359,7 @@ if (require.main === module) (async()=>{
       });
       const [projectHeading,taskHeading,archiveHeading]=await headingStyles();
       assert.deepEqual(projectHeading.slice(0,3),['14px','400','21px']);
-      assert.deepEqual(taskHeading.slice(0,3),['14px','500','21px']);
+      assert.deepEqual(taskHeading.slice(0,3),['14px','400','21px']);
       assert.equal(taskHeading[3],await verticalCenter(plus));
       assert.deepEqual(archiveHeading.slice(0,3),taskHeading.slice(0,3));
       assert(archiveHeading[3]>taskHeading[3]);

@@ -60,7 +60,7 @@ T-380 keeps the compose field stationary during dictation and distinguishes the 
 
 T-381 keeps the owner’s composer visible and editable while stopping a turn and after it ends. Sending waits for the stop to resolve and the task’s continuation capability. The macOS recognition notice now points to Siri and Dictation settings, since the Apple Speech error does not identify which setting applies. Spoken recognition still needs a Mac acceptance test.
 
-T-382 uses regular weight for the Projects heading and for computer and task names in the task sidebar, with grayscale font smoothing where supported. Conversation and Archive headings use medium weight. The public screenshots reflect these weights.
+T-382 uses regular weight in the task sidebar and throughout the window chrome, with grayscale font smoothing where supported. Explicit emphasis in chat content still follows the message markup.
 
 T-383 shares the closed folder glyph across the two draft pickers, and uses the same close path for dynamic window, tab, notice and update controls. Per-computer update actions in the task sidebar are text in the context menu. The local version footer still shows the download icon and uses the 18 px action viewport for update states. T-384 records the optional first-run setup as backlog.
 
