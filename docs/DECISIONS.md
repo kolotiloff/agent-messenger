@@ -1030,7 +1030,7 @@ Show turn activity while waiting for public text and use partial text when the p
 
 ## D-275 — Task shortcuts and composer inputs
 
-A computer heading opens a draft for that computer. A project heading opens a draft for that project. A nested heading carries both selections. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
+A computer heading opens a draft for that computer. A project heading opens a draft for that project. Show the shortcut only on the outermost groups in the current sidebar grouping. Reveal it on row hover or keyboard focus and use the row highlight. Use the standard row inset. Keep it visible on devices without hover. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
 
 Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Use 16 px provider artwork in window controls and retain the compact metadata marks.
 

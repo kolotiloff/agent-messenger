@@ -370,7 +370,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept.am-task-sidebar-preview .am-machine-card:first-child[data-drop-edge=before]::after { inset-block-end:auto; inset-block-start:0; }
 #am-concept.am-task-sidebar-preview .am-machine-card:last-child[data-drop-edge=after]::after { inset-block-start:auto; inset-block-end:0; }
 #am-concept.am-task-sidebar-preview .am-machine-card > .am-machine-name { --am-computer-signal-background:var(--am-side); position:relative; background:var(--am-computer-signal-background); border-radius:var(--am-radius-s); }
-#am-concept.am-task-sidebar-preview .am-machine-name:is(:hover,:focus-visible,:has(> .am-sidebar-disclosure:focus-visible)):where(:not(:has(.am-update-icon:is(:hover,:focus-visible)))) { --am-computer-signal-background:var(--am-list-row-hover); }
+#am-concept.am-task-sidebar-preview .am-machine-name:is(:hover,:focus-visible,:has(> :is(.am-sidebar-disclosure,.am-group-new):focus-visible)):where(:not(:has(.am-update-icon:is(:hover,:focus-visible)))) { --am-computer-signal-background:var(--am-list-row-hover); }
 #am-concept.am-task-sidebar-preview .am-machine-card > .am-machine-name.am-machine-drag-image { --am-computer-signal-background:color-mix(in srgb, var(--am-field-hover) 40%, transparent); }
 #am-concept.am-task-sidebar-preview .am-peer-card .am-machine-name:not(:hover,:focus-visible,:has(:focus-visible),.am-machine-drag-image) > .am-machine-meta { opacity:0; pointer-events:none; }
 @media (hover:none) and (pointer:coarse) {
@@ -380,10 +380,16 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept button.am-sidebar-disclosure:not(:disabled) { position:absolute; inset:0; z-index:1; width:100%; min-height:0; background:transparent; padding:0; }
 #am-concept .am-folder-row { display:flex; align-items:center; min-width:0; border-radius:var(--am-radius-s); }
 #am-concept .am-folder-row > .am-folder-heading { flex:1; min-width:0; }
-#am-concept .am-folder-row:is(:hover,:focus-within) { background:var(--am-list-row-hover); }
+#am-concept .am-folder-row:has(> .am-group-new) { padding-inline-end:var(--am-row-pad-inline); }
+#am-concept .am-folder-row:is(:hover,:has(> :focus-visible)) { background:var(--am-list-row-hover); }
 #am-concept .am-folder-row button.am-folder-heading:is(:hover,:focus-visible) { background:transparent; }
 #am-concept .am-group-new { flex:none; margin-inline-start:auto; z-index:2; }
-#am-concept .am-machine-name > .am-group-new { order:1; margin-block:calc(-1 * var(--am-row-pad-block)); }
+#am-concept .am-machine-name > .am-group-new { order:1; }
+@media (hover:hover) {
+  #am-concept :is(.am-machine-name,.am-folder-row):not(:hover) > .am-group-new:not(:focus-visible) {
+    opacity:0; pointer-events:none;
+  }
+}
 #am-concept :is(.am-machine-name,.am-sidebar-disclosure)[draggable=true] { cursor:grab; }
 #am-concept .am-sidebar-tasks { display:grid; grid-template-rows:1fr; }
 #am-concept .am-sidebar-tasks:not(:empty):not([inert]) { margin-block-start:var(--am-space-1); }
@@ -1130,6 +1136,11 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 }
 #am-concept button:is(.am-chrome-icon,.am-card-icon) > svg { flex:none; width:var(--am-action-icon-size); height:var(--am-action-icon-size); fill:none; stroke:currentColor; stroke-width:var(--am-action-icon-stroke); stroke-linecap:round; stroke-linejoin:round; }
 #am-concept button:is(.am-chrome-icon,.am-card-icon):enabled:is(:hover,:focus-visible,[aria-expanded=true].am-sidebar-picker,.am-filter-active) { background:var(--am-quiet-hover); color:var(--am-text); }
+#am-concept button.am-chrome-icon.am-group-new {
+  align-self:stretch; width:var(--am-computer-icon-size); min-width:var(--am-computer-icon-size); height:auto; min-height:0;
+}
+#am-concept button.am-chrome-icon.am-group-new > svg { width:100%; height:var(--am-computer-icon-size); }
+#am-concept button.am-chrome-icon.am-group-new:enabled:is(:hover,:focus-visible) { background:transparent; }
 
 #am-concept .am-steps { display:flex; flex-direction:column; }
 #am-concept .am-step { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:var(--am-space-2); align-items:center; min-height:40px; padding:var(--am-space-2) 0; }

@@ -1728,7 +1728,7 @@
     return plus;
   }
   function sidebarTaskRows(body,head,card,computer,items=[],projectGroup=''){
-    head.append(sidebarNewTask(computerName(computer)||computer,projectGroup,computer==='local'?'':computer));
+    if(!projectGroup)head.append(sidebarNewTask(computerName(computer)||computer,'',computer==='local'?'':computer));
     const key=projectGroup?JSON.stringify([projectGroup,computer]):computer;
     if(!items.length)return;
     const rows=el('div',undefined,'am-sidebar-task-rows');
@@ -1814,7 +1814,8 @@
       });
       appendRows(rows,tasks,name);
       const heading=el('div',undefined,'am-folder-row');
-      heading.append(button,sidebarNewTask(projectTitle(name),name,computer?(computer==='local'?'':computer):undefined));
+      heading.append(button);
+      if(!computer)heading.append(sidebarNewTask(projectTitle(name),name));
       folder.append(heading,rows);container.append(folder);
     }
   }

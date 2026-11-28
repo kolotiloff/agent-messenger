@@ -1589,10 +1589,30 @@ if (require.main === module) (async()=>{
       const offlineMark=card(browserPreview,'pc2').getByRole('img',{name:'Нет связи',exact:true});
       const group=mode=>select(browserPreview,'sidebar-group',mode);
       const machines=browserPreview.locator('#machines');
+      const checkGroupPlus=async header=>{
+        const plus=header.locator(':scope > .am-group-new');
+        await browserPreview.mouse.move(0,0);
+        assert.equal(await plus.evaluate(node=>getComputedStyle(node).opacity),'0');
+        await header.hover();
+        assert.equal(await plus.evaluate(node=>getComputedStyle(node).opacity),'1');
+        const rowFill=await header.evaluate(node=>getComputedStyle(node).backgroundColor);
+        await plus.hover();
+        assert.equal(await plus.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+        assert.equal(await header.evaluate(node=>getComputedStyle(node).backgroundColor),rowFill);
+        const aligned=await header.evaluate(row=>{
+          const edge=row.getBoundingClientRect();
+          const plus=row.querySelector('.am-group-new').getBoundingClientRect();
+          const padding=parseFloat(getComputedStyle(row).paddingInlineEnd);
+          return Math.abs(edge.right-plus.right-padding)<0.5&&
+            Math.abs(edge.top+edge.height/2-plus.top-plus.height/2)<0.5;
+        });
+        assert.equal(aligned,true);
+        await plus.click();
+      };
       await group('По проекту');
       const gameFolder=machines.locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       const gameButton=gameFolder.locator('.am-folder-heading');
-      await gameFolder.locator('.am-folder-row > .am-group-new').click();
+      await checkGroupPlus(gameFolder.locator('.am-folder-row'));
       assert.equal(await browserPreview.locator('#task-draft-project').inputValue(),'game');
       assert.equal(await gameFolder.locator('.am-sidebar-task-title').filter({hasText:'Мак, Экран настроек'}).count(),1);
       await gameButton.click();
@@ -1623,6 +1643,7 @@ if (require.main === module) (async()=>{
       const localGame=card(browserPreview,'local').locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       assert.equal(await localGame.getByText('Экран настроек',{exact:true}).count(),1);
       const localFolderButton=localGame.locator('.am-folder-heading');
+      assert.equal(await localGame.locator('.am-group-new').count(),0);
       await localFolderButton.press('Shift+F10');
       await projectMenu.waitFor();
       assert.equal(await projectMenu.locator('.am-context-device').count(),0);
@@ -1661,6 +1682,7 @@ if (require.main === module) (async()=>{
       const reverseGame=machines.locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       const reverseLocal=reverseGame.locator('[data-computer=local]');
       const reversePC=reverseGame.locator('[data-computer=pc1]');
+      assert.equal(await reversePC.locator('.am-group-new').count(),0);
       await reverseGame.locator('.am-folder-heading').click({button:'right'});
       assert.equal(await projectMenu.locator('.am-context-device').count(),0);
       await projectMenu.getByRole('menuitem').first().press('Escape');
@@ -1676,7 +1698,7 @@ if (require.main === module) (async()=>{
       await reverseLocal.locator('.am-sidebar-disclosure').click();
       if(process.env.SCREENSHOT_DIR)await machines.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'project-computer.png')});
       await group('По компьютеру');
-      await card(browserPreview,'pc1').locator('.am-group-new').click();
+      await checkGroupPlus(card(browserPreview,'pc1').locator('.am-machine-name'));
       assert.equal(await browserPreview.locator('#task-draft-computer').inputValue(),'pc1');
       await card(browserPreview,'local').locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');

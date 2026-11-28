@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-387 Group shortcut hover refinement
+
+Codex moved the trailing New Task shortcut to the outermost group headers. It appears on row hover or keyboard focus and shares the row highlight. The button uses the row inset and centers vertically. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-28 — T-387 Task shortcuts and composer inputs
 
 Codex added project and computer shortcuts, a consistent context percentage label, installation groups, attachment chips and drop handling, and a slash picker for built-in window actions. The screenshots use the embedded window assets and fictional data in WebKit. Provider-native commands, remote binary transfer, and a Finder drop in an installed build are still unverified. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
