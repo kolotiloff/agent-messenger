@@ -648,8 +648,13 @@ if (require.main === module) (async()=>{
       assert.equal(await readableOption.locator('span').first().evaluate(node=>{
         const range=document.createRange();
         range.selectNodeContents(node);
-        return range.getClientRects().length;
-      }),1);
+        const rects=Array.from(range.getClientRects()).filter(rect=>rect.width && rect.height);
+        const check=node.nextElementSibling.getBoundingClientRect();
+        const row=node.parentElement.getBoundingClientRect();
+        // Font fallback can split a single line into several runs.
+        return rects.length>0 && Math.max(...rects.map(rect=>rect.top))<Math.min(...rects.map(rect=>rect.bottom))
+          && rects.every(rect=>rect.left>=row.left-0.5 && rect.right<=check.left+0.5) && check.right<=row.right+0.5;
+      }),true);
       await draftPage.keyboard.press('Escape');
 
       await select(draftPage,'chat-font-select','Системный');

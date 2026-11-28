@@ -96,7 +96,12 @@
       });
       if(search){search.value='';empty.hidden=options.length>0;}
       menu.showPopover();trigger.setAttribute('aria-expanded','true');
-      positionPopover(menu,trigger,searchable?276:220,searchable||!!iconPaths);
+      let minWidth=searchable?276:220;
+      if(select.id==='chat-font-select'){
+        menu.style.width='max-content';
+        minWidth=Math.max(minWidth,Math.ceil(menu.getBoundingClientRect().width));
+      }
+      positionPopover(menu,trigger,minWidth,searchable||!!iconPaths);
       if(search){menu.scrollTop=0;search.focus({preventScroll:true});}
       else{
         const row=options[select.selectedIndex]||options[0];row?.scrollIntoView({block:'nearest'});
