@@ -163,6 +163,15 @@ func TestConfirmedFileChangeFeed(t *testing.T) {
 }
 
 func TestTaskFeedEntries(t *testing.T) {
+	partial := TaskFeedEntries("claude", []byte(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":" first"}}}`))
+	if len(partial) != 1 || partial[0] != (FeedEntry{Kind: "text_delta", Text: " first"}) {
+		t.Fatalf("claude partial text %+v", partial)
+	}
+	thinking := TaskFeedEntries("claude", []byte(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"internal"}}}`))
+	if len(thinking) != 0 {
+		t.Fatalf("private thinking appeared in the transcript: %+v", thinking)
+	}
+
 	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","id":"bash-1","name":"Bash","input":{"command":"go test ./...","description":"Run the Go suite"}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}},{"type":"tool_use","name":"ToolSearch","input":{"query":"messenger"}}]}}`))
 	if len(got) != 3 || got[0].Kind != "text" || got[1] != (FeedEntry{Kind: "command_start", Title: "bash-1"}) || got[2].Title != "Bash" || got[2].Text != "go test ./..." || got[2].Description != "Run the Go suite" {
 		t.Fatalf("claude %+v", got)

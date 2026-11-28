@@ -1300,7 +1300,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#answer-send').isEnabled(),true);
       await remoteList.click({button:'right'});
       assert.equal(await stopAction.count(),0);
-      const archiveAction=menu.getByRole('menuitem',{name:'Архивировать задачу'});
+      const archiveAction=menu.getByRole('menuitem',{name:'Отправить в архив'});
       await archiveAction.waitFor();
       assert.equal(await archiveAction.isEnabled(),true);
       assert.equal(await removeAction.count(),0);

@@ -276,6 +276,18 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		var outputNoted time.Time
 		finalNoted := false
 		activeCommands := make(map[string]bool)
+		// Batch partial text so the window can follow it without writing
+		// every provider fragment to SQLite and to the network outbox.
+		var partial strings.Builder
+		var partialAt time.Time
+		flushPartial := func() {
+			if partial.Len() > 0 {
+				_ = s.store.AppendTaskRunItem(runID, "text_delta", "", partial.String(), "")
+				partial.Reset()
+				partialAt = time.Now()
+			}
+		}
+
 		for {
 			line, err := reader.ReadBytes('\n')
 			if len(line) > 0 {
@@ -303,6 +315,12 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 				}
 				for _, item := range adapters.TaskFeedEntries(task.Provider, line) {
 					switch item.Kind {
+					case "text_delta":
+						partial.WriteString(item.Text)
+						if time.Since(partialAt) >= 150*time.Millisecond || partial.Len() >= 1000 {
+							flushPartial()
+						}
+						continue
 					case "command_start":
 						if activeCommands[item.Title] {
 							continue
@@ -318,6 +336,8 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 						live.activeCommands.Add(-1)
 						item.Title = runID + "/" + item.Title
 					}
+					flushPartial()
+					partialAt = time.Time{}
 					_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text, item.Description)
 				}
 				if !bound && result.Session != "" {
@@ -337,6 +357,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 				}
 			}
 			if err != nil {
+				flushPartial()
 				if errors.Is(err, io.EOF) {
 					err = nil
 				}

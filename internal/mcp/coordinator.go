@@ -148,7 +148,7 @@ type coordinator struct {
 }
 
 // acting tools make this chat the project's coordinator (T-090).
-var actingTools = map[string]bool{"wait": true, "start_task": true, "review_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true, "cancel_messenger_update": true}
+var actingTools = map[string]bool{"wait": true, "start_task": true, "review_task": true, "answer": true, "continue_task": true, "note_task": true, "archive_task": true, "cancel": true, "update_messenger": true, "cancel_messenger_update": true}
 
 // claim makes this chat the active coordinator of its project. The new chat
 // is told it replaced another only while that chat's process still runs:
@@ -458,6 +458,11 @@ func coordinatorTools() []map[string]any {
 				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 				"coordinator_model": str("optional: your current model, only if known"),
 			}, "task_id", "op_id", "text")},
+		{"name": "archive_task", "description": "Move a finished task from this project's coordinator to the archive, keeping its conversation. Use archive_version from tasks. Personal chats are archived by their owner.",
+			"inputSchema": obj(map[string]any{
+				"task_id":         str("task id"),
+				"archive_version": map[string]any{"type": "integer", "minimum": 0},
+			}, "task_id", "archive_version")},
 		{"name": "note_task", "description": "Write to a worker while its task runs, on this computer or another one of the network, without stopping it: it reads your text only when its current run ends and goes on in the same conversation. A worker CLI takes no input while it works, so this can be many minutes; to stop a worker now, use cancel. A report it was about to send waits until it has read your text. For a worker that asked you, use answer instead. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id":           str("task id"),
@@ -713,6 +718,31 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question.", "waiting": c.waitingInstructions()}, nil
+	case "archive_task":
+		var a struct {
+			TaskID  string `json:"task_id"`
+			Version *int64 `json:"archive_version"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		if a.Version == nil || *a.Version < 0 {
+			return nil, errors.New("archive_version from tasks is required")
+		}
+		if err := c.ownTask(a.TaskID); err != nil {
+			return nil, err
+		}
+		task, err := c.store.TaskByID(a.TaskID)
+		if err != nil {
+			return nil, err
+		}
+		if task.SenderAgent == core.AudienceOwner {
+			return nil, errors.New("the owner archives personal chats in the window")
+		}
+		if err := c.store.SetTaskArchive(a.TaskID, "archive", *a.Version); err != nil {
+			return nil, err
+		}
+		return map[string]bool{"archived": true}, nil
 	case "note_task":
 		var a struct {
 			TaskID      string `json:"task_id"`
@@ -906,10 +936,12 @@ type coordinatorTask struct {
 	Detail   string             `json:"detail,omitempty"`
 	Question *core.TaskQuestion `json:"question,omitempty"`
 	// T-034: why a failed task failed, and when a usage limit resets.
-	FailureReason string `json:"failure_reason,omitempty"`
-	FailureReset  string `json:"failure_reset,omitempty"`
-	CreatedAt     string `json:"created_at"`
-	FinishedAt    string `json:"finished_at,omitempty"`
+	FailureReason  string `json:"failure_reason,omitempty"`
+	FailureReset   string `json:"failure_reset,omitempty"`
+	CreatedAt      string `json:"created_at"`
+	FinishedAt     string `json:"finished_at,omitempty"`
+	Archived       bool   `json:"archived,omitempty"`
+	ArchiveVersion *int64 `json:"archive_version,omitempty"`
 	// T-071: the worker's last action of an open task and when it was,
 	// and the tokens the task used so far.
 	LastActivity   string `json:"last_activity,omitempty"`
@@ -1003,6 +1035,10 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			break
 		}
 		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, State: t.State, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess, taskModelInfo: describeTaskModel(t.Model, t.RanModel)}
+		if closedTaskStates[t.State] && t.SenderAgent != core.AudienceOwner {
+			archived, version := t.Archive()
+			item.Archived, item.ArchiveVersion = archived, &version
+		}
 		// A verified task's detail is the same verification line every
 		// time; only unfinished or unsuccessful ones explain something.
 		if t.State != "done" {

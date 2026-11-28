@@ -845,7 +845,7 @@
         if(inArchive)entries.push({text:tr('Убрать из архива навсегда'),pick:()=>{
           askConfirm(tr('Убрать задачу из архива?'),tr('Карточка исчезнет из списков после синхронизации. Переписка, файлы и статистика сохранятся.'),tr('Убрать из архива'),()=>changeTaskArchive(t,name,'remove'));
         }});
-      }else entries.push({text:tr('Архивировать задачу'),pick:()=>changeTaskArchive(t,name,'archive')});
+      }else entries.push({text:tr('Отправить в архив'),pick:()=>changeTaskArchive(t,name,'archive')});
     }else if(!t.archived&&(finishedStates.includes(t.state)||(p&&!interrupted&&sharedLost(t,p)))){
       entries.push({text:tr('Удалить из списка'),pick:()=>askRemoveTask(t,p,name)});
     }
@@ -2287,7 +2287,7 @@
     for(const it of items){
       if(needsDecision(it))groups.attention.push(it);
       else if(it.t.state==='running'&&!it.t.started_at&&(it.t.pending_launch||it.t.remote?.unaccepted)&&!(it.peer&&sharedWorkerRunning(it.t)))groups.planned.push(it);
-      else if(activeStates.includes(it.t.state))groups.active.push(it);
+      else if(activeStates.includes(it.t.state)||it.t.keep_open&&finishedStates.includes(it.t.state))groups.active.push(it);
       else groups.done.push(it);
     }
     return groups;
@@ -3301,6 +3301,9 @@
       }
     }
     const thread=$('thread');
+    for(const notice of root.querySelectorAll('[data-show-after][hidden]')){
+      if(now>=Number(notice.dataset.showAfter))notice.hidden=false;
+    }
     for(const timer of thread.querySelectorAll('[data-command-start]')){
       timer.textContent=commandElapsed(Number(timer.dataset.commandStart));
     }
@@ -3518,7 +3521,11 @@
     const q=t.quiet;if(!q||t.state!=='running')return null;
     if(q.final_at){
       const p=el('p',undefined,'am-small');
-      p.append(el('span',tr('Итог написан в ')+clock(q.final_at)+tr(', но процесс исполнителя не завершился'),'am-status-wait'));
+      const at=Date.parse(q.final_at);
+      if(!Number.isFinite(at))return null;
+      p.dataset.showAfter=at+60000;
+      p.hidden=Date.now()<Number(p.dataset.showAfter);
+      p.append(el('span',tr('Ответ получен, исполнитель ещё завершает работу'),'am-status-wait'));
       const left=(q.processes||[]).map(x=>(x.name||'?')+' ('+x.pid+')'+(x.worker?tr(' — сам исполнитель'):''));
       p.append(el('span','. '+(left.length?tr('Ещё работают: ')+left.join(', ')+'. ':'')+tr('Закройте лишнее на этом компьютере или остановите задачу.'),'am-muted'));
       return p;
@@ -3567,23 +3574,45 @@
     if(files.size>3)card.append(more);
     return card;
   }
+  // A provider snapshot replaces the preview of the same text. Keep an
+  // interrupted preview when no completed text arrived for it.
+  function visibleFeedItems(raw){
+    const items=[];
+    let preview=null;
+    for(const item of raw){
+      if(item.kind==='text_delta'){
+        if(!preview)preview={...item,kind:'text',text:''};
+        preview.text+=item.text;
+        preview.at=item.at;
+        continue;
+      }
+      if(preview){
+        if(!['text','report','question'].includes(item.kind))items.push(preview);
+        preview=null;
+      }
+      items.push(item);
+    }
+    if(preview)items.push(preview);
+    return items;
+  }
   function renderFeed(t){
     const thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
-    const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
+    const items=visibleFeedItems(feed.items||[]);
+    const count=items.filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const displayModel=taskModelLabel(t),quiet=quietLine(t);
     const header=taskSidebarPreview?conversationTitle(t.title):taskFeedHeader(t,displayModel,quiet);
     const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
-    const direct=feed.items[0]?.author==='owner';
+    const direct=items[0]?.author==='owner';
     // Keep live output visible until a verified reply for this run is available.
     const replyProgress=new Map();
-    if(direct)for(const it of feed.items){
+    if(direct)for(const it of items){
       if(it.run>0&&it.kind==='report'&&it.verified&&it.audience!=='held'&&it.text?.trim())replyProgress.set(it.run,[]);
     }
     const out=[];let group=null,tools=null;
     const appliedFiles=new Map();
     const pending=new Map(), unfinished=new Set();
-    for(const [index,it] of feed.items.entries()){
+    for(const [index,it] of items.entries()){
       if(it.kind==='command_start'){pending.set(it.title,index);unfinished.add(index);}
       if(it.kind==='command_end'){unfinished.delete(pending.get(it.title));pending.delete(it.title);}
       if(['task','answer','report','question','outcome'].includes(it.kind))pending.clear();
@@ -3591,13 +3620,13 @@
     const running=t.state==='running'&&!t.pending_launch&&!t.remote?.lost&&!t.remote?.silent&&online;
     // Only the latest worker action group can show a timer. Keep matching
     // late command ends so an earlier group can still show its finished count.
-    let liveFrom=feed.items.length;
+    let liveFrom=items.length;
     if(running&&pending.size){
-      for(let i=feed.items.length-1;i>=0;i--){
-        const {kind}=feed.items[i];
+      for(let i=items.length-1;i>=0;i--){
+        const {kind}=items[i];
         if(kind==='command_end')continue;
         if(kind==='tool'||kind==='command_start'){liveFrom=i;continue;}
-        if(liveFrom===feed.items.length&&(kind==='note'||kind==='accepted'))continue;
+        if(liveFrom===items.length&&(kind==='note'||kind==='accepted'))continue;
         break;
       }
     }
@@ -3727,7 +3756,7 @@
       return content;
     }
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
-    for(const [index,it] of feed.items.entries()){
+    for(const [index,it] of items.entries()){
       if(it.kind==='command_end')continue;
       if(it.kind==='command_start'){
         const batch=collectTools(index);
@@ -3745,7 +3774,7 @@
       if(it.kind==='answer'){if(it.author==='owner'){outgoingOwner(it);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
-        if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
+        if(items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
       if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере {computer}').replace('{computer}',()=>it.text),'am-status-good'));group=null;continue;}
       if(it.kind==='text'){
         const progress=replyProgress.get(it.run);
@@ -3787,9 +3816,13 @@
           appliedFiles.delete(it.run);
         }
         let note;
+        if(!it.verified&&it.kind==='report'&&it.state==='running'){group=null;continue;}
         if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
         else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
-        else if(it.kind==='report')note=delivery(direct?tr('Задача завершена'):tr('Отчёт отправлен координатору'),'am-delivery-close');
+        else if(it.kind==='report'){
+          if(direct){group=null;continue;}
+          note=delivery(tr('Отчёт отправлен координатору'),'am-delivery-close');
+        }
         else if(it.audience==='owner')note=delivery(direct?tr('Вопрос вам'):tr('Вопрос вам, координатор его не видит'),'am-status-wait');
         else note=delivery(tr('Вопрос координатору'),'am-status-wait');
         if(it.verified){
@@ -3813,6 +3846,14 @@
       }
     }
     flushTools();
+    const stopping=stopProgress(t);
+    if(online&&t.state==='running'&&!taskUnreachable(t)&&!t.quiet?.final_at&&!stopping){
+      const label=t.remote?.unaccepted?taskStatus(t)[0]:t.waits_for_lock||t.pending_launch?tr('В очереди')
+        :feed.items?.at(-1)?.kind==='text_delta'?tr('Исполнитель пишет ответ'):tr('Исполнитель работает');
+      const live=el('div',label, 'am-turn-progress am-small am-muted am-tool-running-label');
+      live.setAttribute('role','status');
+      workerGroup(items.at(-1)?.at||t.created_at).append(live);
+    }
     if(taskSidebarPreview){
       for(const [article,message] of workerMessages)appendMessageTime(article,null,message.at,message.parts.join('\n\n'));
       const date=conversationDate(t);
@@ -4392,7 +4433,7 @@
       if(!v.projects.some(p=>p.name===project))setProject(v.project||'');
       if(v.history_unchanged){
         const live=new Set(v.tasks.map(t=>t.id));
-        v.tasks.push(...(view?.tasks||[]).filter(t=>finishedStates.includes(t.state)&&!live.has(t.id)));
+        v.tasks.push(...(view?.tasks||[]).filter(t=>finishedStates.includes(t.state)&&!t.keep_open&&!live.has(t.id)));
         if(view?.history_next)v.history_next=view.history_next;
         delete v.history_unchanged;
       }

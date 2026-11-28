@@ -96,14 +96,14 @@ func TestSharedTaskDetailsWithLegacyBroker(t *testing.T) {
 	conn := Connection{Address: strings.TrimPrefix(server.URL, "https://"), Fingerprint: hex.EncodeToString(fingerprint[:]), BrokerID: brokerID, DeviceID: deviceID}
 	tasks := []SharedTask{
 		{ID: "task-1", Project: "Game", Title: "Work", Agent: "codex", State: "running",
-			CreatedAt: "2026-11-19T09:19:00Z", StartedAt: "2026-11-19T09:20:00Z", Model: "gpt-6.2-sol[effort=medium]"},
+			CreatedAt: "2026-11-19T09:19:00Z", StartedAt: "2026-11-19T09:20:00Z", Model: "gpt-6.2-sol[effort=medium]", KeepOpen: true},
 		{ID: "task-2", Project: "Game", Title: "Follow-up", Agent: "codex", State: "running",
 			CreatedAt: "2026-11-19T09:21:00Z", PendingLaunch: true, WaitsForLock: "shared cache"},
 	}
-	if _, err := PostSharedTasks(ctx(t), conn, tasks); err != nil || calls.Load() != 3 {
+	if _, err := PostSharedTasks(ctx(t), conn, tasks); err != nil || calls.Load() != 4 {
 		t.Fatalf("legacy broker fallback: %d posts, %v", calls.Load(), err)
 	}
-	if tasks[0].Model == "" || tasks[0].StartedAt == "" || !tasks[1].PendingLaunch || tasks[1].WaitsForLock == "" {
+	if !tasks[0].KeepOpen || tasks[0].Model == "" || tasks[0].StartedAt == "" || !tasks[1].PendingLaunch || tasks[1].WaitsForLock == "" {
 		t.Fatal("fallback modified the caller's snapshot")
 	}
 }

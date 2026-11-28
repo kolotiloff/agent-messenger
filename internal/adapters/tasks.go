@@ -112,7 +112,7 @@ func claudeTaskArgs(s TaskRunSpec) ([]string, error) {
 	for _, name := range TaskToolNames {
 		allowed = append(allowed, "mcp__"+TaskServerName+"__"+name)
 	}
-	args := []string{s.CLI, "-p", "--output-format", "stream-json", "--verbose", "--mcp-config", string(config)}
+	args := []string{s.CLI, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--mcp-config", string(config)}
 	if s.Profile == ProfileMessengerOnly {
 		args = append(args, "--tools", "", "--strict-mcp-config", "--setting-sources", "",
 			"--settings", `{"disableAllHooks":true}`, "--disable-slash-commands", "--no-chrome", "--permission-mode", "dontAsk")
@@ -426,6 +426,16 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 	case "cursor":
 		return cursorFeedEntries(e)
 	case "claude":
+		if e["type"] == "stream_event" {
+			event, _ := e["event"].(map[string]any)
+			delta, _ := event["delta"].(map[string]any)
+			if event["type"] == "content_block_delta" && delta["type"] == "text_delta" {
+				if text, _ := delta["text"].(string); text != "" {
+					return []FeedEntry{{Kind: "text_delta", Text: text}}
+				}
+			}
+			return nil
+		}
 		message, _ := e["message"].(map[string]any)
 		content, _ := message["content"].([]any)
 		if e["type"] == "user" {

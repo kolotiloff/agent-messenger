@@ -54,3 +54,43 @@ func TestWindowPagesCompletedHistoryAndKeepsOlderActiveTasks(t *testing.T) {
 		t.Fatalf("hidden history could not be opened directly: %v", err)
 	}
 }
+
+func TestPersonalConversationStaysInSidebarUntilArchived(t *testing.T) {
+	f := newTaskFixture(t)
+	id, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "personal", Provider: "codex", Text: "Personal chat", ByOwner: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := f.launch(t, id, "019a0000-0000-7000-8000-000000000001")
+	f.dispose(t, run, DispositionReport, "Reply")
+	if _, err := f.st.FinishTaskRun(run.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	check := func(open bool) {
+		t.Helper()
+		v, err := f.st.WindowView("Game", "")
+		if err != nil || len(v.Tasks) != 1 || v.Tasks[0].KeepOpen != open {
+			t.Fatalf("open conversations: %+v, %v", v.Tasks, err)
+		}
+		archive, err := f.st.WindowTaskHistory("Game", "", "", "")
+		if err != nil || (len(archive.Tasks) == 0) != open {
+			t.Fatalf("archive: %+v, %v", archive, err)
+		}
+		feed, err := f.st.TaskFeed(id)
+		if err != nil || feed.Task.KeepOpen != open || feed.Task.CanContinue != open || len(feed.Items) != 2 {
+			t.Fatalf("conversation: %+v, %v", feed, err)
+		}
+	}
+	if err := f.st.HideWindowHistory("Game", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	check(true)
+	if err := f.st.SetTaskArchive(id, "archive", 0); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
+	if err := f.st.SetTaskArchive(id, "restore", 1); err != nil {
+		t.Fatal(err)
+	}
+	check(true)
+}

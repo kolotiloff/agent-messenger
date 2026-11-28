@@ -1555,14 +1555,14 @@ WHERE id=? AND (remote_live_ordinal<? OR (remote_live_ordinal=? AND (remote_live
 		}
 		// A line of the worker's progress, for the window only (D-055).
 		activity := isCommandActivity(b.Event)
-		if b.Event != "text" && b.Event != "tool" && !activity {
+		if b.Event != "text" && b.Event != "tool" && b.Event != "text_delta" && !activity {
 			return nil
 		}
-		var seq, n int
-		if err := tx.QueryRow(`SELECT COALESCE(MAX(seq),0), COUNT(CASE WHEN kind IN ('text','tool') THEN 1 END) FROM remote_task_items WHERE task_id=?`, t.ID).Scan(&seq, &n); err != nil {
+		var seq, n, deltas int
+		if err := tx.QueryRow(`SELECT COALESCE(MAX(seq),0), COUNT(CASE WHEN kind IN ('text','tool') THEN 1 END), COUNT(CASE WHEN kind='text_delta' THEN 1 END) FROM remote_task_items WHERE task_id=?`, t.ID).Scan(&seq, &n, &deltas); err != nil {
 			return err
 		}
-		if (!activity && n >= maxRunItems) || (activity && seq-n >= 2*maxRunItems) {
+		if runItemLimit(b.Event, seq, n, deltas, maxRunItems) {
 			return nil
 		}
 		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, t.ID, seq+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), clip(strings.Join(strings.Fields(b.Description), " "), 200), now())

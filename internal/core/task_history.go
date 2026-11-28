@@ -8,11 +8,15 @@ import (
 
 const windowHistorySize = 10
 
+// Personal chats stay in the sidebar even
+// after their latest run ends.
+const openConversation = `(archive_state='' AND COALESCE(sender_agent,'')='owner')`
+
 const finishedWindowStates = `('done','failed','cancelled')`
 
 // A task sent in an earlier network belongs to no computer of the current
 // one: its peer id there may name another computer now (linkComputer).
-const windowHistoryWhere = `project=? AND hidden_at IS NULL AND archive_state<>'removed' AND state IN ` + finishedWindowStates + `
+const windowHistoryWhere = `project=? AND hidden_at IS NULL AND archive_state<>'removed' AND state IN ` + finishedWindowStates + ` AND NOT ` + openConversation + `
  AND (?='' OR provider=?) AND (?='' OR CASE WHEN remote_peer IS NULL THEN 'local' WHEN remote_broker=? THEN remote_peer ELSE '' END=?)`
 
 // windowHistoryArgs are the arguments of windowHistoryWhere.

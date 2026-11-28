@@ -158,6 +158,65 @@ if (require.main === module) (async()=>{
       assert.equal(await row.locator('td').first().evaluate(background),rowColor,theme+' keyboard focus');
       await page.context().close();
     }
+    let personal=makeTask('personal','game','claude','Личный чат',0,{keep_open:true});
+    let replyItems=[{kind:'text',at:iso(0),text:'Сообщение из game'}];
+    const personalPage=await open([projects[0]],{width:1200,height:800},'dark',url=>{
+      if(url.pathname==='/api/window'||url.pathname==='/api/project-activity'){
+        return {json:{...reply(url,'game',[projects[0]]),tasks:[personal]}};
+      }
+      if(url.pathname==='/api/task'&&url.searchParams.get('id')===personal.id){
+        const items=[{kind:'task',author:'owner',at:personal.created_at,text:personal.title},...replyItems];
+        return {json:{task:personal,items}};
+      }
+      if(url.pathname==='/api/task-archive'){
+        personal={...personal,archived:!personal.archived,keep_open:!!personal.archived,archive_version:(personal.archive_version||0)+1};
+        return {json:{ok:true}};
+      }
+    },true);
+    const personalThread=personalPage.locator('#thread');
+    const status=personalThread.getByText('Исполнитель работает',{exact:true});
+    await status.waitFor();
+    replyItems=[{kind:'text_delta',run:1,at:iso(0),text:'Первый'}];
+    await personalThread.getByText('Первый',{exact:true}).waitFor();
+    replyItems.push({kind:'text_delta',run:1,at:iso(0),text:' фрагмент'});
+    await personalThread.getByText('Первый фрагмент',{exact:true}).waitFor();
+    replyItems.push({kind:'text',run:1,at:iso(0),text:'Первый фрагмент готов'});
+    const completeText=personalThread.getByText('Первый фрагмент готов',{exact:true});
+    await completeText.waitFor();
+    assert.equal(await personalThread.getByText('Первый фрагмент',{exact:true}).count(),0);
+    personal={...personal,quiet:{final_at:iso(0)}};
+    replyItems.push({kind:'report',run:1,at:iso(0),state:'running',text:'Итоговый ответ'});
+    const reportText=personalThread.getByText('Итоговый ответ',{exact:true});
+    await reportText.waitFor();
+    const linger=personalThread.getByText('Ответ получен, исполнитель ещё завершает работу',{exact:true});
+    assert.equal(await linger.isVisible(),false);
+    assert.equal(await personalThread.getByText('Отчёт сохранён без подтверждения запуска').count(),0);
+    personal={...personal,quiet:{final_at:iso(2)}};
+    await linger.waitFor();
+    personal={...personal,state:'done',quiet:null,can_continue:true,finished_at:iso(0)};
+    replyItems.at(-1).verified=true;
+    replyItems.at(-1).state='finished';
+    await linger.waitFor({state:'hidden'});
+    await reportText.waitFor();
+    assert.equal(await personalThread.getByText('Задача завершена',{exact:true}).count(),0);
+    await personalPage.locator('#list-toggle').click();
+    const personalRow=personalPage.locator('#machines .am-sidebar-task').filter({hasText:'Личный чат'});
+    const personalArchive=personalPage.locator('#task-list .am-archive-task').filter({hasText:'Личный чат'});
+    await personalRow.waitFor();
+    assert.equal(await personalArchive.count(),0);
+    await personalRow.click({button:'right'});
+    const personalMenu=personalPage.locator('#device-menu');
+    await personalMenu.getByRole('menuitem',{name:'Отправить в архив',exact:true}).click();
+    await personalArchive.waitFor();
+    assert.equal(await personalRow.count(),0);
+    assert.equal(seen.filter(request=>request.path==='/api/task-archive').at(-1).body,
+      JSON.stringify({task:personal.id,action:'archive',version:0}));
+    await personalArchive.click({button:'right'});
+    await personalMenu.getByRole('menuitem',{name:'Восстановить из архива',exact:true}).click();
+    await personalRow.waitFor();
+    assert.equal(await personalArchive.count(),0);
+    await reportText.waitFor();
+    await personalPage.context().close();
     const hold=()=>{let release;const response=new Promise(resolve=>{release=resolve;});return {response,release};};
     const sameFeed=hold(),otherWindow=hold(),otherFeed=hold();
     let ownerQuestion,remoteLost=false;
@@ -1242,7 +1301,7 @@ if (require.main === module) (async()=>{
       const archiveReport=async()=>{
         await report.click({button:'right'});
         assert.equal(await action('Убрать из архива навсегда').count(),0);
-        await action('Архивировать задачу').click();
+        await action('Отправить в архив').click();
         await report.getByText(/В архиве/).waitFor();
       };
       await archiveReport();

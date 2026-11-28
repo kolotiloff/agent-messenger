@@ -1021,3 +1021,9 @@ The task owner can draft the next message while a stop is pending and after the 
 ## D-273 — Optional first-run setup
 
 Offer a short setup on a new installation and let users close or skip it at any step. Use the same settings for language and appearance, agent and model, optional workspace, network and coordinator, and notifications. Direct chat is available after skipping. Keep the dismissal on that installation and reopen setup from Settings. Upgrades and migrated installations retain their existing configuration and do not trigger setup. See T-384.
+
+## D-274 — Keep personal chats open after a reply
+
+Keep an owner-initiated conversation in Projects until its owner archives it. Archive and restore preserve the conversation and its continuation capability. Coordinators can archive their own finished tasks through the project-scoped MCP action. Existing coordinator task history keeps its automatic placement.
+
+Show turn activity while waiting for public text and use partial text when the provider supplies it. Keep process ownership and verification independent of the displayed reply. Show a process warning only if the recorded final event is at least one minute old and the run is still active. See T-385 and T-386.

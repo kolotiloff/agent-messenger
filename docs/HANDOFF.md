@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+T-385 on PR #257 keeps personal chats in Projects until the owner archives them. A running chat shows activity before text arrives. Claude Code text deltas now flow through the task feed. The final process warning waits 60 seconds. The coordinator can archive its finished tasks through MCP. The Codex worker still uses completed message items, and T-386 tracks its streaming transport.
+
 Kotel 1.0.16 (build 119) is the desktop migration from 1.0.15. [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) merged at `d6e6ca59d8e1a334f016cce5c7addf2334776b41` after all eight PR checks passed. The [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/46092302620) records the signed upgrade on each platform and publication status. Keep the original repository address until the owner confirms the installed computers have moved over.
 
 Right-click a running task to stop it or an interrupted task to close it manually. A shared third-party snapshot can be hidden locally. The coordinator can resume an interrupted conversation when the executor can verify that its old worker is gone. This release retains prior executable paths and name-bound MCP permissions. Fresh connections use `kotel`.

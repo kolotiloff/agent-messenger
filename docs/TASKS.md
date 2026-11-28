@@ -61,6 +61,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-381 | Keep the owner’s composer editable during and after a stop, and clarify the Apple Speech status. | window | PR #257. Sending is gated by the stop state and saved continuation. |
 | T-382 | Reduce heading weights in the task window and produce a before-and-after review. | window | PR #257. Dark WebKit capture shows the typography and control geometry on the same fixture. |
 | T-383 | Audit the rendered icon artwork and hover fills, and share the folder and close glyphs where they have the same meaning. | window | PR #257. Compare against the previous revision in WebKit using SVG viewports, painted bounds and real control styles. |
+| T-385 | Show reply activity and Claude Code text fragments, delay the process warning and keep personal chats open until explicitly archived. | window / worker / MCP | PR #257. Browser fixtures exercise reply and archive transitions, and core and MCP tests cover persistence and coordinator scope. |
 | T-371 | Manage task names and archive entries. | window / network | Origin-owned edits, replicated metadata and explicit manual close upon interruption. Remote observer editing remains open. |
 | T-370 | Refine Statistics, Settings navigation, context details and offline presence. | window | [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
 | T-369 | Adjust the dark palette and compare sidebar task highlights. | window | Dark appearance uses a slightly darker sidebar and brighter text. The preview compares the current highlight with stronger row fills. |
@@ -194,6 +195,8 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 
 ## Next
+
+- T-386. Stream Codex worker text through app-server. Preserve saved sessions, scoped tools, worker identity, cancellation and receipt verification. Verify incremental text, restart and remote delivery before switching the normal worker path. See D-274.
 
 - T-384. Add an optional first-run setup in the Kotel window. 1. Choose language and appearance. 2. Select and check an installed agent and default model. 3. Open a project or folder, or start a chat without either. 4. Optionally connect other computers and set up the coordinator. 5. Optionally enable and test notifications, then open the first chat. Use the existing settings and platform dialogs. Allow users to close the flow or choose “Set up later” at any step, reopen it from Settings, and avoid displaying it again on updates or migrated installations. See D-273.
 

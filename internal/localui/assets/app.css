@@ -683,6 +683,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-tool > summary, .am-tool-group > summary):is(:hover,:focus-visible) { color:var(--am-text); }
 #am-concept .am-tool-group > .am-tool { margin-block:var(--am-space-1); margin-inline-start:var(--am-space-3); padding-block:var(--am-space-1); }
 #am-concept .am-tool-group-title { color:var(--am-muted); }
+#am-concept .am-turn-progress { width:fit-content; }
 @media (prefers-reduced-motion:no-preference) and (forced-colors:none) {
   @supports (background-clip:text) {
     #am-concept .am-tool-running-label {
