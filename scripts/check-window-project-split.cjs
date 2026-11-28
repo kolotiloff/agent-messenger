@@ -139,9 +139,13 @@ if (require.main === module) (async()=>{
         ]}},
         agents[1]
       ]}};
-      if(url.pathname==='/api/server')return {json:{...fixture,peers:[{...fixture.peers[0],age:100,agents:[
-        {agent:'cursor',limit:{state:'ok',window:'7d',used_percent:0}}
-      ]}]}};
+      if(url.pathname==='/api/server')return {json:{...fixture,peers:[
+        {...fixture.peers[0],age:100,agents:[{agent:'cursor',limit:{state:'ok',window:'7d',used_percent:0}}]},
+        {id:'empty',name:'Без замеров',age:0,agents:[]},
+        ...Array.from({length:6},(_,index)=>({id:'limits-'+index,name:'Компьютер '+index,age:0,agents:[
+          {agent:'cursor',limit:{state:'ok',window:'7d'}}
+        ]}))
+      ]}};
     },true);
     const limits=limitsPage.getByRole('dialog',{name:'Лимиты агентов'});
     const limitsButton=limitsPage.getByRole('button',{name:'Лимиты агентов'});
@@ -154,6 +158,34 @@ if (require.main === module) (async()=>{
     await limits.getByText('Срок сброса прошёл',{exact:true}).waitFor();
     assert.equal(await limits.getByText('Claude Code',{exact:true}).count(),0);
     assert.ok((await limits.boundingBox()).y<(await limitsButton.boundingBox()).y);
+    const limitsHeader=limits.locator('.am-agent-limits-header');
+    const limitsContent=limits.locator('#agent-limits-body');
+    const insets=node=>{const style=getComputedStyle(node);return [style.paddingBlock,style.paddingInline];};
+    const limitsInsets=await limitsHeader.evaluate(insets);
+    const headerBefore=await limitsHeader.boundingBox();
+    assert.ok((await limitsContent.boundingBox()).y>=headerBefore.y+headerBefore.height-1);
+    assert.ok(await limitsContent.evaluate(node=>node.scrollHeight>node.clientHeight));
+    await limitsContent.evaluate(node=>{node.scrollTop=node.scrollHeight;});
+    assert.ok(await limitsContent.evaluate(node=>node.scrollTop>0));
+    assert.equal(await limits.evaluate(node=>node.scrollTop),0);
+    assert.equal((await limitsHeader.boundingBox()).y,headerBefore.y);
+    const limitsFilter=limits.locator('button[aria-controls="limits-computer-menu"]');
+    const limitChoices=limits.getByRole('listbox',{name:'Фильтр по компьютеру'});
+    await limitsFilter.press('ArrowDown');
+    await limitChoices.waitFor();
+    await limitsPage.keyboard.press('Escape');
+    await limitChoices.waitFor({state:'hidden'});
+    assert.equal(await limitsFilter.evaluate(button=>button===document.activeElement),true);
+    assert.equal(await limits.isVisible(),true);
+    await select(limitsPage,'limits-computer','ПК-1');
+    assert.equal(await limits.locator('.am-agent-limits-group').count(),1);
+    assert.equal(await limitsContent.evaluate(node=>node.scrollTop),0);
+    await limits.getByText('ПК-1 · Устаревшие данные',{exact:true}).waitFor();
+    assert.match(await limitsFilter.getAttribute('aria-label'),/ПК-1/);
+    await select(limitsPage,'limits-computer','Без замеров');
+    await limits.getByText('Замеров лимитов пока нет.').waitFor();
+    await select(limitsPage,'limits-computer','Все компьютеры');
+    assert.equal(await limits.locator('.am-agent-limits-group').count(),8);
     await limitsPage.keyboard.press('Escape');
     await limits.waitFor({state:'hidden'});
     assert.equal(await limitsButton.evaluate(button=>button===document.activeElement),true);
@@ -311,6 +343,7 @@ if (require.main === module) (async()=>{
     await tokenCount.click();
     const tokenMenu=preview.locator('#answer-token-menu');
     await tokenMenu.waitFor();
+    assert.deepEqual(await tokenMenu.evaluate(insets),limitsInsets);
     assert.deepEqual(await tokenMenu.locator('p:visible').allTextContents(),[
       'Контекстное окно 89\u00a0% заполнено',
       '212 тыс. / 238 тыс. токенов'
@@ -733,13 +766,8 @@ if (require.main === module) (async()=>{
         const css=getComputedStyle(item);
         return [css.height,css.borderRadius,css.backgroundColor];
       });
-      const openSetup=general.getByRole('button',{name:'Открыть',exact:true});
-      assert(await openSetup.evaluate(button=>{
-        const label=document.createRange();label.selectNodeContents(button);
-        const style=getComputedStyle(button);
-        return Math.abs(button.getBoundingClientRect().width-label.getBoundingClientRect().width-
-          parseFloat(style.paddingInlineStart)-parseFloat(style.paddingInlineEnd))<1;
-      }),'first-run setup button should fit its label and insets');
+      assert.equal(await general.getByText('Первоначальная настройка',{exact:true}).count(),0,
+        'General must not offer the paused setup wizard');
       const settingsControl=await controlStyle(general.locator('.am-select-trigger').first());
       const settingsControlWidth=(await general.locator('.am-select-trigger').first().boundingBox()).width;
       const topLeft=async locator=>{
@@ -1749,6 +1777,9 @@ if (require.main === module) (async()=>{
       const computerMenu=browserPreview.locator('#device-menu');
       await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
       const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить версию'});
+      assert.deepEqual(await computerMenu.getByRole('menuitem').allTextContents(),['Обновить версию']);
+      await browserPreview.mouse.move(0,0);
+      await computerMenu.waitFor();
       await peerUpdate.hover();
       const spacing=await peerUpdate.evaluate(async row=>{
         await Promise.all(row.getAnimations().map(animation=>animation.finished));

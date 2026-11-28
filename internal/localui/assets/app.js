@@ -7,6 +7,7 @@
   if(window.webkit?.messageHandlers?.updates||window.amDesktop)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
   const selectViews = new Map();
+  const computerFilterIcon=['M3 5h9m4 0h5M14 2v6M3 12h3m4 0h11M8 9v6M3 19h10m4 0h4M15 16v6'];
   function syncSelects(){selectViews.forEach(view=>view.sync());}
   // Keep the existing select as the source of truth for delivery guards. The
   // visible list is a top-layer popover, so neither pane clips it or grows.
@@ -59,7 +60,7 @@
     // Keep its menus inside the dialog so pointer and keyboard input reach them.
     // The native light-dismiss algorithm must recognize a second click on its invoker.
     trigger.setAttribute('popovertarget',menu.id);
-    trigger.setAttribute('aria-controls',menu.id);select.after(trigger);(select.closest('dialog')||root).append(menu);select.hidden=true;
+    trigger.setAttribute('aria-controls',menu.id);select.after(trigger);(select.closest('dialog,[popover]')||root).append(menu);select.hidden=true;
     select.labels[0]?.addEventListener('click',event=>{event.preventDefault();trigger.focus();});
     let options=[];
     const isOpen=()=>menu.matches(':popover-open');
@@ -1037,10 +1038,6 @@
         options[(index<0?(direction>0?0:options.length-1):(index+direction+options.length)%options.length)].focus();
       });
       menu.addEventListener('focusout',e=>{if(!menu.contains(e.relatedTarget))close();});
-      document.addEventListener('pointermove',event=>{
-        if(event.pointerType==='mouse'&&menu.matches(':popover-open')&&
-          menu.querySelector('.am-context-device')&&!menu.contains(event.target))close();
-      });
       window.addEventListener('blur',close);
       window.addEventListener('resize',close);
     }
@@ -1067,7 +1064,8 @@
     menu.showPopover();
     menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
     menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
-    (menu.querySelector('[aria-checked=true]')||menu.querySelector('button[role^=menuitem]:not(:disabled)')||menu).focus();
+    const initialItem=device?null:(menu.querySelector('[aria-checked=true]')||menu.querySelector('button[role^=menuitem]:not(:disabled)'));
+    (initialItem||menu).focus({preventScroll:true});
   }
   function contextMenuItem(menu,text,pick){
     const item=el('button',text,'am-select-option');item.type='button';item.setAttribute('role','menuitem');
@@ -1091,7 +1089,10 @@
     const menu=footer.parentNode,mark=local||peer?updateMark(peer):null;
     const original=$('app-update-button');
     let caption='',pick=null;
-    if(updateInProgress(mark)){
+    const checking=updateCheckScope===device,inProgress=updateInProgress(mark);
+    if(checking){
+      caption=tr('Проверка обновлений…');
+    }else if(inProgress){
       const state=updatePresentation(peer,mark);
       caption=state.canCancel?tr('Отменить обновление'):state.caption;
       if(state.canCancel)pick=()=>void cancelUpdate(state);
@@ -1108,22 +1109,23 @@
     const label=el('span',version||'—','am-version');
     label.title=version?tr('Версия ')+version.replace(/^v/,''):tr('Версия неизвестна');
     if(!label.isEqualNode(footer.firstChild))footer.replaceChildren(label);
-    let check=menu.querySelector('[data-device-check]');
-    if(!check){
-      check=contextMenuItem(menu,'',()=>void manualUpdateCheck(device));
-      check.dataset.deviceCheck='';
-      footer.after(check);
+    if(!caption){
+      caption=tr('Проверить обновления');
+      if(!updateCheckScope&&!localUpdateRunning()&&(local||peerFresh(peer||{}))){
+        pick=()=>void manualUpdateCheck(device);
+      }
     }
-    check.textContent=updateCheckScope===device?tr('Проверка обновлений…'):tr('Проверить обновления');
-    check.disabled=!!updateCheckScope||localUpdateRunning()||updateInProgress(mark)||(!local&&!peerFresh(peer||{}));
-    const next=caption?(pick?contextMenuItem(menu,caption,pick):el('div',caption,'am-context-status')):null;
     const previous=menu.querySelector('[data-device-update]');
-    if(next)next.dataset.deviceUpdate=JSON.stringify([device,mark?.id]);
-    if((!next&&!previous)||next?.isEqualNode(previous))return;
+    if(previous?.textContent===caption&&(previous.tagName==='BUTTON')===!!pick){
+      if(pick)previous.onclick=()=>{menu.hidePopover();pick();};
+      return;
+    }
+    const next=pick?contextMenuItem(menu,caption,pick):el('div',caption,'am-context-status');
+    next.dataset.deviceUpdate='';
     const restoreFocus=previous===document.activeElement;
     if(restoreFocus)menu.focus({preventScroll:true});
     previous?.remove();
-    if(next)footer.before(next);
+    footer.before(next);
     if(restoreFocus&&pick)next.focus({preventScroll:true});
   }
   // Asking another computer to update itself (T-078). Its answers arrive
@@ -4408,15 +4410,20 @@
     }
     return parts.slice(0,2).join(' ');
   }
-  const limitsTrigger=$('limits-open'),limitsMenu=$('agent-limits');
+  const limitsTrigger=$('limits-open'),limitsMenu=$('agent-limits'),limitsComputer=$('limits-computer'),limitsBody=$('agent-limits-body');
+  const limitsFilter=enhanceSelect(limitsComputer,false,computerFilterIcon);
   function renderAgentLimits(){
-    const body=$('agent-limits-body'),now=Date.now();
+    const now=Date.now(),scrollTop=limitsBody.scrollTop;
+    const options=computerOptions(),requested=limitsComputer.value;
+    const selected=options.some(([id])=>id===requested)?requested:'';
+    projectOptions(limitsComputer,[['',tr('Все компьютеры')],...options],selected);
     const computers=[
-      {name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents,stale:!online},
-      ...(server?.peers||[]).map(peer=>({...peer,stale:!peerFresh(peer)}))
+      {id:'local',name:computerName('local'),agents:view?.agents,stale:!online},
+      ...(server?.peers||[]).map(peer=>({...peer,name:peer.name||peer.id,stale:!peerFresh(peer)}))
     ];
     const groups=[];
-    for(const {name,agents,stale} of computers){
+    for(const {id,name,agents,stale} of computers){
+      if(selected&&id!==selected)continue;
       const measured=(agents||[]).filter(agent=>agent.limit);
       if(!measured.length)continue;
       const group=el('section',undefined,'am-agent-limits-group');
@@ -4456,8 +4463,14 @@
       }
       groups.push(group);
     }
-    body.replaceChildren(...(groups.length?groups:[el('p',tr('Замеров лимитов пока нет.'),'am-agent-limits-empty am-small am-muted')]));
+    limitsBody.replaceChildren(...(groups.length?groups:[el('p',tr('Замеров лимитов пока нет.'),'am-agent-limits-empty am-small am-muted')]));
+    limitsBody.scrollTop=scrollTop;
   }
+  limitsComputer.addEventListener('change',()=>{
+    limitsBody.scrollTop=0;
+    renderAgentLimits();
+    limitsFilter.focus({preventScroll:true});
+  });
   limitsTrigger.addEventListener('click',()=>{
     if(limitsMenu.matches(':popover-open')){limitsMenu.hidePopover();return;}
     renderAgentLimits();
@@ -4467,7 +4480,7 @@
   });
   limitsMenu.addEventListener('toggle',()=>limitsTrigger.setAttribute('aria-expanded',String(limitsMenu.matches(':popover-open'))));
   limitsMenu.addEventListener('keydown',event=>{
-    if(event.key!=='Escape')return;
+    if(event.key!=='Escape'||event.defaultPrevented)return;
     event.preventDefault();event.stopPropagation();
     limitsMenu.hidePopover();limitsTrigger.focus();
   });
@@ -6493,17 +6506,18 @@
   const settingsTrigger=$('settings-open'),settingsMenu=$('settings-menu');
   const settingsMenuItems=()=>[...settingsMenu.querySelectorAll('button:not(:disabled)')];
   const positionSettingsMenu=()=>positionPopover(settingsMenu,settingsTrigger,null,false,true);
-  function toggleSettingsMenu(){
+  function toggleSettingsMenu(keyboard){
     if(settingsMenu.matches(':popover-open')){settingsMenu.hidePopover();return;}
     settingsMenu.showPopover();
     positionSettingsMenu();
-    settingsMenuItems()[0].focus();
+    (keyboard?settingsMenuItems()[0]:settingsMenu).focus({preventScroll:true});
   }
-  settingsTrigger.addEventListener('click',toggleSettingsMenu);
+  settingsMenu.tabIndex=-1;
+  settingsTrigger.addEventListener('click',event=>toggleSettingsMenu(event.detail===0));
   settingsTrigger.addEventListener('keydown',event=>{
     if(event.key!=='ArrowDown')return;
     event.preventDefault();
-    if(!settingsMenu.matches(':popover-open'))toggleSettingsMenu();
+    if(!settingsMenu.matches(':popover-open'))toggleSettingsMenu(true);
   });
   settingsMenu.addEventListener('toggle',()=>settingsTrigger.setAttribute('aria-expanded',String(settingsMenu.matches(':popover-open'))));
   settingsMenu.addEventListener('keydown',event=>{
@@ -6694,7 +6708,7 @@
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  const sidebarFilterIcon=taskSidebarPreview?['M3 5h9m4 0h5M14 2v6M3 12h3m4 0h11M8 9v6M3 19h10m4 0h4M15 16v6']:null;
+  const sidebarFilterIcon=taskSidebarPreview?computerFilterIcon:null;
   if(taskSidebarPreview){
     $('sidebar-group-control').hidden=false;
     enhanceSelect(groupSelect,false,['M12 3 2 8l10 5 10-5-10-5ZM2 12l10 5 10-5M2 16l10 5 10-5']);
@@ -6986,6 +7000,8 @@
   window.addEventListener('resize',()=>{if(sleepMenu.matches(':popover-open'))positionPopover(sleepMenu,sleepButton,234,false,true);});
   sleepSelect.addEventListener('change',()=>saveSleep(sleepSelect.value));
 
+  // T-384: keep the wizard out of the window until its flow is ready for review.
+  const windowSetupEnabled=false;
   const setupDialog=el('dialog',undefined,'am-session-dialog am-window-setup');
   setupDialog.id='window-setup-dialog';
   const setupTitle=el('h3');setupTitle.id='window-setup-title';setupTitle.tabIndex=-1;
@@ -6994,7 +7010,7 @@
   const setupClose=iconButton(tr('Закрыть'),closeIconPaths,false,()=>finishWindowSetup(false));
   setupHeader.append(setupTitle,setupClose);
   const setupBody=el('div',undefined,'am-dialog-body');
-  setupDialog.append(setupHeader,setupBody);root.append(setupDialog);
+  setupDialog.append(setupHeader,setupBody);
   function setupButton(label,action,primary=false){
     const button=el('button',label,primary?'am-primary':undefined);button.type='button';
     button.addEventListener('click',action);return button;
@@ -7003,7 +7019,10 @@
   const openSetup=setupButton(tr('Открыть'),()=>showWindowSetup(setupPage));
   openSetup.classList.add('am-settings-action');
   setupSetting.append(el('span',tr('Первоначальная настройка')),openSetup);
-  preferencesPanel.append(setupSetting);
+  if(windowSetupEnabled){
+    root.append(setupDialog);
+    preferencesPanel.append(setupSetting);
+  }
   let setupPage=0,setupBusy=false,setupChoice='',defaultTaskModel='';
   function setupSelect(label,values,selected,pick){
     const wrapper=el('label',label,'am-theme-setting');
@@ -7129,7 +7148,7 @@
     try{resume=sessionStorage.getItem('kotel-setup-resume');sessionStorage.removeItem('kotel-setup-resume');}catch(_){}
     api('/api/onboarding').then(state=>{
       if(typeof state?.model==='string'){defaultTaskModel=state.model;if(draftOpen)renderTaskDraft();}
-      if((state?.pending||resume==='0')&&!setupDialog.open)showWindowSetup(0);
+      if(windowSetupEnabled&&(state?.pending||resume==='0')&&!setupDialog.open)showWindowSetup(0);
     }).catch(()=>{});
   }
   loadSleep();setInterval(loadSleep,5000);

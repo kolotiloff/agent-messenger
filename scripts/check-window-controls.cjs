@@ -87,6 +87,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/model-catalog': {models: [{model:'gpt-6.2-sol[effort=medium]',name:'GPT-6.2 Sol Medium'}],limit:12},
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
+          '/api/onboarding': {pending: true, model: ''},
           '/api/machine-order': {order: machineOrder, peers: machinePeers},
           '/api/server': {host: {running: hostRunning, enabled: hostRunning, scope:'lan', addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',...(peerLasting ? {computer:'computer-fixture'} : {}),name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported},
           '/api/self-update': {current:'1.0.3-preview.106',installed_version:'1.0.3-preview.106'},
@@ -106,16 +107,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         assert(await settings.evaluate(node => node.open), 'choosing an option must not close settings');
         assert.equal(await trigger.evaluate(node => node.getBoundingClientRect().height), 32);
       }
+      await page.addInitScript(() => sessionStorage.setItem('kotel-setup-resume', '0'));
+      const pendingSetup = page.waitForResponse(response => new URL(response.url()).pathname === '/api/onboarding');
       await page.goto('http://messenger.test/#fictional');
       await page.locator('#project-select option').filter({hasText: 'Проекты недоступны'}).waitFor({state: 'attached'});
       assert(await page.locator('#project-select').isDisabled());
       windowReadFails = false;
       await page.evaluate(() => window.messengerRefresh());
+      await pendingSetup;
       const welcome = page.locator('#thread .am-welcome');
       await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
       assert(await welcome.getByText('Задайте название и выберите папку проекта.', {exact: true}).isVisible());
       assert(await welcome.getByText('Настройте агента и включите хотя бы одну модель.', {exact: true}).isVisible());
       assert.equal(await page.locator('#task-panel').isVisible(), false, 'an empty task pane must not cover onboarding');
+      assert.equal(await page.locator('#window-setup-dialog').count(), 0, 'pending and resumed setup must leave the wizard unavailable');
       await welcome.getByRole('button', {name: 'Создать проект', exact: true}).click();
       assert(await page.locator('#project-dialog').evaluate(node => node.open));
       await page.locator('#project-dialog-close').click();
@@ -1388,6 +1393,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#settings-open').evaluate(node=>node===document.activeElement),true);
       await page.locator('#settings-open').click();
+      const settingsItems=page.locator('#settings-menu button');
+      await settingsItems.nth(1).hover();
+      assert.deepEqual(await settingsItems.evaluateAll(items=>items.map(item=>getComputedStyle(item).backgroundColor==='rgba(0, 0, 0, 0)')),
+        [true,false,true], 'only the hovered settings menu item should have a fill');
       await page.locator('#fb-open').click();
       assert.equal(await page.locator('#fb-export').innerText(), 'Выгрузить новые отзывы (2)');
       await page.locator('#fb-export').click();

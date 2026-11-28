@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-384 and T-390 Mac review follow-up
+
+Codex added the shared computer filter to agent limits and moved scrolling into the list beneath the header. The context-window popover uses the same insets. The local Mac preview uses the installed appearance and font as defaults. The dark palette remains the T-369 version already published in build 119. Codex paused the first-run wizard after the native review and retained the saved default model and direct chat. The computer menu now shows one contextual update action and stays open while the pointer moves. Gear menu hover highlights only the hovered row.
+
 ## 2026-11-28 — T-391 settings follow-up
 
 The local review bundle now opens beside the installed Mac window by using a separate bundle identifier and desktop lock. A new release run is building a private draft pending owner approval.

@@ -1020,7 +1020,7 @@ The task owner can draft the next message while a stop is pending and after the 
 
 ## D-273 — Optional first-run setup
 
-Offer a short setup on a new installation and let users close or skip it at any step. Use the same settings for language and appearance, agent and model, optional workspace, network and coordinator, and notifications. Direct chat is available after skipping. Keep the dismissal on that installation and reopen setup from Settings. Upgrades and migrated installations retain their existing configuration and do not trigger setup. See T-384.
+Offer a short setup on a new installation and let users close or skip it at any step. Use the same settings for language and appearance, agent and model, optional workspace, network and coordinator, and notifications. Direct chat is available after skipping. Keep the dismissal on that installation and reopen setup from Settings. Upgrades and migrated installations retain their existing configuration and do not trigger setup. See T-384. The owner paused the wizard after native review. Hide both entry points until the step layout and the agent selection flow have been reviewed again. Leave saved preferences and direct chat available.
 
 ## D-274 — Keep personal chats open after a reply
 

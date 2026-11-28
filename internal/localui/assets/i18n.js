@@ -868,6 +868,7 @@
   'Лимит на 5 часов':'5-hour limit',
   'Недельный лимит':'Weekly limit',
   'Лимиты агентов':'Agent limits',
+  'Фильтр по компьютеру':'Filter by computer',
   'Использовано':'Used',
   'Лимит использования':'Usage limit',
   'До сброса {time}':'Resets in {time}',

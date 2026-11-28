@@ -14,8 +14,11 @@
 <div id="settings-menu" class="am-select-menu am-settings-menu" popover="auto" role="menu" aria-label="Настройки программы"><button id="settings-menu-open" class="am-select-option" type="button" role="menuitem"><span>Настройки</span></button><button id="settings-menu-update" class="am-select-option" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5m-11 5v-5h5M5 9a7.5 7.5 0 0 1 13-2l2 5M4 12l2 5a7.5 7.5 0 0 0 13-2"/></svg><span>Проверить обновления</span></button><button id="fb-open" class="am-select-option" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="8" width="12" height="13" rx="6"/><path d="M8.5 8 7 4m8.5 4L17 4M12 12v9M6 13H3m18 0h-3M6 16l-3 2m18 0-3-2M6.5 10 3 8m14.5 2L21 8"/></svg><span>Отзыв о программе</span></button></div>
 <button id="limits-open" class="am-fb-open am-icon-btn am-chrome-icon" type="button" aria-label="Лимиты агентов" title="Лимиты агентов" aria-haspopup="dialog" aria-controls="agent-limits" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17a9 9 0 1 1 16 0M12 13l4-4M8 19h8"/><circle cx="12" cy="13" r="1"/></svg></button>
 <div id="agent-limits" class="am-select-menu am-agent-limits" popover="auto" role="dialog" aria-labelledby="agent-limits-title" tabindex="-1">
-<header class="am-agent-limits-header"><h2 id="agent-limits-title">Лимиты агентов</h2><span class="am-muted am-small">Использовано</span></header>
-<div id="agent-limits-body"></div>
+<header class="am-agent-limits-header">
+  <h2 id="agent-limits-title">Лимиты агентов</h2>
+  <div class="am-agent-limits-controls"><span class="am-muted am-small">Использовано</span><select id="limits-computer" aria-label="Фильтр по компьютеру"><option value="">Все компьютеры</option></select></div>
+</header>
+<div id="agent-limits-body" class="am-agent-limits-body" tabindex="0" role="region" aria-label="Лимит использования"></div>
 </div>
 <button id="stats-open" class="am-fb-open am-icon-btn am-chrome-icon" type="button" aria-label="Статистика" title="Статистика" aria-haspopup="dialog" aria-controls="stats-dialog" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linejoin="round" d="M4 20h16M6 20v-7h3v7m2 0V9h3v11m2 0V4h3v16"/></svg></button>
 </div>
