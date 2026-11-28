@@ -33,8 +33,9 @@
 - **Several computers.** Host the server on one of your computers or a Linux VPS. Join on the same local network with six digits, or use a long invitation with the server's reachable address. The coordinator can assign tasks to a computer that accepts them and has a folder for the project. Drag computer cards to set the order in your window.
 - **Projects and tasks.** Switch between projects with separate task histories and statistics. See planned, active, finished and interrupted work, including the worker's reported model when available. Group active tasks by computer or project, or display them as a flat list.
 - **Conversations and run controls.** Write to a worker or answer a question from the task view. Stop eligible tasks from the conversation or the task list and see the request status while Kotel waits for the result. Workers can attach images to reports and questions. Kotel preserves uncertain outcomes for review. **Any commands** is off by default.
+- **Files and dictation.** Open a local report link to read Markdown or text in the window. Expand a completed task’s file list to see confirmed edits and any available line counts. On supported Macs, the microphone can dictate into a draft before you send it.
 - **Statistics and feedback.** Filter by period, project, agent, model or computer. Sort the task table by finish time, duration or tokens by clicking the column headings. The feedback button saves a note and an optional screenshot on this computer.
-- **Updates from the window.** Use the update arrow next to the local version in the sidebar footer. In **Settings → Network → My network**, check versions and request updates on Windows and Linux computers. A queued request can be cancelled before installation starts.
+- **Updates from the window.** Use the update arrow next to the local version in the sidebar footer. Right-click a computer in the sidebar to see its installed version and request an update on Windows or Linux. A queued request can be cancelled before installation starts.
 
 <details>
   <summary>Statistics screenshot</summary>
@@ -43,7 +44,7 @@
 
 <details>
   <summary>Network settings screenshot</summary>
-  <img src="docs/assets/network.webp" alt="Kotel Network settings showing the connection controls and the list of computers with their versions">
+  <img src="docs/assets/network.webp" alt="Kotel Network settings showing the connection mode, server and pairing controls">
 </details>
 
 ## Getting started

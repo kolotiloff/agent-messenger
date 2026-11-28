@@ -41,7 +41,7 @@ function reply(url,p,available){
     const task=Object.values(tasks).flat().find(t=>t.id===url.searchParams.get('id'));
     return {task,items:[
       {kind:'task',author:'coordinator',sender_agent:'codex',at:task.created_at,text:task.title},
-      {kind:'text',author:task.agent,at:iso(2),text:'Сообщение из '+task.project},
+      {kind:'text',author:task.agent,at:iso(5),text:'Сообщение из '+task.project},
     ]};
   }
   if(url.pathname==='/api/server')return {host:{addresses:[],devices:[]},member:{},peers:[
@@ -103,9 +103,11 @@ if (require.main === module) (async()=>{
         const override=await beforeReply(url,p);
         return route.fulfill(override||{json:reply(url,p,available)});
       }
-      const files={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','application/javascript'],'/i18n.js':['i18n.js','application/javascript'],'/app.css':['app.css','text/css'],'/icon.svg':['icon.svg','image/svg+xml']};
+      const files={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','application/javascript'],'/i18n.js':['i18n.js','application/javascript'],'/file-viewer.js':['file-viewer.js','application/javascript'],'/file-viewer.css':['file-viewer.css','text/css'],'/app.css':['app.css','text/css'],'/icon.svg':['icon.svg','image/svg+xml'],
+        '/fonts/Inter.woff2':['fonts/Inter.woff2','font/woff2'],'/fonts/SourceSans3.woff2':['fonts/SourceSans3.woff2','font/woff2']};
       const file=files[url.pathname];
       if(!file)return route.fulfill({status:404,body:''});
+      if(file[1]==='font/woff2')return route.fulfill({contentType:file[1],body:await fs.readFile(path.join(assets,file[0]))});
       let body=await fs.readFile(path.join(assets,file[0]),'utf8');
       if(preview&&url.pathname==='/')body=body.replace('id="am-concept"','id="am-concept" class="am-task-sidebar-preview"');
       return route.fulfill({contentType:file[1],body});
@@ -361,10 +363,10 @@ if (require.main === module) (async()=>{
       assert.equal(await footerCancel.getAttribute('data-request'),'upd-local');
       await pendingUpdate.locator('#settings-open').click();
       await pendingUpdate.locator('#settings-dialog [data-tab=server]').click();
-      const networkCancel=pendingUpdate.locator('#network-local').getByRole('button',{name:'Отменить обновление'});
-      await networkCancel.waitFor();
-      assert.equal(await networkCancel.getAttribute('data-request'),'upd-local');
+      assert.equal(await pendingUpdate.locator('#network-roster').count(),0);
     }finally{await pendingUpdate.close();}
+    let toolArchiveState='',toolArchiveVersion=0;
+    const archiveChanges=[];
     const draftPage=await open(projects,{width:1150,height:770},'dark',(url,p)=>{
       if(p==='game'&&url.pathname==='/api/window'){
         const window=reply(url,p,projects);
@@ -372,7 +374,16 @@ if (require.main === module) (async()=>{
       }
       if(p==='tools'&&['/api/window','/api/project-activity'].includes(url.pathname)){
         const showCodex=!url.searchParams.get('agent')||url.searchParams.get('agent')==='codex';
-        return {json:{...reply(url,p,projects),tasks:[...tasks.tools,queued,...(showCodex?[toolDone]:[])],shared:[toolShared],history_paged:true,history_next:showCodex?toolDone.id:''}};
+        const report={...toolDone,archived:toolArchiveState==='archived',archive_version:toolArchiveVersion};
+        return {json:{...reply(url,p,projects),tasks:[...tasks.tools,queued,...(showCodex&&toolArchiveState!=='removed'?[report]:[])],shared:[toolShared],history_paged:true,history_next:showCodex?toolDone.id:''}};
+      }
+      if(url.pathname==='/api/task-archive'){
+        const change=JSON.parse(seen.at(-1).body);
+        archiveChanges.push(change);
+        assert.equal(change.task,toolDone.id);
+        assert.equal(change.version,toolArchiveVersion++);
+        toolArchiveState={archive:'archived',restore:'',remove:'removed'}[change.action];
+        return {json:{ok:true}};
       }
       if(p==='game'&&url.pathname==='/api/task-history')return {json:{tasks:[]}};
       if(p==='tools'&&url.pathname==='/api/task-history')return {json:{tasks:[toolOlder]}};
@@ -381,9 +392,10 @@ if (require.main === module) (async()=>{
       if(url.pathname==='/api/task-note')return {json:{ok:true}};
       if(url.pathname==='/api/pick')return {json:{ok:true,path:'/fictional/project/notes.txt'}};
       if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
-        const at=directTask.created_at;
+        const at=iso(24*60+5);
         return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at},
           {kind:'text',run:1,text:'Проверяю настройки',at},{kind:'text',run:1,text:directReply,at},
+          ...['a.md','b.md','c.md','d.md'].map(text=>({kind:'tool',run:1,title:'applied_file_change',text,description:'+2 −1',at})),
           {kind:'report',run:1,verified:true,text:directReply,at},
           {kind:'answer',run:2,author:'owner',text:'А сейчас?',at},{kind:'text',run:2,text:'Ищу последнюю запись',at}]}};
       }
@@ -564,15 +576,27 @@ if (require.main === module) (async()=>{
       }
       const message=draftPage.locator('#thread .am-message-group').first();
       const timestamp=message.locator('time.am-message-time');
-      assert.deepEqual(await timestamp.evaluate(node=>[getComputedStyle(node.parentElement).opacity,getComputedStyle(node).fontSize]),['0','12px']);
-      await message.hover();
-      assert(await timestamp.evaluate(node=>getComputedStyle(node.parentElement).opacity==='1'&&
-        node.getBoundingClientRect().top>node.closest('article').getBoundingClientRect().bottom));
       const workerMessage=draftPage.locator('#thread .am-message-group').last();
-      await workerMessage.hover();
       const workerActions=workerMessage.locator('.am-message-actions');
-      assert.equal(await workerActions.locator('time').count(),1);
-      assert(await workerActions.evaluate(node=>getComputedStyle(node).opacity==='1'&&node.getBoundingClientRect().left===node.closest('article').getBoundingClientRect().left));
+      const workerTimestamp=workerActions.locator('time');
+      assert.equal(await workerTimestamp.textContent(),'5 минут назад');
+      for(const [time,outgoing] of [[timestamp,true],[workerTimestamp,false]]){
+        const layout=await time.evaluate(node=>{
+          const actions=node.parentElement, body=actions.previousElementSibling;
+          const footer=actions.getBoundingClientRect(), message=body.getBoundingClientRect();
+          return {
+            opacity:getComputedStyle(actions).opacity,fontSize:getComputedStyle(node).fontSize,
+            gap:footer.top-message.bottom,left:footer.left===message.left,right:footer.right===message.right,
+            first:actions.firstElementChild===node,
+          };
+        });
+        assert.equal(layout.opacity,'1');
+        assert.equal(layout.fontSize,'12px');
+        assert.equal(layout.gap,8);
+        assert.equal(outgoing?layout.right:layout.left,true);
+        assert.equal(layout.first,outgoing);
+        assert.match(await time.getAttribute('title'),/\d{2}:\d{2}$/);
+      }
       assert.equal(await workerMessage.evaluate(node=>node.getBoundingClientRect().top-node.previousElementSibling.getBoundingClientRect().bottom),24);
       const settingsDialog=draftPage.getByRole('dialog',{name:'Настройки программы'});
       const settingsOpen=draftPage.locator('#settings-open');
@@ -586,7 +610,7 @@ if (require.main === module) (async()=>{
           getComputedStyle(card).paddingTop,getComputedStyle(card).paddingLeft];
       }),['16px','16px','16px','16px']);
       for(const row of await general.locator('.am-theme-setting:has(.am-select-trigger)').all()){
-        await expectCentered(row.locator('label'),row.locator('.am-select-trigger'));
+        await expectCentered(row.locator(':scope > :first-child'),row.locator('.am-select-trigger'));
       }
       const controlStyle=node=>node.evaluate(item=>{
         const css=getComputedStyle(item);
@@ -600,6 +624,44 @@ if (require.main === module) (async()=>{
       };
       const generalTitle=await topLeft(general.getByRole('heading',{name:'Общие',exact:true}));
       const generalField=await topLeft(general.locator('.am-select-trigger').first());
+      const fontSample=general.locator('label[for=chat-font-select]');
+      for(const [label,key,family] of [['Inter','inter','Inter'],['Source Sans 3','source-sans','Source Sans 3']]){
+        await select(draftPage,'chat-font-select',label);
+        await fontSample.evaluate(async (sample,face)=>{
+          const fonts=await document.fonts.load(`14px "${face}"`,sample.textContent);
+          if(!fonts.some(font=>font.status==='loaded'))throw Error('The Cyrillic specimen did not load '+face);
+        },family);
+        assert.equal(await draftPage.evaluate(()=>localStorage.getItem('messenger-chat-font')),key);
+        assert.equal(await fontSample.evaluate(node=>getComputedStyle(node).fontSize),'14px');
+        assert.match(await fontSample.evaluate(node=>getComputedStyle(node).fontFamily),new RegExp(family));
+      }
+      const fontMetrics=()=>fontSample.evaluate(node=>{
+        const css=getComputedStyle(node);
+        return {size:css.fontSize,line:parseFloat(css.lineHeight),color:css.color};
+      });
+      await select(draftPage,'chat-font-select','Системный контрастный');
+      const readable=await fontMetrics();
+      const fontLabel=general.locator('#chat-font-select + .am-select-trigger .am-select-value');
+      assert.equal(await fontLabel.evaluate(node=>node.scrollWidth<=node.clientWidth),true);
+      await general.locator('#chat-font-select + .am-select-trigger').click();
+      const readableOption=draftPage.getByRole('option',{name:'Системный контрастный',exact:true});
+      assert.equal(await readableOption.locator('span').first().evaluate(node=>{
+        const range=document.createRange();
+        range.selectNodeContents(node);
+        const rects=Array.from(range.getClientRects()).filter(rect=>rect.width && rect.height);
+        const check=node.nextElementSibling.getBoundingClientRect();
+        const row=node.parentElement.getBoundingClientRect();
+        // Font fallback can split a single line into several runs.
+        return rects.length>0 && Math.max(...rects.map(rect=>rect.top))<Math.min(...rects.map(rect=>rect.bottom))
+          && rects.every(rect=>rect.left>=row.left-0.5 && rect.right<=check.left+0.5) && check.right<=row.right+0.5;
+      }),true);
+      await draftPage.keyboard.press('Escape');
+
+      await select(draftPage,'chat-font-select','Системный');
+      const standard=await fontMetrics();
+      assert.equal(standard.size,readable.size);
+      assert.equal(readable.line,standard.line);
+      assert.notEqual(readable.color,standard.color);
       assert.equal(await general.locator('.am-card h3').count(),0);
       const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
       const dialogHeaderHeight=await headerHeight('#settings-dialog .am-dialog-header');
@@ -623,28 +685,7 @@ if (require.main === module) (async()=>{
         assert(await screen.locator(firstHeading).evaluate(node=>!node.closest('.am-card')),section);
         assert.deepEqual(await topLeft(screen.locator(firstControl)),generalField,section);
         if(section==='server'){
-          const roster=screen.locator('#network-roster');
-          await roster.locator('#network-local').getByText('v1.0.9',{exact:true}).waitFor();
-          const peer=roster.locator('[data-peer="pc1"]');
-          await peer.getByRole('button',{name:'Обновить до v1.0.10'}).waitFor();
-          assert.equal(await peer.locator('.am-network-update').textContent(),'Обновить');
-          const labelStyle=locator=>locator.evaluate(node=>{
-            const style=getComputedStyle(node);
-            return [style.fontSize,style.fontWeight];
-          });
-          const rosterLabel=roster.locator('#network-roster-heading');
-          assert.deepEqual(await labelStyle(rosterLabel),await labelStyle(screen.locator('#network-mode-label')));
-          const rosterRows=await roster.locator('.am-network-row').evaluateAll(rows=>rows.map(row=>{
-            const {top,bottom}=row.getBoundingClientRect();
-            return {top,bottom};
-          }));
-          assert(rosterRows.length>2);
-          for(const [index,row] of rosterRows.slice(1).entries()){
-            const previous=rosterRows[index];
-            assert.equal(row.top,previous.bottom);
-            assert.equal(row.bottom-row.top,previous.bottom-previous.top);
-          }
-
+          assert.equal(await screen.locator('#network-roster').count(),0);
           await screen.getByRole('tab',{name:'Свой сервер'}).click();
           assert.equal(await screen.locator('#member-panel').isVisible(),false);
           for(const selector of ['#computer-name','#host-scope + .am-select-trigger','#host-port','#host-enable']){
@@ -896,6 +937,13 @@ if (require.main === module) (async()=>{
       await conversation.getByText('Ищу последнюю запись',{exact:true}).waitFor();
       await conversation.getByText('Ход работы',{exact:true}).click();
       await conversation.getByText('Проверяю настройки',{exact:true}).waitFor();
+      const changed=conversation.locator('.am-file-changes');
+      await changed.getByText('+8',{exact:true}).waitFor();
+      assert.equal(await changed.getByText('d.md',{exact:true}).isVisible(),false);
+      await changed.locator('summary').click();
+      await changed.getByText('d.md',{exact:true}).waitFor();
+      assert(await conversation.locator('details[data-key="progress-1"]').evaluate(node=>
+        Boolean(node.compareDocumentPosition(node.parentNode.querySelector('.am-disposition')) & Node.DOCUMENT_POSITION_FOLLOWING)));
       await ownerBubble.waitFor();
       assert.equal(await ownerBubble.locator('.am-meta').count(),0);
       const ownerMessage=ownerBubble.locator('..');
@@ -904,6 +952,7 @@ if (require.main === module) (async()=>{
         Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.testCopiedMessage=text;}}});
       });
       const reply=conversation.locator('article').filter({has:draftPage.getByText('Настройки сохранены',{exact:true})});
+      assert.equal(await reply.locator('.am-message-time').textContent(),'1 день назад');
       const workerCopy=reply.getByRole('button',{name:'Скопировать сообщение'});
       await workerCopy.focus();
       await workerCopy.press('Enter');
@@ -1046,6 +1095,30 @@ if (require.main === module) (async()=>{
       await archive.getByText('Инструменты, Старый отчёт',{exact:true}).waitFor();
       const older=archive.locator('.am-task').filter({hasText:'Старый отчёт'});
       assert.match(await older.locator('time').textContent(),/^\d{1,2} .+ в 03:00$/);
+      const report=archive.locator('.am-archive-task').filter({hasText:'Готовый отчёт'});
+      const archiveMenu=draftPage.locator('#device-menu');
+      const action=name=>archiveMenu.getByRole('menuitem',{name,exact:true});
+      const archiveReport=async()=>{
+        await report.click({button:'right'});
+        assert.equal(await action('Убрать из архива навсегда').count(),0);
+        await action('Архивировать задачу').click();
+        await report.getByText(/В архиве/).waitFor();
+      };
+      await archiveReport();
+      await report.click({button:'right'});
+      await action('Восстановить из архива').click();
+      await report.getByText(/В архиве/).waitFor({state:'hidden'});
+      await archiveReport();
+      await report.click({button:'right'});
+      await action('Убрать из архива навсегда').click();
+      await draftPage.getByText('Убрать задачу из архива?',{exact:true}).waitFor();
+      await draftPage.getByRole('button',{name:'Отмена',exact:true}).click();
+      assert.deepEqual(archiveChanges.map(change=>change.action),['archive','restore','archive']);
+      await report.click({button:'right'});
+      await action('Убрать из архива навсегда').click();
+      await draftPage.getByRole('button',{name:'Убрать из архива',exact:true}).click();
+      await report.waitFor({state:'hidden'});
+      assert.deepEqual(archiveChanges.map(change=>change.action),['archive','restore','archive','remove']);
       await select(draftPage,'agent-filter','Claude Code');
       const emptyArchive=archive.getByText('В архиве пока нет задач');
       await emptyArchive.waitFor();
@@ -1310,6 +1383,17 @@ if (require.main === module) (async()=>{
       assert.equal(await gameButton.locator('.am-sidebar-task-count').isVisible(),true);
       await gameButton.click();
       assert.equal(await gameButton.locator('.am-sidebar-task-count').isVisible(),false);
+      await gameButton.click({button:'right'});
+      const projectMenu=browserPreview.locator('#device-menu');
+      const projectSettings=projectMenu.getByRole('menuitem',{name:'Настройки проекта'});
+      assert.equal(await projectMenu.locator('.am-context-device').getAttribute('data-device'),'local');
+      await projectSettings.click();
+      await browserPreview.locator('#settings-dialog #project-page-title').waitFor();
+      await browserPreview.locator('#settings-close').click();
+      await gameButton.click({button:'right'});
+      await projectMenu.getByRole('menuitem',{name:'Удалить локальный проект'}).click();
+      await browserPreview.locator('#confirm-dialog').getByText('Удалить проект «Игра»?').waitFor();
+      await browserPreview.locator('#confirm-cancel').click();
       await group('По компьютеру, затем по проекту');
       const localGame=card(browserPreview,'local').locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       assert.equal(await localGame.getByText('Экран настроек',{exact:true}).count(),1);
@@ -1344,6 +1428,13 @@ if (require.main === module) (async()=>{
       await localGame.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await browserPreview.locator('#task-head').getByText('Экран настроек',{exact:true}).waitFor();
       await group('По компьютеру');
+      await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');
+      const computerMenu=browserPreview.locator('#device-menu');
+      await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
+      const peerUpdate=computerMenu.getByRole('button',{name:'Обновить до v1.0.9'});
+      await peerUpdate.click();
+      await browserPreview.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
+      await browserPreview.locator('#confirm-cancel').click();
       await offlineMark.locator('svg').waitFor();
       assert.match(await offlineMark.locator('svg path').getAttribute('d'),/M2 2l20 20/);
       for(const mark of [localMark,remoteMark]){
@@ -1554,6 +1645,12 @@ if (require.main === module) (async()=>{
     await cells(page,'pc1').nth(1).getByRole('button',{name:'Обновить до v1.0.9'}).click();
     await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
     await page.locator('#confirm-cancel').click();
+    await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).click({button:'right'});
+    const peerMenu=page.locator('#device-menu');
+    await peerMenu.getByText('v1.0.5',{exact:true}).waitFor();
+    await peerMenu.getByRole('button',{name:'Обновить до v1.0.9'}).click();
+    await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
+    await page.locator('#confirm-cancel').click();
     assert.equal(await cells(page,'pc1').nth(1).getAttribute('aria-pressed'),'false');
     assert.equal(await chat(page,'game').isVisible(),true);
     await page.locator('#list-toggle').click();
@@ -1612,7 +1709,12 @@ if (require.main === module) (async()=>{
     await total(page,'3579');
     const statsTask=page.locator('#stats-top tr').filter({hasText:'Экспорт отчёта'});
     const taskButton=statsTask.locator('.am-stats-task-text');
-    assert.equal(await taskButton.evaluate(button=>getComputedStyle(button.closest('.am-card')).padding),'12px');
+    assert.deepEqual(await taskButton.evaluate(button=>{
+      const card=button.closest('.am-card'),style=getComputedStyle(card);
+      const last=card.querySelector('#stats-top tr:last-child').getBoundingClientRect();
+      const bottom=card.getBoundingClientRect().bottom-parseFloat(style.borderBottomWidth);
+      return [style.paddingBlockStart,style.paddingInlineStart,bottom-last.bottom];
+    }),['12px','12px',12]);
     const dateCell=statsTask.locator('td').first();
     await dateCell.hover();
     assert.deepEqual(await taskButton.evaluate(button=>{
@@ -1623,7 +1725,7 @@ if (require.main === module) (async()=>{
       const [first,second]=row.parentElement.rows;
       const gap=second.getBoundingClientRect().top-first.getBoundingClientRect().bottom;
       return [highlight.paddingBlockStart,highlight.paddingBlockEnd,highlight.borderBlockStartWidth,highlight.borderBlockEndWidth,title.left-titleColumnStart,gap];
-    }),['4px','4px','0px','0px',0,4]);
+    }),['2px','2px','0px','0px',0,4]);
     await dateCell.click();
     await chat(page,'tools').waitFor();
     await cells(page,'local').nth(0).press('Enter');

@@ -47,6 +47,7 @@ type Request struct {
 	Workspace      string `json:"workspace,omitempty"`
 	Limit          int    `json:"limit,omitempty"`
 	Before         string `json:"before,omitempty"`
+	ArchiveVersion int64  `json:"archive_version,omitempty"`
 	// Data is a base64 picture attached to a remark (T-135).
 	Data string `json:"data,omitempty"`
 }
@@ -273,6 +274,22 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: "timeline unavailable"}
 		}
 		return Response{OK: true, Timeline: raw}
+	case "task-file":
+		reader, ok := handler.(interface {
+			TaskFile(context.Context, string, string, string) (any, error)
+		})
+		if !ok {
+			return Response{Error: "неизвестная команда"}
+		}
+		value, err := reader.TaskFile(ctx, request.MessageID, request.Workspace, request.Action)
+		if err != nil {
+			return Response{Error: "file unavailable"}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "file unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "task-image":
 		// T-175: a worker's picture for the window.
 		reader, ok := handler.(interface {
@@ -541,7 +558,30 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "task-rename":
+		h, ok := handler.(interface {
+			RenameTask(string, string, string) error
+		})
+		if !ok {
+			return Response{Error: "renaming tasks requires an updated background client"}
+		}
+		if err := h.RenameTask(request.MessageID, request.Alias, request.Text); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
+	case "task-archive":
+		h, ok := handler.(interface {
+			SetTaskArchive(string, string, int64) error
+		})
+		if !ok {
+			return Response{Error: "task archive actions require an updated background client"}
+		}
+		if err := h.SetTaskArchive(request.MessageID, request.Action, request.ArchiveVersion); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "task-hide":
+		// The legacy hide operation is separate from the managed archive state.
 		h, ok := handler.(interface{ HideNetTask(string, string) error })
 		if !ok {
 			return Response{Error: "hiding tasks unsupported; update the background client"}

@@ -25,8 +25,9 @@ The embedded WebView receives only the random private loopback address of its UI
 The window opens to the current task. The left sidebar shows active work and the Archive opens on the right. The same window runs on Windows and Linux. See the [task model](TASK_MODEL.md).
 
 - The left sidebar groups active tasks by computer or project and can show a flat list. Busy agents show the model and elapsed time when available. The bottom-left toolbar opens Settings, feedback and Statistics and shows this computer’s version and update arrow. The feedback form saves remarks and optional screenshots on this computer.
-- The button at the top right toggles the Archive.
-- Settings has General, Project, Agents and Network sections. Project holds the local project folder and shared worker instructions. Network shows connection settings and the computers’ versions and update controls.
+- The button at the top right toggles the Archive. Right-click a working task to stop it or an interrupted task to close it explicitly. A coordinator can resume a saved interrupted conversation once the executing computer verifies that its previous worker has exited.
+- Use the microphone in the composer to dictate a Russian or English draft with on-device recognition when available. Review the draft and press Send. The first use requests microphone and speech-recognition access.
+- Settings has General, Project, Agents and Network sections. Project holds the local project folder and shared worker instructions. Network shows connection settings. Right-click a computer to find its version and update controls.
 - **«Вид → Обновить задачи и статусы»** (⌘R) refreshes the window. It does not install a new version.
 
 The theme set in the window also applies to the app's system windows and is kept across launches and updates.

@@ -12,7 +12,7 @@ const finishedWindowStates = `('done','failed','cancelled')`
 
 // A task sent in an earlier network belongs to no computer of the current
 // one: its peer id there may name another computer now (linkComputer).
-const windowHistoryWhere = `project=? AND hidden_at IS NULL AND state IN ` + finishedWindowStates + `
+const windowHistoryWhere = `project=? AND hidden_at IS NULL AND archive_state<>'removed' AND state IN ` + finishedWindowStates + `
  AND (?='' OR provider=?) AND (?='' OR CASE WHEN remote_peer IS NULL THEN 'local' WHEN remote_broker=? THEN remote_peer ELSE '' END=?)`
 
 // windowHistoryArgs are the arguments of windowHistoryWhere.
@@ -26,6 +26,10 @@ type TaskHistoryPage struct {
 }
 
 func (s *Store) windowHistoryVersion(project, agent, computer, broker string) (string, error) {
+	var revision string
+	if err := s.db.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key=?),'0')`, taskHistoryEditKey(project)).Scan(&revision); err != nil {
+		return "", err
+	}
 	rows, err := s.db.Query(`SELECT id,version,updated_at,COALESCE(ran_model,'') FROM tasks WHERE `+windowHistoryWhere+`
  ORDER BY created_at DESC,rowid DESC LIMIT ?`, append(windowHistoryArgs(project, agent, computer, broker), windowHistorySize+1)...)
 	if err != nil {
@@ -33,6 +37,7 @@ func (s *Store) windowHistoryVersion(project, agent, computer, broker string) (s
 	}
 	defer rows.Close()
 	hash := sha256.New()
+	fmt.Fprintln(hash, revision)
 	for rows.Next() {
 		var id, updated, model string
 		var version int64
@@ -85,6 +90,6 @@ func (s *Store) HideWindowHistory(project, agent, computer string) error {
 	if err != nil {
 		return err
 	}
-	_, err = scoped.db.Exec(`UPDATE tasks SET hidden_at=? WHERE `+windowHistoryWhere, append([]any{now()}, windowHistoryArgs(project, agent, computer, broker)...)...)
+	_, err = scoped.db.Exec(`UPDATE tasks SET hidden_at=? WHERE archive_state='' AND `+windowHistoryWhere, append([]any{now()}, windowHistoryArgs(project, agent, computer, broker)...)...)
 	return err
 }

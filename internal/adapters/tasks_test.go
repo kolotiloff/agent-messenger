@@ -141,6 +141,27 @@ func TestCodexReconnectNeedsConfirmedCompletion(t *testing.T) {
 	}
 }
 
+func TestConfirmedFileChangeFeed(t *testing.T) {
+	for _, tc := range []struct{ provider, event, path, counts string }{
+		{"codex", `{"type":"item.completed","item":{"type":"file_change","status":"completed","changes":[{"path":"docs/guide.md"}]}}`, "docs/guide.md", ""},
+		{"codex", `{"type":"item.completed","item":{"type":"file_change","status":"failed","changes":[{"path":"docs/guide.md"}]}}`, "", ""},
+		{"cursor", `{"type":"tool_call","subtype":"completed","tool_call":{"writeToolCall":{"result":{"success":{"path":"docs/a.md","linesCreated":5}}}}}`, "docs/a.md", ""},
+		{"cursor", `{"type":"tool_call","subtype":"completed","tool_call":{"readToolCall":{"result":{"success":{"path":"docs/a.md"}}}}}`, "", ""},
+		{"claude", `{"type":"user","message":{"content":[{"type":"tool_result"}]},"tool_use_result":{"filePath":"a.md","structuredPatch":[{"lines":[" context","-old","+new","+more"]}]}}`, "a.md", "+2 −1"},
+		{"claude", `{"type":"user","message":{"content":[{"type":"tool_result","is_error":true}]},"tool_use_result":{"filePath":"a.md","structuredPatch":[{"lines":["+new"]}]}}`, "", ""},
+	} {
+		var path, counts string
+		for _, entry := range TaskFeedEntries(tc.provider, []byte(tc.event)) {
+			if entry.Title == "applied_file_change" {
+				path, counts = entry.Text, entry.Description
+			}
+		}
+		if path != tc.path || counts != tc.counts {
+			t.Errorf("%s: got (%q, %q), want (%q, %q)", tc.provider, path, counts, tc.path, tc.counts)
+		}
+	}
+}
+
 func TestTaskFeedEntries(t *testing.T) {
 	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","id":"bash-1","name":"Bash","input":{"command":"go test ./...","description":"Run the Go suite"}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}},{"type":"tool_use","name":"ToolSearch","input":{"query":"messenger"}}]}}`))
 	if len(got) != 3 || got[0].Kind != "text" || got[1] != (FeedEntry{Kind: "command_start", Title: "bash-1"}) || got[2].Title != "Bash" || got[2].Text != "go test ./..." || got[2].Description != "Run the Go suite" {

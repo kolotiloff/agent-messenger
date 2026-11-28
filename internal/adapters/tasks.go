@@ -435,6 +435,30 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 					out = appendCommandEvent(out, "command_end", block["tool_use_id"])
 				}
 			}
+			result, _ := e["tool_use_result"].(map[string]any)
+			path, _ := result["filePath"].(string)
+			hunks, patched := result["structuredPatch"].([]any)
+			if path != "" && patched && len(content) == 1 {
+				block, _ := content[0].(map[string]any)
+				if block["type"] == "tool_result" && block["is_error"] != true {
+					added, removed := 0, 0
+					for _, h := range hunks {
+						hunk, _ := h.(map[string]any)
+						lines, _ := hunk["lines"].([]any)
+						for _, value := range lines {
+							line, _ := value.(string)
+							if strings.HasPrefix(line, "+") {
+								added++
+							} else if strings.HasPrefix(line, "-") {
+								removed++
+							}
+						}
+					}
+					if added+removed > 0 {
+						out = append(out, FeedEntry{Kind: "tool", Title: "applied_file_change", Text: path, Description: fmt.Sprintf("+%d −%d", added, removed)})
+					}
+				}
+			}
 			return out
 		}
 		if e["type"] != "assistant" {
@@ -485,16 +509,19 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 			out = append(out, FeedEntry{Kind: "tool", Title: "Команда", Text: command, Description: description})
 			out = appendCommandEvent(out, "command_end", item["id"])
 		case "file_change":
-			var paths []string
 			changes, _ := item["changes"].([]any)
-			for _, c := range changes {
-				if m, ok := c.(map[string]any); ok {
-					if p, _ := m["path"].(string); p != "" {
-						paths = append(paths, p)
-					}
+			for _, change := range changes {
+				entry, _ := change.(map[string]any)
+				path, _ := entry["path"].(string)
+				if path == "" {
+					continue
 				}
+				title := "Изменение файлов"
+				if item["status"] == "completed" {
+					title = "applied_file_change"
+				}
+				out = append(out, FeedEntry{Kind: "tool", Title: title, Text: path})
 			}
-			out = append(out, FeedEntry{Kind: "tool", Title: "Изменение файлов", Text: strings.Join(paths, "\n")})
 		case "mcp_tool_call":
 			server, _ := item["server"].(string)
 			tool, _ := item["tool"].(string)

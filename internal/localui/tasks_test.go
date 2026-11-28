@@ -70,6 +70,12 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("POST", "/api/task-hide-history", `{"project":"Game","agent":"codex","computer":"local"}`); code != 200 || got[len(got)-1].Cmd != "task-hide-history" || got[len(got)-1].Alias != "Game" {
 		t.Fatalf("hide filtered history %d %+v", code, got[len(got)-1])
 	}
+	if code, _ := do("POST", "/api/task-archive", `{"task":"task-1","action":"restore","version":2}`); code != 200 || got[len(got)-1].Cmd != "task-archive" || got[len(got)-1].MessageID != "task-1" || got[len(got)-1].Action != "restore" || got[len(got)-1].ArchiveVersion != 2 {
+		t.Fatalf("archive action: %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("POST", "/api/task-archive", `{"task":"task-1","action":"erase","version":2}`); code != 400 {
+		t.Fatalf("unknown archive action: %d", code)
+	}
 	if code, _ := do("GET", "/api/usage-stats?period=year", ""); code != 400 {
 		t.Fatalf("bad period %d", code)
 	}

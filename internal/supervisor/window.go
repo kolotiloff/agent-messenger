@@ -319,6 +319,14 @@ func (s *Supervisor) RemoveAgent(provider string) error {
 	return s.store.RemoveComputerAgent(provider)
 }
 
+func (s *Supervisor) RenameTask(id, previous, title string) error {
+	return s.store.RenameTask(id, previous, title)
+}
+
+func (s *Supervisor) SetTaskArchive(id, action string, version int64) error {
+	return s.store.SetTaskArchive(id, action, version)
+}
+
 // HideNetTask removes a task from the window's list (T-131): another
 // computer's task when peer is set, else a finished task of this computer.
 func (s *Supervisor) HideNetTask(peer, task string) error {

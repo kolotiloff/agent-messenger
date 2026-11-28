@@ -965,3 +965,24 @@ The owner revised the release scope in D-257 on November 27. Show the Settings w
 ## D-259 — Keep the My network label inside its card
 
 Use the same typography as Connection mode. Place this computer and its peers in one list with the same vertical spacing between all rows. Keep the connection controls in their existing layout.
+
+## D-261 — Keep computer update notices outside the conversation
+
+Place update notices above the conversation in a fixed area outside its scrollable history. General defaults to manual dismissal and offers automatic dismissal after eight seconds. Hover or focus keeps the notice visible. The three-notice limit applies to both modes. Keep confirmations modal.
+
+## D-262 — Manage computers from the sidebar
+
+Keep the original connection layout in Network settings and remove the duplicate roster. The context menu and local sidebar footer align the shared update control and installed version together at the trailing edge. Keep the same arrow, spinner and cancel icon. Project folders use the enclosing computer, or this computer in the project-only view. Open project settings with the selected project.
+
+
+## D-263 — Brighten dark appearance and apply font preferences throughout the interface
+
+Use #1e1e1e for the sidebar, #dededc for primary text and #a5a5a3 for secondary text in dark appearance. Keep the existing task fills during the visual comparison. Font selection applies to all ordinary interface text. System high contrast keeps the same font and size with brighter text in dark appearance and darker text in light appearance.
+
+## D-264 — Keep task lifecycle with the originating computer
+
+The computer that created a task writes its display title to the task record. The server already distributes titles in the shared task list. Reuse that distribution when the title changes. A rename initiated elsewhere requires an authenticated request to the originating computer, a durable result and a capability check for older installations. Archive is a reversible lifecycle state for finished tasks. Keep permanent deletion in Archive with explicit confirmation and define how it reaches disconnected copies. See T-371.
+
+## D-265 — Open concurrent task views inside the main window
+
+Use tabs for switching and closing task views. Use Open alongside to keep concurrent conversations visible in the same workspace, with side-by-side, stacked and grid layouts. Every pane addresses an existing task and keeps its own draft and scroll position. See T-372.

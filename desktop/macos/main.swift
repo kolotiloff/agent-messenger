@@ -41,10 +41,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     var origin: URL?
     var generation = 0
     var lockFD: Int32 = -1
-    let updates = DesktopUpdater()
+    lazy var updates = DesktopUpdater()
+    let dictation = ComposerDictation()
     var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let renamed = BundleName.migrate(Bundle.main.bundleURL) {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.createsNewApplicationInstance = true
+            configuration.promptsUserIfNeeded = false
+            NSWorkspace.shared.openApplication(at: renamed, configuration: configuration) { [weak self] application, _ in
+                DispatchQueue.main.async {
+                    if let application, application.processIdentifier != getpid(), !application.isTerminated {
+                        NSApp.terminate(nil)
+                    } else {
+                        self?.startDesktop()
+                    }
+                }
+            }
+            return
+        }
+        startDesktop()
+    }
+
+    private func startDesktop() {
         // LaunchServices normally reuses the app. flock also covers open -n and
         // direct executable launches without affecting the client's own lock.
         let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/AgentMessenger")
@@ -59,19 +79,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             return
         }
         // Use the bundle icon with the same system framing as the application list.
-        NSApp.applicationIconImage = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+        NSApp.applicationIconImage = NSWorkspace.shared.icon(forFile: Bundle.main.bundleURL.resolvingSymlinksInPath().path)
         applyTheme(UserDefaults.standard.string(forKey: "appearance") ?? "system")
         buildMenu()
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.userContentController.add(self, name: "updates")
         config.userContentController.add(self, name: "appearance")
+        config.userContentController.add(self, name: "chatFont")
+        config.userContentController.add(self, name: "windowPreference")
         config.userContentController.add(self, name: "folder")
         config.userContentController.add(self, name: "app")
         config.userContentController.add(self, name: "titlebar")
-        let savedTheme = UserDefaults.standard.string(forKey: "appearance") ?? "system"
-        let safeTheme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
-        addPageScripts(config.userContentController, theme: safeTheme)
+        config.userContentController.add(self, name: "composerDictation")
+        config.userContentController.add(self, name: "reportFileSave")
+        dictation.onEvent = { [weak self] id, event, text in
+            let payload = ["id": id, "event": event, "text": text ?? ""]
+            guard let data = try? JSONSerialization.data(withJSONObject: payload),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            self?.web?.evaluateJavaScript("window.messengerDictationEvent?.(\(json))")
+        }
+        refreshPageScripts(config.userContentController)
         updates.onStatus = { [weak self] _ in self?.showUpdateStatus() }
         updates.onRun = { [weak self] state in self?.showUpdateRun(state) }
         web = TitlebarWebView(frame: .zero, configuration: config)
@@ -140,11 +168,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
+        dictation.cancel()
+        web?.evaluateJavaScript("window.messengerCancelDictation?.()")
         NSApp.setActivationPolicy(.accessory)
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        updates.checkAutomaticallyIfDue()
+        if window != nil { updates.checkAutomaticallyIfDue() }
     }
 
     func fatalLaunch(_ text: String) {
@@ -195,12 +225,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
     @objc func automaticData() { UserDefaults.standard.removeObject(forKey: "dataRoot"); connect() }
     func stopUI() {
+        dictation.cancel()
         generation += 1
         // EOF revokes this app-owned HTTP server; never send shutdown to client.
         try? input?.fileHandleForWriting.close(); input = nil
         child = nil
         origin = nil
-        updates.endpoint = nil
+        if lockFD >= 0 { updates.endpoint = nil }
         web?.stopLoading()
     }
     // A failure: the reason, a retry button and a short note.
@@ -219,6 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     @objc func connect() {
         stopUI()
         let version = generation
+        refreshPageScripts(web.configuration.userContentController)
         showConnecting()
         guard let executable = Bundle.main.url(forResource: "kotel", withExtension: nil) else { message("В приложении отсутствует клиент. Заново распакуйте проверенную сборку."); return }
         let process = Process(); process.executableURL = executable
@@ -275,6 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         decisionHandler(.allow)
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { statusSpinner.stopAnimation(nil); statusView.isHidden = true; web.isHidden = false; showUpdateStatus() }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { dictation.cancel() }
     func showUpdateStatus() {
         let status: [String: Any] = ["version": updates.shownVersion ?? "", "installedVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "", "channel": "github", "detail": updates.fetchStatus, "checking": updates.fetching || updates.waitingForDownload]
         guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data: data, encoding: .utf8) else { return }
@@ -297,9 +330,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             self?.web?.evaluateJavaScript("window.messengerFolderPicked && window.messengerFolderPicked(" + json + "[0])", completionHandler: nil)
         }
     }
-    // theme is one of "system", "light", "dark", checked by the caller.
-    func addPageScripts(_ controller: WKUserContentController, theme: String) {
-        controller.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(theme)'; window.amMacTitlebar = true", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    private static let chatFonts = ["system", "system-readable", "inter", "source-sans"]
+
+    private var preferencesKey: String {
+        "windowPreferences." + (UserDefaults.standard.string(forKey: "dataRoot") ?? "default")
+    }
+    private static let windowPreferenceKeys = ["kotel-task-panes", "kotel-active-pane", "kotel-pane-layout", "messenger-notice-dismissal"]
+    func refreshPageScripts(_ controller: WKUserContentController) {
+        let defaults = UserDefaults.standard
+        let savedTheme = defaults.string(forKey: "appearance") ?? "system"
+        let theme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
+        let savedFont = defaults.string(forKey: "chatFont") ?? "system"
+        let font = Self.chatFonts.contains(savedFont) ? savedFont : "system"
+        controller.removeAllUserScripts()
+        let source = "window.messengerInitialTheme = '\(theme)'; window.messengerInitialChatFont = '\(font)'; window.amMacTitlebar = true"
+        let preferences = defaults.dictionary(forKey: preferencesKey) as? [String: String] ?? [:]
+        let data = try? JSONSerialization.data(withJSONObject: preferences)
+        let json = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        controller.addUserScript(WKUserScript(source: source + "; window.messengerPreferences = " + json, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
     func rects(_ value: Any?) -> [NSRect] {
         guard let list = value as? [[Double]] else { return [] }
@@ -308,6 +356,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func applyTheme(_ theme: String) {
         NSApp.appearance = theme == "dark" ? NSAppearance(named: .darkAqua) : theme == "light" ? NSAppearance(named: .aqua) : nil
     }
+    private func saveReportFile(_ body: [String: String]) {
+        guard let id = body["id"].flatMap(UUID.init(uuidString:)) else { return }
+        func finish(_ result: String) {
+            web?.evaluateJavaScript("window.taskFiles?.saved('\(id.uuidString.lowercased())', '\(result)')")
+        }
+        guard let name = body["name"], !name.isEmpty, name != ".", name != "..",
+              name.utf8.count <= 255, name.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:").union(.controlCharacters)) == nil,
+              let encoded = body["data"], encoded.utf8.count <= 1_400_000,
+              let data = Data(base64Encoded: encoded), data.count <= 1_048_576,
+              let window = window, window.isKeyWindow, window.attachedSheet == nil else { finish("failed"); return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = name
+        panel.canCreateDirectories = true
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { finish("cancelled"); return }
+            do { try data.write(to: url, options: .atomic); finish("saved") }
+            catch { finish("failed") }
+        }
+    }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame,
               let page = message.frameInfo.request.url, let origin = origin,
@@ -315,13 +382,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if message.name == "updates", message.body as? String == "check" { updates.check() }
         if message.name == "updates", message.body as? String == "install" { updates.install() }
         if message.name == "folder", message.body as? String == "pick" { pickProjectFolder() }
+        if message.name == "reportFileSave", let body = message.body as? [String: String] { saveReportFile(body) }
+        if message.name == "composerDictation", let body = message.body as? [String: String],
+           let id = body["id"], UUID(uuidString: id) != nil {
+            switch body["action"] {
+            case "start":
+                guard window.isKeyWindow else { dictation.onEvent?(id, "failed", nil); return }
+                let language = body["language"] == "en" ? "en-US" : "ru-RU"
+                dictation.start(id, locale: Locale(identifier: language))
+            case "stop": dictation.stop(id)
+            case "cancel": dictation.cancel(id)
+            default: break
+            }
+        }
         // Quits only the app; the background client and its reservations stay.
         if message.name == "app", message.body as? String == "quit" { NSApp.terminate(nil) }
         if message.name == "appearance", let theme = message.body as? String, ["system", "light", "dark"].contains(theme) {
             UserDefaults.standard.set(theme, forKey: "appearance"); applyTheme(theme)
             // A reconnect creates a new document in the same WebView.
-            web.configuration.userContentController.removeAllUserScripts()
-            addPageScripts(web.configuration.userContentController, theme: theme)
+            refreshPageScripts(userContentController)
+        }
+        if message.name == "windowPreference", let body = message.body as? [String: String],
+           let key = body["key"], Self.windowPreferenceKeys.contains(key),
+           let value = body["value"], value.utf8.count <= 262144 {
+            var preferences = UserDefaults.standard.dictionary(forKey: preferencesKey) as? [String: String] ?? [:]
+            preferences[key] = value
+            UserDefaults.standard.set(preferences, forKey: preferencesKey)
+            refreshPageScripts(userContentController)
+        }
+        if message.name == "chatFont", let font = message.body as? String, Self.chatFonts.contains(font) {
+            UserDefaults.standard.set(font, forKey: "chatFont")
+            refreshPageScripts(userContentController)
         }
         // The empty parts of the page's top that move the window (T-082).
         if message.name == "titlebar", let body = message.body as? [String: Any], let view = web as? TitlebarWebView {
@@ -332,7 +423,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { message("Не удалось открыть окно: \(error.localizedDescription)") }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { message("Ошибка окна: \(error.localizedDescription)") }
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { message("Окно было остановлено системой. Повторите подключение; сохранённые исходящие останутся в клиенте.") }
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        dictation.cancel()
+        message("Окно было остановлено системой. Повторите подключение; сохранённые исходящие останутся в клиенте.")
+    }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? { nil }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showWindow(); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

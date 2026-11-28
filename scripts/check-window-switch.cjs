@@ -69,7 +69,7 @@ const shots = process.env.SCREENSHOT_DIR;
         if (url.pathname.startsWith('/api/')) return route.fulfill({json: fixtures[url.pathname] || {ok: true}});
         if (url.pathname === '/blank') return route.fulfill({body: '', contentType: 'text/html'});
         const filename = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-        if (!['index.html', 'app.js', 'app.css', 'i18n.js'].includes(filename)) return route.fulfill({status: 404, body: ''});
+        if (!['index.html', 'app.js', 'app.css', 'i18n.js', 'file-viewer.js', 'file-viewer.css'].includes(filename)) return route.fulfill({status: 404, body: ''});
         const source = await fs.readFile(path.join(assets, filename), 'utf8');
         const body = firstRun && filename === 'index.html'
           ? source.replace('id="am-concept"', 'id="am-concept" class="am-task-sidebar-preview"') : source;

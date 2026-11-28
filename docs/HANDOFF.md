@@ -8,11 +8,35 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+[PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) prepares build 119. Right-click a running task to stop it or an interrupted task to close it manually. A shared third-party snapshot can be hidden locally. The coordinator can resume an interrupted conversation when the executor can verify that its old worker is gone. This release retains prior executable paths and name-bound MCP permissions. Fresh connections use `kotel`.
+
+The dark and light public screenshots use fictional data. The macOS bundle migration, on-device dictation bridge, scoped file reader, independent task panes and archive actions have targeted checks. Audible dictation and the live Dock item still need observation on an installed Mac. Previously approved provider registrations were exercised with stock build 118 and candidate 119 in disposable profiles without model calls.
+
 T-367 updates the GitHub README header with the approved tagline and a short explanation of how the coordinator and workers share the work.
 
 [Kotel 1.0.15 (build 118)](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.15-preview.118) is public in the original repository. The [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/46073340337) signed the packages, exercised upgrades from build 117 on all five targets and verified the public channel. The release source is `2e5d796efe1a1a7d27cbde54a95fa40d30d58cc4`.
 
 Build 118 includes the monochrome icon, the Graphite theme, task grouping, Network versions and updates, and per-task access controls. The local update button, version and other footer controls are at the bottom left. The My network card uses the same label typography as Connection mode and a uniform row spacing. Statistics row hover matches the Archive’s color and 4 px gap.
+
+T-365 removes the duplicate computer list from Network settings while retaining the original Connection mode layout and status colors. Computer and project menus use a divided, right-aligned footer with the installed version next to the shared update control. Project-only folders show the local computer's controls; folders grouped under a computer show that computer. Project settings opens the selected local project's name and folder fields. Update notices sit above the conversation and use the standard close icon. General offers manual dismissal by default and optional automatic dismissal. T-364 tracks the legacy macOS bundle path and Dock shortcut after in-place upgrades.
+
+T-366 applies the font choice throughout the interface. The system font uses the platform’s normal fallback chain, and the high-contrast option changes text colors without resizing it. The macOS shell remembers the selection across launches.
+
+T-369 uses a slightly darker sidebar and lighter text in dark appearance. The existing task highlight is the baseline pending comparison with a stronger highlight. The isolated preview shows both fills on the same screen.
+
+T-370 reduces the trailing inset in Statistics and uses the Archive's 4 px row gap in Efficiency. Settings has a wider section list. The context popup aligns its text to the end and separates the historical measurement label with a colon. An offline computer has a crossed icon and shows its local last contact time beside its name when available. Statistics gives task rows less vertical padding. Efficiency shows the exact counts within expanded details.
+
+T-371 tracks shared task renaming and the separate Archive and Delete permanently actions. T-372 tracks task tabs and simultaneous conversations within the main window. The integration branch includes origin-owned title changes and simultaneous task views.
+
+T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
+
+The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.
+
+T-364 is required for the next desktop update. On an upgraded Mac, the bundle already declares Kotel but its installed package can still be named Agent Messenger.app. An isolated in-place rename preserved the bundle's file identity and passed signature verification. Stock-build upgrade, Dock, search and subsequent signed-update acceptance remain open.
+
+T-368 moves the chat timestamp and actions into a visible row below each text message. The localized age updates while the window is visible. Older messages display a date, and the timestamp tooltip shows the full local date and time.
+
+T-338 keeps the existing Claude and Cursor server names on reconnect to preserve name-scoped permissions. New registrations use `kotel`. Kotel checks for conflicting or explicitly disabled Claude entries. In Cursor settings, the connected state identifies an existing legacy registration. The signed-install check verifies the MCP server before and after a stock 117 to public 118 macOS upgrade, including both executable names and the retained project and computer identity. Authenticated Claude and Cursor same-chat transitions remain open.
 
 The isolated stock-117 Codex chat resumed under the new MCP name after a tool call on each side of the transition. The installed Cursor CLI lists tools with an unset worker marker and hides them in a marked worker. Claude and Cursor same-chat permission migration, live task steering and authenticated provider acceptance remain open. See the [development report](reports/2026-11-27-kotel-combined.md).
 

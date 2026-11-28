@@ -38,7 +38,7 @@ const (
 type CoordinatorLinkView struct {
 	State      string `json:"state"`
 	Detail     string `json:"detail,omitempty"`
-	serverName string
+	ServerName string `json:"server_name,omitempty"`
 }
 
 var coordinatorConnect sync.Mutex
@@ -105,7 +105,7 @@ func (s *Supervisor) resolveCoordinatorTarget(t coordinatorTarget) (coordinatorT
 
 func (s *Supervisor) readCoordinatorLink(project string, t coordinatorTarget) CoordinatorLinkView {
 	state, name, err := adapters.ClaudeCoordinatorEntry(t.config, t.folder, t.messenger, s.root, project)
-	view := CoordinatorLinkView{State: state, serverName: name}
+	view := CoordinatorLinkView{State: state, ServerName: name}
 	if err != nil {
 		view.Detail = err.Error()
 	}
@@ -169,10 +169,10 @@ func (s *Supervisor) connectCoordinator(project string) CoordinatorLinkView {
 	if before.State == adapters.LinkStale {
 		// Our own entry for an earlier program file (T-117): Claude's add
 		// does not replace an entry, so it is removed first.
-		runErr = run(adapters.ClaudeRemoveCoordinatorArgs(t.cli, before.serverName))
+		runErr = run(adapters.ClaudeRemoveCoordinatorArgs(t.cli, before.ServerName))
 	}
 	if runErr == nil {
-		runErr = run(adapters.ClaudeAddCoordinatorArgs(t.cli, before.serverName, t.messenger, s.root, project))
+		runErr = run(adapters.ClaudeAddCoordinatorArgs(t.cli, before.ServerName, t.messenger, s.root, project))
 	}
 	after := s.readCoordinatorLink(project, t)
 	if after.State == adapters.LinkConnected {
@@ -255,8 +255,8 @@ func (s *Supervisor) connectCodexCoordinator(project string) CoordinatorLinkView
 }
 
 func (s *Supervisor) readCursorLink(project string, t coordinatorTarget) CoordinatorLinkView {
-	state, err := adapters.CursorCoordinatorLink(adapters.CursorProjectConfig(t.folder), t.messenger, s.root, project)
-	view := CoordinatorLinkView{State: state}
+	state, name, err := adapters.CursorCoordinatorLink(adapters.CursorProjectConfig(t.folder), t.messenger, s.root, project)
+	view := CoordinatorLinkView{State: state, ServerName: name}
 	if err != nil {
 		view.Detail = err.Error()
 	}

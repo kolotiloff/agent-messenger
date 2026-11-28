@@ -45,7 +45,8 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
 
     override init() {
         super.init()
-        updater = SPUUpdater(hostBundle: Bundle.main, applicationBundle: Bundle.main, userDriver: self, delegate: self)
+        let bundle = Bundle(url: Bundle.main.bundleURL.resolvingSymlinksInPath()) ?? .main
+        updater = SPUUpdater(hostBundle: bundle, applicationBundle: bundle, userDriver: self, delegate: self)
     }
     func attach(menu: NSMenu) {
         checkItem = menu.addItem(withTitle: "Проверить обновления…", action: #selector(check), keyEquivalent: "")

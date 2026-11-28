@@ -96,7 +96,12 @@
       });
       if(search){search.value='';empty.hidden=options.length>0;}
       menu.showPopover();trigger.setAttribute('aria-expanded','true');
-      positionPopover(menu,trigger,searchable?276:220,searchable||!!iconPaths);
+      let minWidth=searchable?276:220;
+      if(select.id==='chat-font-select'){
+        menu.style.width='max-content';
+        minWidth=Math.max(minWidth,Math.ceil(menu.getBoundingClientRect().width));
+      }
+      positionPopover(menu,trigger,minWidth,searchable||!!iconPaths);
       if(search){menu.scrollTop=0;search.focus({preventScroll:true});}
       else{
         const row=options[select.selectedIndex]||options[0];row?.scrollIntoView({block:'nearest'});
@@ -163,6 +168,15 @@
       else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
     }
   }
+  function applyChatFont(persist=false){
+    const select=$('chat-font-select');
+    if(!select.value)select.value='system';
+    root.dataset.chatFont=select.value;
+    if(persist){
+      if(window.webkit?.messageHandlers?.chatFont)window.webkit.messageHandlers.chatFont.postMessage(select.value);
+      else remember('messenger-chat-font',select.value);
+    }
+  }
   // Task window (D-024, D-026, T-029). The window observes tasks; the owner
   // talks to the coordinator in the Claude app. Its only actions are creating
   // a project, changing the project folder, connecting an agent program and
@@ -181,8 +195,15 @@
   let token=location.hash.slice(1)||root.dataset.previewToken||'';
   try{if(token)sessionStorage.setItem('messenger-ui-token',token);else token=sessionStorage.getItem('messenger-ui-token')||'';}catch(_){}
   if(location.hash)history.replaceState(null,'',location.pathname);
-  function remember(key,value){try{localStorage.setItem(key,value);}catch(_){}}
-  function recall(key){try{return localStorage.getItem(key)||'';}catch(_){return '';}}
+  const nativePreferences=new Set(['kotel-task-panes','kotel-active-pane','kotel-pane-layout','messenger-notice-dismissal']);
+  function remember(key,value){
+    try{localStorage.setItem(key,value);}catch(_){}
+    if(nativePreferences.has(key)&&window.messengerPreferences&&window.messengerPreferences[key]!==value){
+      window.messengerPreferences[key]=value;
+      window.webkit?.messageHandlers?.windowPreference?.postMessage({key,value});
+    }
+  }
+  function recall(key){if(nativePreferences.has(key)&&window.messengerPreferences?.[key]!=null)return window.messengerPreferences[key];try{return localStorage.getItem(key)||'';}catch(_){return '';}}
   let view=null,project=recall('messenger-project'),selectedTask='',selectedShared=null,feed=null,feedSignature='',viewSignature='';
   // T-133: the task shown last, and whether the feed should go to its end on
   // the next render (a new task opened, or the owner just wrote).
@@ -225,7 +246,7 @@
   function renderToasts(){
     const box=$('toasts');
     // An agent action must not report its error inside the hidden Tasks tab.
-    if(tab==='tasks'||(taskSidebarPreview&&tab==='stats'))$('notices').after(box);
+    if(tab==='tasks'||(taskSidebarPreview&&tab==='stats'))root.querySelector('.am-chat-footer').prepend(box);
     else if(taskSidebarPreview)$('settings-dialog').querySelector('.am-settings-views').prepend(box);
     else root.querySelector('.am-main').insertBefore(box,root.querySelector('[data-screen]'));
     box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
@@ -423,7 +444,244 @@
   function sharedDisplayTask(t){
     return sharedWorkerRunning(t)?{...t,pending_launch:false,worker_observed:true}:t;
   }
-  function taskMenu(event,t,p,name){
+  const taskPanes=new Map();
+  const paneLayouts=['columns','stack','grid'];
+  let paneBoard=null,paneStrip=null,paneGrid=null,paneTimer=null,paneActive=null,paneDragging=null;
+  function savePanes(){
+    remember('kotel-task-panes',JSON.stringify([...taskPanes.values()].map(({id,project,title,placement})=>({id,project,title,placement}))));
+    remember('kotel-active-pane',paneActive?.id||'');
+  }
+  function preservePaneFocus(move){
+    const focused=document.activeElement;
+    const selection=focused instanceof HTMLTextAreaElement?[focused.selectionStart,focused.selectionEnd,focused.selectionDirection]:null;
+    move();
+    if(focused?.isConnected&&focused!==document.body&&document.activeElement!==focused){
+      focused.focus({preventScroll:true});
+      if(selection)focused.setSelectionRange(...selection);
+    }
+  }
+  function closePane(pane){
+    const before=[...taskPanes.values()],index=before.indexOf(pane);
+    const hadFocus=pane.tab.contains(document.activeElement)||pane.node.contains(document.activeElement);
+    abortPaneRequest(pane);
+    taskPanes.delete(pane.id);
+    pane.tab.remove();pane.node.remove();
+    if(paneActive===pane)paneActive=before[index+1]||before[index-1]||null;
+    if(!taskPanes.size&&paneBoard){
+      const primary=paneGrid.querySelector('.am-chat');
+      preservePaneFocus(()=>paneBoard.replaceWith(primary));
+      paneBoard=paneStrip=paneGrid=null;
+      clearInterval(paneTimer);paneTimer=null;
+    }
+    syncTaskPanes();
+    if(hadFocus){
+      if(paneActive)paneActive.label.focus({preventScroll:true});
+      else if(!$('compose').hidden&&!$('answer-text').disabled)$('answer-text').focus({preventScroll:true});
+      else $('thread').focus({preventScroll:true});
+    }
+    savePanes();
+  }
+  function paneVisible(pane){
+    return pane.node.isConnected&&!pane.node.hidden&&!document.hidden&&tab==='tasks';
+  }
+  function abortPaneRequest(pane){
+    pane.request?.abort();pane.request=null;
+  }
+  function renderPaneControls(pane){
+    const task=pane.task;
+    const canSend=task&&!task.remote?.from&&!stopProgress(task)&&!taskUnreachable(task)&&(task.owner_question||canNote(task));
+    pane.compose.hidden=!canSend&&!pane.input.value.trim();
+    pane.input.readOnly=pane.busy;
+    pane.send.disabled=!canSend||pane.busy||!pane.input.value.trim();
+  }
+  async function sendPaneReply(pane){
+    if(pane.send.disabled)return;
+    const task=pane.task,text=pane.input.value.trim(),question=task.owner_question;
+    const key=question?'messenger-answer-op:'+question.id:'messenger-note-op:'+task.id+':'+text;
+    let op=recall(key);
+    if(!op){op='window-'+(question?.id||task.id)+'-'+crypto.randomUUID();remember(key,op);}
+    pane.busy=true;pane.status.textContent=tr('Отправляем сообщение…');renderPaneControls(pane);
+    try{
+      await postAPI(question?'/api/task-answer':'/api/task-note',{task:task.id,op_id:op,text,...(question?{question:question.id}:{})});
+      if(!question)try{localStorage.removeItem(key);}catch(_){}
+      pane.input.value='';await updatePane(pane);
+    }catch(error){pane.status.textContent=error.message+tr(' Повтор с тем же текстом безопасен.');}
+    finally{pane.busy=false;renderPaneControls(pane);}
+  }
+  function renderPaneSnapshot(pane,snapshot,offset=0){
+    const scroll=pane.body.scrollTop;
+    const stick=pane.body.scrollHeight-scroll-pane.body.clientHeight<32;
+    if(!offset)pane.body.replaceChildren();
+    for(const it of snapshot.items||[]){
+      if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||!it.text)continue;
+      const message=el('div',undefined,'am-pane-message');
+      const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
+      message.append(el('span',role,'am-small am-muted'),richText(it.text));
+      pane.body.append(message);
+    }
+    pane.count=offset+(snapshot.items?.length||0);
+    pane.cursor=snapshot.cursor||'';
+    pane.task=snapshot.task;
+    pane.label.textContent=pane.heading.textContent=snapshot.task.title||pane.title;
+    if(pane.title!==pane.label.textContent){pane.title=pane.label.textContent;savePanes();}
+    pane.label.title=pane.title;
+    pane.close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+pane.title);
+    pane.status.textContent=taskStatus(snapshot.task)[0];
+    renderPaneControls(pane);
+    pane.body.scrollTop=stick?pane.body.scrollHeight:scroll;
+  }
+  async function updatePane(pane){
+    if(!paneVisible(pane))return;
+    if(pane.id===selectedTask&&pane.project===project){
+      abortPaneRequest(pane);
+      if(feed?.task.id===pane.id&&feed.task.project===pane.project&&pane.primarySnapshot!==feed){
+        const offset=pane.cursor&&pane.count<=(feed.items?.length||0)&&feed.append_from===pane.count?pane.count:0;
+        renderPaneSnapshot(pane,offset?{...feed,items:feed.items.slice(offset)}:feed,offset);
+        pane.primarySnapshot=feed;
+      }
+      return;
+    }
+    pane.primarySnapshot=null;
+    if(pane.request)return;
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
+    pane.request=controller;
+    try{
+      const query=new URLSearchParams({id:pane.id,cursor:pane.cursor||''});
+      const snapshot=await api('/api/task?'+query,5000,controller.signal);
+      if(controller.signal.aborted||!paneVisible(pane)||snapshot.task?.id!==pane.id||snapshot.task.project!==pane.project)return;
+      if(snapshot.append_from&&snapshot.append_from!==pane.count){pane.cursor='';return;}
+      renderPaneSnapshot(pane,snapshot,snapshot.append_from||0);
+    }catch(error){if(!controller.signal.aborted)pane.status.textContent=tr('Не удалось загрузить задачу');}
+    finally{clearTimeout(timer);if(pane.request===controller)pane.request=null;}
+  }
+  function syncTaskPanes(){
+    if(!paneBoard)return;
+    const enabled=tab==='tasks'&&!document.hidden;
+    let visible=0;
+    for(const pane of taskPanes.values()){
+      const active=pane===paneActive;
+      pane.node.hidden=pane.placement==='tab'&&!active;
+      pane.label.setAttribute('aria-selected',String(active));
+      pane.label.tabIndex=active?0:-1;
+      pane.close.tabIndex=active?0:-1;
+      if(!pane.node.hidden)visible++;
+      if(!enabled||pane.node.hidden)abortPaneRequest(pane);
+      else updatePane(pane);
+    }
+    paneBoard.style.setProperty('--am-watch-visible',Math.max(1,visible));
+    if(!enabled&&paneTimer){clearInterval(paneTimer);paneTimer=null;}
+    if(enabled&&!paneTimer)paneTimer=setInterval(()=>taskPanes.forEach(updatePane),5000);
+  }
+  function activatePane(pane){
+    paneActive=pane;
+    syncTaskPanes();savePanes();
+  }
+  function reorderPane(pane,target){
+    const ordered=[...taskPanes.values()];
+    const from=ordered.indexOf(pane),to=ordered.indexOf(target);
+    if(from<0||to<0||from===to)return;
+    ordered.splice(from,1);ordered.splice(to,0,pane);
+    const next=ordered[to+1];
+    taskPanes.clear();
+    ordered.forEach(item=>taskPanes.set(item.id,item));
+    preservePaneFocus(()=>{
+      paneStrip.insertBefore(pane.tab,next?.tab||null);
+      paneGrid.insertBefore(pane.node,next?.node||null);
+    });
+    savePanes();
+  }
+  function setPaneLayout(layout){
+    if(!paneLayouts.includes(layout))layout='grid';
+    paneBoard.dataset.layout=layout;
+    for(const button of paneBoard.querySelectorAll('[data-pane-layout]')){
+      button.setAttribute('aria-pressed',String(button.dataset.paneLayout===layout));
+    }
+    remember('kotel-pane-layout',layout);
+  }
+  function openTaskPane(task,name,placement='tab',restore=false){
+    if(!paneBoard){
+      paneBoard=el('div',undefined,'am-pane-board');
+      paneGrid=el('div',undefined,'am-pane-grid');
+      paneStrip=el('div',undefined,'am-pane-strip');
+      paneStrip.setAttribute('role','tablist');paneStrip.setAttribute('aria-label',tr('Вкладки задач'));
+      const toolbar=el('div',undefined,'am-pane-toolbar');
+      const layouts=el('div',undefined,'am-pane-layouts');
+      for(const [mode,text] of [['columns',tr('Столбцы')],['stack',tr('Строки')],['grid',tr('Сетка')]]){
+        const button=el('button',text,'am-quiet-button');
+        button.type='button';button.dataset.paneLayout=mode;button.onclick=()=>setPaneLayout(mode);layouts.append(button);
+      }
+      toolbar.append(paneStrip,layouts);paneBoard.append(toolbar,paneGrid);
+      const primary=$('task-layout').querySelector('.am-chat');
+      preservePaneFocus(()=>{primary.replaceWith(paneBoard);paneGrid.append(primary);});
+      setPaneLayout(recall('kotel-pane-layout'));
+    }
+    if(taskPanes.has(task.id)){
+      const pane=taskPanes.get(task.id);
+      pane.placement=placement;activatePane(pane);return;
+    }
+    const node=el('section',undefined,'am-watch-pane'), tabNode=el('div',undefined,'am-pane-tab');
+    const label=el('button',task.title,'am-quiet-button');
+    const close=el('button',undefined,'am-icon-btn am-close-x');
+    const status=el('span','','am-small am-muted');
+    const heading=el('h3',task.title);
+    const body=el('div',undefined,'am-watch-body');
+    const input=el('textarea',undefined,'am-watch-input');
+    const compose=el('form',undefined,'am-watch-compose');
+    const send=el('button',tr('Отправить ответ'));
+    const uid=crypto.randomUUID();
+    node.id='kotel-pane-'+uid;node.setAttribute('role','tabpanel');
+    label.type=close.type='button';label.id='kotel-tab-'+uid;
+    label.title=task.title;label.setAttribute('role','tab');label.setAttribute('aria-controls',node.id);
+    node.setAttribute('aria-labelledby',label.id);
+    tabNode.setAttribute('role','presentation');tabNode.draggable=true;
+    close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+task.title);
+    close.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+    input.rows=2;input.maxLength=20000;input.setAttribute('aria-label',tr('Ответ исполнителю'));
+    input.placeholder=tr('Написать исполнителю…');send.type='submit';
+    compose.hidden=true;compose.append(input,send);
+    status.setAttribute('role','status');
+    body.tabIndex=0;
+    const pane={id:task.id,project:name,title:task.title,placement,node,tab:tabNode,label,close,heading,body,status,input,send,compose,count:0};
+    label.onclick=()=>activatePane(pane);
+    close.onclick=()=>closePane(pane);
+    input.oninput=()=>renderPaneControls(pane);
+    compose.onsubmit=event=>{event.preventDefault();sendPaneReply(pane);};
+    input.onkeydown=event=>{
+      if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendPaneReply(pane);}
+    };
+    label.onkeydown=event=>{
+      const ordered=[...taskPanes.values()],index=ordered.indexOf(pane);
+      if(event.key==='Delete'){event.preventDefault();closePane(pane);return;}
+      const direction=event.key==='ArrowLeft'?-1:event.key==='ArrowRight'?1:0;
+      const next=direction?ordered[(index+direction+ordered.length)%ordered.length]:
+        event.key==='Home'?ordered[0]:event.key==='End'?ordered.at(-1):null;
+      if(!next)return;
+      event.preventDefault();
+      if(event.altKey&&direction)reorderPane(pane,ordered[index+direction]);
+      else{
+        activatePane(next);next.label.focus({preventScroll:true});
+        next.label.scrollIntoView({block:'nearest',inline:'nearest'});
+      }
+    };
+    tabNode.ondragstart=event=>{
+      paneDragging=pane;event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',pane.id);
+    };
+    tabNode.ondragover=event=>{
+      if(paneDragging&&paneDragging!==pane){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
+    };
+    tabNode.ondragleave=()=>tabNode.classList.remove('am-pane-drop');
+    tabNode.ondrop=event=>{
+      if(paneDragging){event.preventDefault();reorderPane(paneDragging,pane);paneDragging=null;}
+      tabNode.classList.remove('am-pane-drop');
+    };
+    tabNode.ondragend=()=>{
+      paneDragging=null;paneStrip?.querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
+    };
+    tabNode.append(label,close);node.append(heading,status,body,compose);
+    paneStrip.append(tabNode);paneGrid.append(node);taskPanes.set(task.id,pane);
+    if(!restore)activatePane(pane);
+  }
+  function taskMenu(event,t,p,name,inArchive=false){
     event.preventDefault();
     // Unchanged rows keep their listeners across refreshes. The underlying
     // stop request can advance even when its short label stays the same.
@@ -433,6 +691,13 @@
       t=current;
     }
     const entries=[];
+    if(taskSidebarPreview&&!p){
+      entries.push({text:tr('Открыть во вкладке'),pick:()=>openTaskPane(t,name)},
+        {text:tr('Открыть рядом'),pick:()=>openTaskPane(t,name,'alongside')});
+    }
+    if(!p&&!t.remote?.from){
+      entries.push({text:tr('Переименовать задачу'),pick:()=>renameTask(t)});
+    }
     if(!p&&canStopTask(t)){
       const progress=stopProgress(t);
       if(progress){
@@ -441,10 +706,37 @@
       }
       entries.push({text:tr('Остановить задачу'),pick:()=>stopTask(t,name)});
     }
-    if(finishedStates.includes(t.state)||(p&&sharedLost(t,p))){
+    const interrupted=t.state==='blocked'||t.state==='interrupted';
+    if(!p&&(interrupted||taskUnreachable(t))){
+      entries.push({text:tr('Закрыть задачу'),pick:()=>closeHere(t,name)});
+    }
+    if(p&&interrupted){
+      entries.push({text:tr('Скрыть на этом компьютере'),pick:()=>askRemoveTask(t,p,name)});
+    }
+    if(!p&&!t.remote?.from&&finishedStates.includes(t.state)){
+      if(t.archived){
+        entries.push({text:tr('Восстановить из архива'),pick:()=>changeTaskArchive(t,name,'restore')});
+        if(inArchive)entries.push({text:tr('Убрать из архива навсегда'),pick:()=>{
+          askConfirm(tr('Убрать задачу из архива?'),tr('Карточка исчезнет из списков после синхронизации. Переписка, файлы и статистика сохранятся.'),tr('Убрать из архива'),()=>changeTaskArchive(t,name,'remove'));
+        }});
+      }else entries.push({text:tr('Архивировать задачу'),pick:()=>changeTaskArchive(t,name,'archive')});
+    }else if(!t.archived&&(finishedStates.includes(t.state)||(p&&!interrupted&&sharedLost(t,p)))){
       entries.push({text:tr('Удалить из списка'),pick:()=>askRemoveTask(t,p,name)});
     }
     popMenu(event.clientX,event.clientY,entries);
+  }
+  function renameTask(task){
+    const field=el('input');
+    field.type='text';field.value=task.title;field.maxLength=120;
+    field.setAttribute('aria-label',tr('Название задачи'));
+    askConfirm(tr('Переименовать задачу'),'',tr('Сохранить'),async()=>{
+      await postAPI('/api/task-rename',{task:task.id,previous:task.title,title:field.value});
+      viewSignature='';await refresh();loadProjectActivity();
+    },true);
+    $('confirm-text').append(field);field.select();
+    field.addEventListener('keydown',event=>{
+      if(event.key==='Enter'&&!event.isComposing&&field.value.trim())$('confirm-go').click();
+    });
   }
   function askRemoveTask(t,p,name){
     const text=p?tr('Задача пропадёт из списка на этом компьютере. У других она останется, пока её не удалят на компьютере «')+p.name+'».'
@@ -458,6 +750,17 @@
       }
       viewSignature='';await refresh();loadProjectActivity();
     });
+  }
+  async function changeTaskArchive(task,name,action){
+    try{
+      await postAPI('/api/task-archive',{task:task.id,action,version:task.archive_version||0});
+      taskHistories.delete(name);
+      if(action==='remove'&&selectedTask===task.id){selectedTask='';feed=null;feedSignature='';}
+      viewSignature='';await refresh();loadProjectActivity();
+    }catch(error){
+      if(action==='remove')throw error;
+      showError(error);
+    }
   }
   function coordinatorName(client){
     const c=(client||'').toLowerCase();
@@ -479,6 +782,7 @@
   const collapsedFolders=new Set();
   const sidebarSnapshots=new Map(),collapsedComputers=new Set();
   let sidebarProject='',sidebarRequest=null,draftOpen=false,draftSending=false,draftAttempt=null;
+  let composerDictation=null;
   function sidebarProjects(){
     return sidebarProject?[sidebarProject]:(view?.projects||[]).map(entry=>entry.name);
   }
@@ -585,12 +889,9 @@
     }
     syncSelects();
   }
-  // Right-click menu on another computer of the network. Revoking cannot be
-  // undone, so its item only opens a confirmation inside the card. Updating
-  // moved to an icon on the card (T-128).
   // A right-click menu; entries are {text,pick}.
-  function popMenu(x,y,entries,status=null){
-    if(!entries.length&&!status)return;
+  function popMenu(x,y,entries,status=null,device=''){
+    if(!entries.length&&!status&&!device)return;
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
@@ -612,19 +913,59 @@
     menu.setAttribute('role',status?'status':'menu');
     menu.dataset.stopTask=status?.task||'';
     menu.replaceChildren(...(status?[el('div',status.text,'am-context-status')]:items));
+    if(device){
+      const footer=el('div',undefined,'am-context-device am-version-row');
+      footer.dataset.device=device;
+      menu.append(footer);
+      renderDeviceMenuFooter(footer);
+    }
     menu.showPopover();
     menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
     menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
-    (items[0]||menu).focus();
+    (items[0]||menu.querySelector('.am-context-device button:not(:disabled)')||menu).focus();
   }
   function deviceMenu(d,x,y,can){
+    const peer=(server?.peers||[]).find(other=>other.id===d.id);
+    if(!peer)return;
     const items=[];
     const add=(text,pick)=>items.push({text,pick});
     if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
-    popMenu(x,y,items);
+    popMenu(x,y,items,null,peer.id);
+  }
+  function renderDeviceMenuFooter(footer=$('device-menu')?.matches(':popover-open')?$('device-menu').querySelector('.am-context-device'):null){
+    if(!footer)return;
+    const device=footer.dataset.device;
+    const local=device==='local';
+    const peer=local?null:server?.peers?.find(item=>item.id===device);
+    const version=local?$('app-installed-version').textContent:(peer?versionName(peerInstalledVersion(peer)||''):'');
+    let control;
+    if(local){
+      const mark=updateMark(null);
+      if(updateInProgress(mark))control=updateControl(null,mark);
+      else{
+        const original=$('app-update-button');
+        if(!original.hidden){
+          control=original.cloneNode(true);
+          control.removeAttribute('id');
+          control.classList.add('am-local-update-copy');
+          control.addEventListener('click',()=>original.click());
+        }
+      }
+    }else if(peer)control=peerUpdateButton(peer,peerInstalledVersion(peer));
+    if(control?.matches('button:not(.am-update-cancel)')){
+      control.addEventListener('click',()=>$('device-menu').hidePopover(),{capture:true});
+    }
+    const label=el('span',version||'—','am-version');
+    label.title=version?tr('Версия ')+version.replace(/^v/,''):tr('Версия неизвестна');
+    const parts=control?[control,label]:[label];
+    if(parts.length===footer.children.length&&parts.every((part,index)=>part.isEqualNode(footer.children[index])))return;
+    const restoreFocus=footer.contains(document.activeElement);
+    if(restoreFocus)$('device-menu').focus({preventScroll:true});
+    footer.replaceChildren(...parts);
+    if(restoreFocus)footer.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
   }
   // Asking another computer to update itself (T-078). Its answers arrive
-  // with the server status and show as notices above the reply box (T-128);
+  // with the server status and show as notices in the window;
   // the card only says while it is under way.
   async function requestUpdate(peer){
     try{const answer=await postAPI('/api/server-action',{action:'update',device:peer.id},28000);if(answer?.result)server=answer.result;}
@@ -689,7 +1030,7 @@
   }
   const updateCancelAttempts=new Map();
   function cancelUpdateKey(broker,device,id){return JSON.stringify([broker,device,id]);}
-  function updateControl(peer,mark,text=false){
+  function updatePresentation(peer,mark){
     const broker=updateNetwork(),device=peer?.id||'';
     const key=cancelUpdateKey(broker,device,mark.id);
     const attempt=updateCancelAttempts.get(key);
@@ -698,60 +1039,74 @@
     if(!installing&&(attempt||queued)){
       const caption=attempt==='sending'?tr('Отправляем запрос на отмену…'):
         queued||attempt==='queued'?tr('Отмена запрошена, ждём подтверждения'):tr('Проверяем, принят ли запрос на отмену…');
-      const status=el('span',undefined,'am-update-icon am-update-wait am-update-cancelling');
-      status.title=caption;status.setAttribute('role','img');status.setAttribute('aria-label',caption);
-      status.append(svgIcon(['M6 3h12M6 21h12M8 3v5l8 8v5M16 3v5l-8 8v5']));
-      if(text){status.className='am-network-status-text';status.textContent=tr('Отмена запрошена');}
-      status.addEventListener('click',e=>e.stopPropagation());
-      return status;
+      return {caption,cancelling:true,canCancel:false};
     }
     const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено'):tr('Ждёт обновления');
     // The update board can confirm the queue while the roster is delayed.
     const canCancel=!installing&&!!mark.id&&(!peer||updateBuildNumber(peer.version)>=100);
+    return {caption,canCancel,key,device,broker,requestID:mark.id};
+  }
+  async function cancelUpdate({key,device,broker,requestID}){
+    if(updateCancelAttempts.has(key)||broker!==updateNetwork())return;
+    updateCancelAttempts.set(key,'sending');renderMachines();
+    try{
+      await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:requestID},28000);
+      updateCancelAttempts.set(key,'queued');
+    }catch(error){
+      updateCancelAttempts.set(key,'unknown');
+      addNotice('cancel-'+requestID,'bad',tr('Отмена обновления'),capital(error.message));
+    }
+    renderMachines();void loadServer();
+  }
+  function updateControl(peer,mark){
+    const state=updatePresentation(peer,mark),{caption,canCancel}=state;
+    if(state.cancelling){
+      const status=el('span',undefined,'am-update-icon am-update-wait am-update-cancelling');
+      status.title=caption;status.setAttribute('role','img');status.setAttribute('aria-label',caption);
+      status.append(updateSpinner());
+      status.addEventListener('click',e=>e.stopPropagation());
+      return status;
+    }
     const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
     const label=canCancel?tr('Отменить обновление'):caption;
     b.title=label;b.setAttribute('aria-label',label);
     b.append(updateSpinner());
-    if(text){b.className=canCancel?'am-network-update':'am-network-status-text';b.textContent=canCancel?tr('Отменить'):caption;}
     if(!canCancel){b.setAttribute('role','img');return b;}
     b.setAttribute('aria-description',caption);
     b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
-    if(!text)b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+    b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
     b.addEventListener('keydown',e=>e.stopPropagation());
-    b.addEventListener('click',async e=>{
-      e.stopPropagation();
-      if(updateCancelAttempts.has(key))return;
-      updateCancelAttempts.set(key,'sending');renderMachines();
-      try{
-        await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:mark.id},28000);
-        updateCancelAttempts.set(key,'queued');
-      }catch(error){
-        updateCancelAttempts.set(key,'unknown');
-        addNotice('cancel-'+mark.id,'bad',tr('Отмена обновления'),capital(error.message));
-      }
-      renderMachines();void loadServer();
-    });
+    b.addEventListener('click',e=>{e.stopPropagation();void cancelUpdate(state);});
     return b;
   }
-  // T-128: notices above the reply box. A good one fades after a few seconds
-  // on screen; a bad one stays until the owner closes it, also across
-  // reloads of the window. Only answers that came while the window was open
-  // are shown as good news; problems of the last day are kept.
   const notices=[],noticeSince=Date.now();
+  const noticePreference='messenger-notice-dismissal',noticeDuration=8000;
+  let autoCloseNotices=recall(noticePreference)==='automatic';
   const waitingUpdateNotices=new Map();
   function closedNotices(){try{return JSON.parse(localStorage.getItem('messenger-notices-closed')||'{}')||{};}catch(_){return {};}}
   // T-181: no scroll of their own; at most noticeLimit are shown and a new
   // one pushes out the oldest, which then counts as closed.
   const noticeLimit=3;
   function closeNotice(key){
-    const i=notices.findIndex(n=>n.key===key);if(i>=0){clearTimeout(notices[i].timer);notices.splice(i,1);}
+    const i=notices.findIndex(n=>n.key===key);
+    if(i>=0){clearTimeout(notices[i].timer);notices.splice(i,1);}
     const closed=closedNotices(),cut=Date.now()-2*24*3600*1000;closed[key]=Date.now();
     for(const k of Object.keys(closed))if(closed[k]<cut)delete closed[k];
     remember('messenger-notices-closed',JSON.stringify(closed));renderNotices();
   }
+  function scheduleNoticeClose(notice){
+    clearTimeout(notice.timer);
+    if(!autoCloseNotices)return;
+    notice.timer=setTimeout(()=>{
+      const card=$('notices').querySelector('[data-key="'+CSS.escape(notice.key)+'"]');
+      if(card?.matches(':hover,:focus-within'))scheduleNoticeClose(notice);
+      else closeNotice(notice.key);
+    },noticeDuration);
+  }
   function addNotice(key,kind,title,text){
     if(notices.some(n=>n.key===key)||closedNotices()[key])return;
-    notices.push({key,kind,title,text:text||''});
+    const notice={key,kind,title,text:text||''};
+    notices.push(notice);scheduleNoticeClose(notice);
     while(notices.length>noticeLimit)closeNotice(notices[0].key);
     renderNotices();
   }
@@ -794,18 +1149,15 @@
       const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
       icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
       const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted am-notice-text'));
-      const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>closeNotice(n.key));
+      const close=el('button',undefined,'am-icon-btn am-close-x');close.type='button';
+      close.setAttribute('aria-label',tr('Закрыть'));
+      close.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+      close.addEventListener('click',()=>closeNotice(n.key));
       card.append(icon,body,close);
-      if(n.kind!=='bad'){
-        card.append(el('span',undefined,'am-notice-timer'));
-        // The countdown starts once the notice can be seen.
-        if(!n.timer&&tab==='tasks'&&!document.hidden)n.timer=setTimeout(()=>closeNotice(n.key),6000);
-      }
       box.append(card);
     }
     updateNoticeTooltips();
   }
-  document.addEventListener('visibilitychange',renderNotices);
   // One line per agent program, with its worker state.
   // live is false when the computer cannot be reached.
   function busyTasksByComputer(snapshot){
@@ -1184,9 +1536,10 @@
     if(head)layoutMachineRoles(head);
   }));
   const serverIconPaths=['M4 3h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM4 14h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2ZM6 7h1M6 18h1'];
-  function machinePresence(online,local=false){
+  function machinePresence(online,local=false,lastSeen=''){
     const mark=el('span',undefined,'am-machine-presence'+(online?' online':''));
-    const connection=online?tr('На связи'):tr('Нет связи');
+    const lastOnline=!online&&lastSeen?stamp(lastSeen):'';
+    const connection=online?tr('На связи'):lastOnline?tr('Нет связи. Был на связи ')+lastOnline:tr('Нет связи');
     mark.title=local?tr('Этот компьютер')+' — '+connection:connection;
     mark.setAttribute('role','img');
     mark.setAttribute('aria-label',mark.title);
@@ -1228,6 +1581,7 @@
     body.append(rows);
     const disclosure=el('button',undefined,'am-sidebar-disclosure');disclosure.type='button';
     disclosure.dataset.sidebarFocus=JSON.stringify([computer]);
+    if(head.title)disclosure.title=head.title;
     const label=head.querySelector('.am-machine-label'),count=tasksWord(items.length);
     const countLabel=sidebarTaskCount(items.length);
     function update(){
@@ -1285,6 +1639,24 @@
         if(expand)collapsedFolders.delete(key);else collapsedFolders.add(key);
         showFolder(expand);
       });
+      const openProjectMenu=(x,y)=>{
+        if(!view?.projects.some(item=>item.name===name))return;
+        popMenu(x,y,[
+          {text:tr('Настройки проекта'),pick:()=>{if(project!==name)selectProject(name);show('project');}},
+          {text:tr('Удалить локальный проект'),pick:()=>askRemoveProject(name)},
+        ],null,computer||'local');
+      };
+      button.addEventListener('contextmenu',event=>{
+        event.preventDefault();
+        openProjectMenu(event.clientX,event.clientY);
+      });
+      button.addEventListener('keydown',event=>{
+        if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){
+          event.preventDefault();
+          const bounds=button.getBoundingClientRect();
+          openProjectMenu(bounds.left,bounds.bottom);
+        }
+      });
       appendSidebarRows(rows,tasks);
       folder.append(button,rows);container.append(folder);
     }
@@ -1333,74 +1705,33 @@
     const confirmed=mark?.state==='done'?mark.version:shared?.state==='done'?shared.version:'';
     return confirmed&&(!peer.version||versionOlder(peer.version,confirmed))?confirmed:peer.version;
   }
-  function peerUpdateButton(peer,installed,text){
+  function peerUpdateOffer(peer,installed,mark){
+    const newest=newestVersion();
+    return peerFresh(peer)&&!updateInProgress(mark)&&installed&&versionOlder(installed,newest)?versionName(newest):'';
+  }
+  function confirmPeerUpdate(peer,newest){
+    askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);
+  }
+  function peerUpdateButton(peer,installed){
     const mark=updateMark(peer);
-    if(updateInProgress(mark))return updateControl(peer,mark,text);
-    if(!peerFresh(peer)||!installed||!versionOlder(installed,newestVersion()))return null;
-    const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
-    const b=el('button',text?tr('Обновить'):undefined,text?'am-network-update':'am-update-icon am-peer-update');
+    if(updateInProgress(mark))return updateControl(peer,mark);
+    const newest=peerUpdateOffer(peer,installed,mark);
+    if(!newest)return null;
+    const label=tr('Обновить до ')+newest;
+    const b=el('button',undefined,'am-update-icon am-peer-update');
     b.type='button';b.title=label;b.setAttribute('aria-label',label);
-    if(!text)appendUpdateGlyphs(b);
-    b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
+    appendUpdateGlyphs(b);
+    b.addEventListener('click',event=>{event.stopPropagation();confirmPeerUpdate(peer,newest);});
     b.addEventListener('keydown',event=>event.stopPropagation());
     return b;
   }
-  function networkIdentity(label,connected,roles,lastSeen,local){
-    const identity=el('div',undefined,'am-network-identity');
-    const dot=el('span',undefined,'am-network-dot');dot.toggleAttribute('data-online',connected);
-    const name=el('span',label);
-    if(roles.length)name.append(el('span',', '+roles.join(', '),'am-muted'));
-    if(!connected)name.append(el('span',', '+(lastSeen?tr('Был на связи ')+stamp(lastSeen):tr('Нет связи')),'am-muted'));
-    name.title=name.textContent;
-    identity.append(dot,machinePresence(connected,local),name);
-    return identity;
-  }
-  function syncNetworkLocalUpdate(){
-    const local=$('network-self-update'),footer=$('app-update-button');
-    local.hidden=footer.hidden||!!$('network-local').querySelector('[data-network-mark]');
-    local.disabled=footer.disabled;local.title=footer.title;
-    $('network-local-version').textContent=$('app-installed-version').textContent||
-      versionName(clientInfo?.window_version||clientInfo?.client_version||'')||'—';
-  }
-  function renderLocalUpdateMark(container,mark,text){
+  function renderLocalUpdateMark(container,mark){
     const pending=container.querySelector('[data-network-mark]');
     if(!updateInProgress(mark)){pending?.remove();return;}
-    const next=updateControl(null,mark,text);
+    const next=updateControl(null,mark);
     next.dataset.networkMark='';next.dataset.request=mark.id||'';next.dataset.network=updateNetwork();
     if(!pending)container.prepend(next);
     else if(!pending.isEqualNode(next))pending.replaceWith(next);
-  }
-  function renderNetworkRoster(coordinator,host){
-    const local=$('network-local'),roles=[];
-    if(coordinator)roles.push(tr('координатор'));
-    if(host)roles.push(tr('сервер'));
-    const identity=networkIdentity(view?.computer_name||tr('Этот компьютер'),online,roles,null,true);
-    if(!local.firstElementChild.isEqualNode(identity))local.firstElementChild.replaceWith(identity);
-    const localMark=updateMark(null);
-    renderLocalUpdateMark(local.querySelector('.am-network-action'),localMark,true);
-    if(taskSidebarPreview)renderLocalUpdateMark(document.querySelector('.am-version-row'),localMark,false);
-    syncNetworkLocalUpdate();
-    const peers=server?.peers||[];
-    $('network-roster-count').textContent=String(1+peers.length);
-    const list=$('network-peers'),rows=[];
-    for(const peer of peers){
-      const row=el('div',undefined,'am-network-row');row.dataset.peer=peer.id;
-      const roles=[];
-      if(peer.coordinator)roles.push(tr('координатор'));
-      if(peer.host)roles.push(tr('сервер'));
-      const installed=peerInstalledVersion(peer),action=el('div',undefined,'am-network-action');
-      const control=peerUpdateButton(peer,installed,true);
-      if(control){control.dataset.request=updateMark(peer)?.id||'';action.append(control);}
-      row.dataset.network=updateNetwork();
-      row.append(networkIdentity(peer.name,peerConnected(peer),roles,peer.last_seen,false),action,
-        el('span',installed?versionName(installed):'—','am-network-version'));
-      rows.push(row);
-    }
-    if(rows.length!==list.children.length||rows.some((row,i)=>!row.isEqualNode(list.children[i]))){
-      const focus=list.contains(document.activeElement)?document.activeElement.closest('[data-peer]')?.dataset.peer:'';
-      list.replaceChildren(...rows);
-      if(focus)list.querySelector('[data-peer="'+CSS.escape(focus)+'"] button')?.focus({preventScroll:true});
-    }
   }
   function renderMachines(){
     if(draggedMachine)return;
@@ -1443,8 +1774,8 @@
     const version=el('div',undefined,'am-machine-version am-local-version');
     const corner=el('div',undefined,'am-card-update am-local-update');
     const localMark=updateMark(null),localBusy=updateInProgress(localMark);
+    if(taskSidebarPreview)renderLocalUpdateMark(document.querySelector('.am-version-row'),localMark);
     if(localBusy&&!taskSidebarPreview)corner.append(updateControl(null,localMark));
-    renderNetworkRoster(!!coordinatorRole,!!serverRole);
     root.classList.toggle('am-local-update-pending',localBusy);
     const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);
     // A paused agent is left out, as other computers leave it out of what
@@ -1464,6 +1795,16 @@
       body.append(lines);
       head.append(localMeta);machine.append(head,body);
     }
+    head.tabIndex=0;
+    head.addEventListener('contextmenu',event=>{
+      event.preventDefault();popMenu(event.clientX,event.clientY,[],null,'local');
+    });
+    head.addEventListener('keydown',event=>{
+      if(event.target!==head||!(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')))return;
+      event.preventDefault();
+      const bounds=head.getBoundingClientRect();
+      popMenu(bounds.left,bounds.bottom,[],null,'local');
+    });
     box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
@@ -1474,14 +1815,23 @@
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
       const peerName=el('span',peer.name,'am-machine-label');
-      name.append(machinePresence(connected),peerName);
+      const presence=machinePresence(connected,false,peer.last_seen);
+      if(!connected)name.title=presence.title;
+      if(taskSidebarPreview&&!connected&&peer.last_seen){
+        const seen=new Date(peer.last_seen);
+        if(!Number.isNaN(seen.getTime())){
+          const date=seen.toLocaleDateString(amLocale,{day:'numeric',month:'short'});
+          peerName.append(el('span',', '+tr('был в сети {time} {date}').replace('{time}',clock(peer.last_seen)).replace('{date}',date),'am-machine-last-seen'));
+        }
+      }
+      name.append(presence,peerName);
       if(peer.host)(taskSidebarPreview?peerName:name).append(serverTag());
       const meta=el('div',undefined,'am-machine-meta');
       const corner=el('div',undefined,'am-card-update');
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
       if(!taskSidebarPreview){
-        const installed=peerInstalledVersion(peer),control=peerUpdateButton(peer,installed,false);
+        const installed=peerInstalledVersion(peer),control=peerUpdateButton(peer,installed);
         if(control){corner.append(control);meta.append(corner);}
         if(installed)meta.append(el('span',versionName(installed),'am-version am-machine-version'));
       }
@@ -1512,11 +1862,13 @@
       }
       if(!projectActivity.length){name.append(meta);card.append(name,peerBody);}
       const can={revoke:hosted.has(peer.id)};
-      if(can.revoke){
-        card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
-        card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);});
-        card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});
-      }
+      card.classList.add('am-device-card');
+      if(can.revoke)card.dataset.key='revoke-'+peer.id;
+      const menuTarget=taskSidebarPreview?name:card;
+      menuTarget.tabIndex=0;
+      if(!menuTarget.title)menuTarget.title=tr('Правая кнопка мыши — действия');
+      card.addEventListener('contextmenu',event=>{if(!event.defaultPrevented){event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);}});
+      menuTarget.addEventListener('keydown',event=>{if(event.target===menuTarget&&(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10'))){event.preventDefault();const r=menuTarget.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});
       box.append(card);
     }
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
@@ -1558,6 +1910,7 @@
       else if(focusedCell)live.querySelector('[data-project-cell="'+CSS.escape(focusedCell)+'"]')?.focus({preventScroll:true});
     }
     placeLocalParts();
+    renderDeviceMenuFooter();
     // T-271: only the highlighted card shows the chosen computer, so a
     // computer that left the list no longer filters anything.
     if(computerFilter&&!pickedComputers.has(computerFilter))queueMicrotask(()=>{if(computerFilter&&!pickedComputers.has(computerFilter))clearComputer();});
@@ -1697,7 +2050,7 @@
   }
   function syncTaskHistory(snapshot){
     const history=currentTaskHistory(snapshot);
-    if(history&&history.first!==(snapshot.history_next||''))taskHistories.delete(snapshot.project);
+    if(history&&(history.first!==(snapshot.history_next||'')||history.version!==snapshot.history_version))taskHistories.delete(snapshot.project);
   }
   function taskRows(snapshot=view){
     const recent=snapshot?.tasks||[],history=currentTaskHistory(snapshot);
@@ -1712,7 +2065,7 @@
     let history=currentTaskHistory(snapshot);
     if(!history){
       const first=snapshot.history_next||'';
-      history={scope,rows:new Map(),first,next:first,loading:false};
+      history={scope,rows:new Map(),first,next:first,version:snapshot.history_version,loading:false};
       taskHistories.set(name,history);
     }
     if(history.loading||!history.next)return;
@@ -1786,7 +2139,7 @@
     const agent=$('agent-filter').value,computer=computerFilter;
     const count=batches.reduce((total,{items})=>total+items.length,0);
     const text=batches.some(({snapshot})=>snapshot.history_paged)
-      ?tr('Из списка пропадут все завершённые задачи по текущему фильтру, включая те, которые ещё не загружены. История задач сохранится.')
+      ?tr('Завершённые задачи без отметки архива исчезнут из списка по текущему фильтру, включая ещё не загруженные. История сохранится.')
       :tr('Из списка на этом компьютере пропадут завершённые задачи: ')+count+tr('. Задачи этого компьютера пропадут и у других компьютеров; задачи других компьютеров останутся у них.');
     const action=taskSidebarPreview?tr('Очистить архив'):tr('Убрать все');
     const heading=taskSidebarPreview?tr('Очистить архив?'):tr('Убрать все завершённые задачи?');
@@ -1870,6 +2223,7 @@
       :el('span',text,color);
     if(tip)duration.title=tip;
     details.append(identity,', ',duration);
+    if(t.archived)details.append(', ',tr('В архиве'));
     if(tokens!=null){
       const usage=el('span',tokensText(tokens)+tr(' т.'),'am-task-usage');
       usage.title=peer?tokensFull(tokens):usageLong(t.usage);
@@ -1938,7 +2292,7 @@
         if(draftOpen)closeTaskDraft();
         selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();if(taskSidebarPreview)renderMachines();
       });
-      row.addEventListener('contextmenu',e=>taskMenu(e,t,null,name));
+      row.addEventListener('contextmenu',e=>taskMenu(e,t,null,name,taskSidebarPreview));
       return row;
     };
     const sharedRow=(t,p,name)=>{
@@ -2018,14 +2372,16 @@
       if(taskSidebarPreview){
         const done=groups.done.filter(({t})=>finishedStates.includes(t.state));
         archived+=done.length;
-        if(done.length)archiveBatches.push({items:done,snapshot});
+        const clearable=done.filter(({t})=>!t.archived);
+        if(clearable.length)archiveBatches.push({items:clearable,snapshot});
         section(target,name,'',done);
       }else{
         section(target,name,tr('Активные'),groups.active);
         section(target,name,tr('Запланированные'),groups.planned);
         const closableItems=groups.attention.filter(closable);
         section(target,name,tr('Требуют решения'),groups.attention,actions(closableItems,tr('Закрыть все'),()=>askCloseAll(closableItems)));
-        section(target,name,tr('Завершённые'),groups.done,actions(groups.done.length>1?groups.done:[],tr('Убрать все'),()=>askClearDone([{items:groups.done,snapshot}])));
+        const clearable=groups.done.filter(({t})=>!t.archived);
+        section(target,name,tr('Завершённые'),groups.done,actions(clearable.length>1?clearable:[],tr('Убрать все'),()=>askClearDone([{items:clearable,snapshot}])));
       }
       const history=currentTaskHistory(snapshot);
       if(snapshot.history_paged&&(name!==project||windowHistoryScope===taskWindowQuery())&&(history?history.next:snapshot.history_next)){
@@ -2042,8 +2398,8 @@
       if(!box.childElementCount)box.append(el('p',tr('В архиве пока нет задач'),'am-small am-muted'));
       const clear=$('archive-clear');
       clear.hidden=false;
-      clear.disabled=!archived;
-      clear.onclick=archived?()=>askClearDone(archiveBatches):null;
+      clear.disabled=!archiveBatches.length;
+      clear.onclick=archiveBatches.length?()=>askClearDone(archiveBatches):null;
     }
     if(live.innerHTML!==box.innerHTML)replaceTaskRows(live,box,JSON.stringify([projects,agentChosen,computerFilter]));
   }
@@ -2118,6 +2474,7 @@
     if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
     if(link.state==='connected'){
       let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Kotel'):tr('Подключён. Откройте папку проекта в новом чате');
+      if(agent==='cursor'&&link.server_name==='messenger')sub=tr('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.');
       if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».');
       return stepRow('ok',title,sub,null);
     }
@@ -2246,6 +2603,7 @@
     const status=$('task-draft-status');
     status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
     status.classList.toggle('am-status-bad',!draftSending&&!!draftAttempt?.error);
+    composerDictation?.sync();
     syncSelects();
   }
   $('task-draft-access').addEventListener('click',event=>{
@@ -2257,6 +2615,7 @@
     popMenu(rect.left,rect.bottom,choices.map(([value,text])=>({text,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})));
   });
   function closeTaskDraft(){
+    composerDictation?.cancel();
     draftOpen=false;
     $('task-new').setAttribute('aria-expanded','false');
     $('task-draft').hidden=true;
@@ -2375,7 +2734,7 @@
     const spent=$('answer-task-total');
     spent.hidden=!task.usage;
     spent.textContent=spent.hidden?'':tr('{tokens} по задаче').replace('{tokens}',tokensFull(task.usage.input_tokens+task.usage.output_tokens));
-    if(hasContext&&task.state!=='running')$('answer-context-summary').textContent=tr('Последний замер контекста')+' · '+occupancy;
+    if(hasContext&&task.state!=='running')$('answer-context-summary').textContent=tr('Последний замер контекста')+': '+occupancy;
     const details=$('answer-context-count');
     details.textContent=count;
     details.hidden=!count;
@@ -2383,6 +2742,7 @@
   }
   async function sendTaskDraft(event){
     event.preventDefault();
+    if(composerDictation?.finishFor($('task-draft-text')))return;
     if(!draftOpen||$('task-draft-send').disabled)return;
     const selection=$('task-draft-model').value;
     const split=selection.indexOf(':');
@@ -2413,6 +2773,9 @@
     }
   }
   function renderThread(){
+    composerDictation?.sync();
+    const companion=taskPanes.get(selectedTask);
+    if(companion)updatePane(companion);
     const thread=$('thread'),head=$('task-head');
     const panelOpen=!!view?.project&&$('list-toggle').getAttribute('aria-expanded')==='true';
     $('task-panel').hidden=!panelOpen;$('task-layout').classList.toggle('am-queue-collapsed',!panelOpen);
@@ -2541,12 +2904,16 @@
     }
     return p;
   }
-  function richText(text,cls){
+  function richText(text,cls,fileSource){
     const box=el('div',undefined,'am-rich'+(cls?' '+cls:''));
     const pieces=String(text||'').split(/^```[^\n]*\n?/m);
     pieces.forEach((piece,i)=>{
       if(i%2===1){box.append(el('pre',piece.replace(/\n$/,''),'am-code-block'));return;}
-      for(const para of piece.split(/\n{2,}/)){if(para.trim())box.append(inlineCode(el('p'),para.replace(/^\n+|\n+$/g,'')));}
+      for(const para of piece.split(/\n{2,}/)){
+        if(!para.trim())continue;
+        const paragraph=el('p'),body=para.replace(/^\n+|\n+$/g,'');
+        box.append(fileSource&&window.taskFiles?window.taskFiles.paragraph(paragraph,body,fileSource,true):inlineCode(paragraph,body));
+      }
     });
     return box;
   }
@@ -2634,7 +3001,7 @@
       [kind,label]=commandAction(raw);
     }else if(name==='read'||name==='readfile'){
       kind='read';label=actionTitle(tr('Прочитать файл'),actionFile(target));
-    }else if(['edit','multiedit','write',"изменение файлов"].includes(name)){
+    }else if(['edit','multiedit','write',"изменение файлов","applied_file_change"].includes(name)){
       kind='edit';label=actionTitle(tr('Изменить файл'),actionFile(target));
       if(raw.includes('\n'))label=tr('Изменить файлы');
     }else if(['grep','glob',"поиск в интернете",'websearch'].includes(name)){
@@ -2646,7 +3013,7 @@
       else if(name==='todowrite')label=tr('Обновить план');
       else label=it.title||tr('Вызвать инструмент');
     }
-    const caption=it.description?.trim()||label;
+    const caption=name==='applied_file_change'?label:(it.description?.trim()||label);
     return {kind,label:caption.length>120?caption.slice(0,119)+'…':caption};
   }
   // This is a display-only tokenizer. Keep the original command intact
@@ -2696,6 +3063,17 @@
     const minutes=Math.floor(seconds/60);
     return (minutes?minutes+tr(' мин')+' ':'')+(seconds%60)+tr(' с');
   }
+  const messageAgeFormat=new Intl.RelativeTimeFormat(amLocale);
+  function messageAge(sent,now){
+    if(!Number.isFinite(sent))return '';
+    const minutes=Math.max(0,Math.floor((now-sent)/60000));
+    if(!minutes)return tr('Только что');
+    if(minutes<60)return messageAgeFormat.format(-minutes,'minute');
+    if(minutes<1440)return messageAgeFormat.format(-Math.floor(minutes/60),'hour');
+    if(minutes<10080)return messageAgeFormat.format(-Math.floor(minutes/1440),'day');
+    return stamp(sent);
+  }
+  let lastMessageAgeMinute=-1;
   function updateTimers(){
     // T-275: a hidden window draws nothing; it catches up when shown.
     if(document.hidden)return;
@@ -2708,8 +3086,17 @@
         if(meta)meta.title=meta.textContent;
       }
     }
-    for(const timer of $('thread').querySelectorAll('[data-command-start]')){
+    const thread=$('thread');
+    for(const timer of thread.querySelectorAll('[data-command-start]')){
       timer.textContent=commandElapsed(Number(timer.dataset.commandStart));
+    }
+    const minute=Math.floor(now/60000);
+    if(minute!==lastMessageAgeMinute){
+      lastMessageAgeMinute=minute;
+      for(const label of thread.querySelectorAll('.am-message-time')){
+        const age=messageAge(Date.parse(label.dateTime),now);
+        if(age!==label.textContent)label.textContent=age;
+      }
     }
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
@@ -2736,17 +3123,19 @@
     if(wasHidden&&!field.hidden)sizeAnswer();
     if(status.textContent!==text)status.textContent=text;
   }
-  function closeHere(){
-    const t=selectedTaskRow();if(!t)return;
+  function closeHere(row=selectedTaskRow(),name=project){
+    if(!row)return;
+    const t=taskRows(taskListView(name)).find(task=>task.id===row.id);
+    if(!t||(!taskUnreachable(t)&&!['interrupted','blocked'].includes(t.state)))return;
     if(!t.remote||t.remote.from){
       if(t.state!=='blocked'&&t.state!=='interrupted')return;
       askConfirm(tr('Закрыть задачу?'),tr('Kotel проверит, что процесса исполнителя на этом компьютере нет, и закроет задачу. Если процесс ещё есть, задача останется как была.')+(t.remote?.from?' '+tr('Компьютер «')+t.remote.name+tr('» узнает, что задача закрыта.'):''),tr('Закрыть'),async()=>{
-        await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
+        await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();loadProjectActivity();
       });
       return;
     }
-    askConfirm(tr('Закрыть задачу?'),(t.remote.silent&&!t.remote.lost?tr('Компьютер «')+t.remote.name+tr('» не отвечает по этой задаче.'):tr('С компьютером «')+t.remote.name+tr('» нет связи.'))+' '+tr('Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
-      await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
+    askConfirm(tr('Закрыть задачу?'),(!t.remote.silent&&!t.remote.lost?tr('Выполнение задачи было прервано на компьютере «')+t.remote.name+'».':t.remote.silent&&!t.remote.lost?tr('Компьютер «')+t.remote.name+tr('» не отвечает по этой задаче.'):tr('С компьютером «')+t.remote.name+tr('» нет связи.'))+' '+tr('Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
+      await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();loadProjectActivity();
     });
   }
   function stopSelectedTask(){
@@ -2940,6 +3329,32 @@
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     return headRow;
   }
+  function fileChangeCard(files,run,fileSource){
+    const card=el('section',undefined,'am-file-changes');
+    const header=el('div',tr('Изменённые файлы')+' ('+files.size+')','am-file-change-row');
+    const counts=(added,removed)=>{
+      const pair=el('span',undefined,'am-file-counts');
+      pair.append(el('span','+'+added,'am-status-good'),el('span','−'+removed,'am-status-bad'));
+      return pair;
+    };
+    const values=[...files.values()];
+    if(values.every(file=>file.counted)){
+      header.append(counts(values.reduce((n,file)=>n+file.added,0),values.reduce((n,file)=>n+file.removed,0)));
+    }
+    card.append(header);
+    const more=el('details');
+    more.dataset.key='changes-'+run;
+    more.append(el('summary',tr('Показать ещё')+' ('+(files.size-3)+')'));
+    let index=0;
+    for(const [path,file] of files){
+      const row=el('div',undefined,'am-file-change-row am-small');
+      row.append(fileSource&&!fileSource.remote&&window.taskFiles?window.taskFiles.link(path,path,fileSource):el('span',path));
+      if(file.counted)row.append(counts(file.added,file.removed));
+      (index++<3?card:more).append(row);
+    }
+    if(files.size>3)card.append(more);
+    return card;
+  }
   function renderFeed(t){
     const thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
@@ -2954,6 +3369,7 @@
       if(it.run>0&&it.kind==='report'&&it.verified&&it.audience!=='held'&&it.text?.trim())replyProgress.set(it.run,[]);
     }
     const out=[];let group=null,tools=null;
+    const appliedFiles=new Map();
     const pending=new Map(), unfinished=new Set();
     for(const [index,it] of feed.items.entries()){
       if(it.kind==='command_start'){pending.set(it.title,index);unfinished.add(index);}
@@ -3027,10 +3443,10 @@
       return author;
     };
     const appendMessageTime=(group,meta,at,text)=>{
-      const time=el('time',clock(at),taskSidebarPreview?'am-message-time':'');
-      time.dateTime=at;
+      const time=el('time',taskSidebarPreview?messageAge(Date.parse(at),Date.now()):clock(at),taskSidebarPreview?'am-message-time':'');
+      if(at)time.dateTime=at;
       if(taskSidebarPreview){
-        group.tabIndex=0;
+        time.title=connectionTimestamp(at);
         const actions=el('div',undefined,'am-message-actions');
         const copy=el('button',undefined,'am-quiet-button');copy.type='button';
         const label=tr('Скопировать сообщение');copy.title=label;copy.setAttribute('aria-label',label);
@@ -3053,7 +3469,9 @@
           copy.title=status.textContent;
           reset=setTimeout(()=>{delete copy.dataset.copied;copy.title=label;copy.replaceChildren(svgIcon(copyPaths));status.textContent='';},1500);
         });
-        actions.append(time,copy,status);group.append(actions);
+        if(group.firstElementChild.classList.contains('am-outgoing'))actions.append(time,copy);
+        else actions.append(copy,time);
+        actions.append(status);group.append(actions);
       }else{
         meta.append(time);
       }
@@ -3084,10 +3502,22 @@
       if(!taskSidebarPreview)appendMessageTime(g,meta,at);
       out.push(g);group=content;return content;
     };
+    const reportFiles={
+      remote:t.remote&&!t.remote.from?(t.remote.name||t.remote.id||tr('Другой компьютер')):'',
+      request:async(ref,action)=>{
+        const response=await fetch('/api/task-file',{
+          method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+          body:JSON.stringify({task:t.id,path:ref.path,action}),cache:'no-store',signal:AbortSignal.timeout(4500),
+        });
+        if(response.status===502)throw outdatedMessage();
+        if(!response.ok)throw Error(tr('Файл недоступен в локальной папке этой задачи.'));
+        return response.json();
+      },
+    };
     const workerMessages=new Map();
     function appendWorkerText(it,cls){
       const content=workerGroup(it.at);
-      content.append(richText(it.text,cls));
+      content.append(richText(it.text,cls,it.kind==='report'&&it.verified?reportFiles:null));
       if(taskSidebarPreview&&it.text){
         const article=content.closest('article');
         const message=workerMessages.get(article)||{parts:[]};
@@ -3126,6 +3556,15 @@
       }
       if(it.kind==='tool'){
         const batch=collectTools(index);
+        if(it.title==='applied_file_change'&&it.run>0&&it.text){
+          const files=appliedFiles.get(it.run)||new Map();
+          const file=files.get(it.text)||{added:0,removed:0,counted:true};
+          const counts=/^\+(\d+) −(\d+)$/.exec(it.description||'');
+          if(counts){file.added+=Number(counts[1]);file.removed+=Number(counts[2]);}
+          else file.counted=false;
+          files.set(it.text,file);
+          appliedFiles.set(it.run,files);
+        }
         const line=toolLine(it,toolAction(it));line.dataset.key='t'+index;
         batch.at??=it.at;
         batch.lines.push(line);
@@ -3141,8 +3580,12 @@
             const details=el('details',undefined,'am-tool');
             details.dataset.key='progress-'+it.run;
             details.append(el('summary',tr('Ход работы')),...earlier.map(text=>richText(text)));
-            c.append(details);
+            c.querySelector('.am-disposition')?.before(details);
           }
+        }
+        if(it.verified&&it.kind==='report'&&it.audience!=='held'&&appliedFiles.has(it.run)){
+          c.append(fileChangeCard(appliedFiles.get(it.run),it.run,reportFiles));
+          appliedFiles.delete(it.run);
         }
         let note;
         if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
@@ -3275,7 +3718,7 @@
     if(!t.remote)return t.state==='running'||t.state==='waiting_coordinator';
     return t.state==='running'&&!t.remote.from&&!t.remote.lost&&!t.remote.silent;
   }
-  function answerControls(){const t=selectedTaskRow();$('answer-send').disabled=answering||!t||taskUnreachable(t)||!!stopProgress(t)||!$('answer-text').value.trim()||!(t.owner_question&&!t.remote?.from||canNote(t));}
+  function answerControls(){const t=selectedTaskRow();$('answer-send').disabled=answering||!t||taskUnreachable(t)||!!stopProgress(t)||!$('answer-text').value.trim()||!(t.owner_question&&!t.remote?.from||canNote(t));composerDictation?.sync();}
   async function sendNote(){
     const t=selectedTaskRow();if(!canNote(t)||answering)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -3288,6 +3731,7 @@
     finally{answering=false;answerControls();}
   }
   async function sendAnswer(){
+    if(composerDictation?.finishFor($('answer-text')))return;
     const t=selectedTaskRow(),q=t?.owner_question;
     if(!t||$('compose').inert||taskUnreachable(t)||stopProgress(t))return;
     if(!q&&canNote(t))return sendNote();
@@ -3775,7 +4219,9 @@
     }catch(_){}finally{discovering=false;}
   }
   function show(next){
-    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab&&!(taskSidebarPreview&&n.dataset.screen==='tasks'));renderNotices();renderToasts();
+    if(next!=='tasks')composerDictation?.cancel();
+    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab&&!(taskSidebarPreview&&n.dataset.screen==='tasks'));renderToasts();
+    syncTaskPanes();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     if(taskSidebarPreview){
       const dialog=$('settings-dialog');
@@ -3786,7 +4232,7 @@
         if(tab==='stats'&&!statistics.open)statistics.showModal();
       }else if(!dialog.open)dialog.showModal();
     }
-    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
+    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='project')renderProjectPage();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
     if(tab==='tasks'&&setupPaneShown())renderThread();
   }
@@ -3933,20 +4379,23 @@
     button.append(label);
     row.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
     const name=el('th');name.scope='row';name.append(button);row.append(name);
-    const rate=(value,total,kind)=>{
+    const rate=(value,total)=>{
       const cell=el('td');
       if(!total){cell.textContent='—';return cell;}
-      const label=el('span',Math.round(100*value/total)+'%','am-efficiency-rate');label.tabIndex=0;
-      const tip=el('span',value+'/'+total,'am-tip');tip.id='stats-efficiency-count-'+index+'-'+kind;tip.setAttribute('role','tooltip');
-      label.setAttribute('aria-describedby',tip.id);label.append(tip);
-      cell.append(label);return cell;
+      cell.textContent=Math.round(100*value/total)+'%';
+      return cell;
     };
     const metric=(data,format)=>data?.samples?format(Math.round(data.median||0)):'—';
-    row.append(rate(group.accepted,group.reviewed,'accepted'),rate(group.first_pass_accepted,group.first_pass_known,'first-pass'),
+    row.append(rate(group.accepted,group.reviewed),rate(group.first_pass_accepted,group.first_pass_known),
       el('td',metric(group.accepted_new_input_plus_output,tokensText)),el('td',metric(group.time_to_acceptance_ms,statsDuration)));
 
     const panel=el('td');panel.colSpan=5;
     const breakdown=el('div',undefined,'am-efficiency-breakdown');
+    const countLabel=(label,value,total)=>label+': '+(total?value+'/'+total:'—');
+    const acceptanceCounts=[
+      countLabel(tr('Принято'),group.accepted,group.reviewed),
+      countLabel(tr('С первого раза'),group.first_pass_accepted,group.first_pass_known)
+    ];
     const metrics=el('table',undefined,'am-efficiency-metrics');
     metrics.setAttribute('aria-label',model);
     const headers=el('tr');metrics.createTHead().append(headers);
@@ -3962,8 +4411,10 @@
     addMetric(tr('Токены до приёмки'),group.accepted_new_input_plus_output,tokensText);
     addMetric(tr('Активная работа'),group.accepted_active_runtime_ms,statsDuration);
     addMetric(tr('Время до приёмки'),group.time_to_acceptance_ms,statsDuration);
-    breakdown.append(metrics,el('p',tr('Проверено ')+group.reviewed+'/'+group.tasks+'. '+
-      tr('В 90% задач расход или время были не выше указанного порога.'),'am-small am-muted'));
+    const note=el('p',acceptanceCounts.join(', '),'am-small am-muted');
+    note.append(el('br'),tr('Проверено ')+group.reviewed+'/'+group.tasks+'. '+
+      tr('В 90% задач расход или время были не выше указанного порога.'));
+    breakdown.append(metrics,note);
     panel.append(breakdown);details.append(panel);
     return [row,details];
   }
@@ -4120,7 +4571,7 @@
       }
       const tokens=el('td',task.usage_missing?'—':tokensText(task.tokens),'am-stats-value');
       row.append(when,titleCell,duration,tokens);
-      words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
+      if(!task.usage_missing&&typeof task.input_tokens==='number')tokens.title=usageLong(task);
       row.addEventListener('click',()=>{
         if(task.project&&task.project!==project&&(taskSidebarPreview
           ?statsProjects().some(entry=>entry.name===task.project):splitProjects.includes(task.project))){
@@ -4475,7 +4926,7 @@
     return row;
   }
   function renderProjectPage(){
-    const name=view?.project||'';
+    const name=view?.project===project?project:'';
     $('project-none').hidden=!!name;$('project-page').hidden=!name;
     if(!name){projectPageFor='';return;}
     if(projectPageFor!==name){$('project-page-status').textContent='';$('project-rules-status').textContent='';clearTimeout(rulesTimer);}
@@ -4491,10 +4942,10 @@
     renderCoordinatorRow();
   }
   function saveProjectField(field){
-    const name=view?.project;if(!name)return;
+    const name=view?.project;if(!name||name!==project)return;
     const status=$(field==='rules'?'project-rules-status':'project-page-status');
     projectSaving=projectSaving.then(async()=>{
-      if(view?.project!==name)return;
+      if(view?.project!==name||project!==name)return;
       try{
         if(field==='title'){
           const title=$('project-page-name').value.trim();
@@ -4517,11 +4968,15 @@
   }
   // Removing a project asks in a popup first. Its tasks stay in the database;
   // creating the project again brings them back.
-  function askRemoveProject(){
-    const name=view?.project;if(!name)return;
-    askConfirm(tr('Удалить проект «')+(view.project_title||name)+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
+  function askRemoveProject(name=view?.project){
+    if(!name)return;
+    askConfirm(tr('Удалить проект «')+(name===view?.project&&view.project_title||projectTitle(name))+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
       await postAPI('/api/project-remove',{name});
-      setProject('');remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
+      if(project===name){
+        setProject('');remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';projectPageFor='';
+      }
+      if(sidebarProject===name)sidebarProject='';
+      viewSignature='';await refresh();
     });
   }
   // Installation and sign-in use the agent's own terminal commands.
@@ -4930,7 +5385,7 @@
     updateTip(version,busy);
     button.classList.toggle('am-update-active',!!busy);
     button.disabled=!!busy;
-    syncNetworkLocalUpdate();
+    renderDeviceMenuFooter();
   }
   // Windows and Linux: the program updates itself from the window (D-048).
   let selfUpdate=null,selfUpdateBusy=false,selfUpdateTimer=0;
@@ -4953,7 +5408,7 @@
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
     updateTip(version,s.state==='downloading'?'downloading':installing?'installing':'');
     $('app-update-button').disabled=installing;
-    syncNetworkLocalUpdate();
+    renderDeviceMenuFooter();
     renderUpdateDialog();
   }
   async function loadSelfUpdate(){
@@ -5055,7 +5510,6 @@
   $('update-close').addEventListener('click',()=>{updateRun=null;clearTimeout(updateRunTimer);$('update-dialog').close();loadSelfUpdate();});
   // The download and the install are not cancelled halfway.
   $('update-dialog').addEventListener('cancel',event=>{if(!updateRun?.error)event.preventDefault();else{updateRun=null;}});
-  $('network-self-update').addEventListener('click',()=>$('app-update-button').click());
   $('app-update-button').addEventListener('click',()=>{
     if(window.webkit?.messageHandlers?.updates)startMacUpdate();
     else startUpdate();
@@ -5165,8 +5619,13 @@
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopSelectedTask);
-  $('lost-close').addEventListener('click',closeHere);
-  document.addEventListener('keydown',e=>{if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
+  $('lost-close').addEventListener('click',()=>closeHere());
+  document.addEventListener('keydown',e=>{
+    if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&
+      !document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true],.am-pane-toolbar,.am-watch-pane')){
+      e.preventDefault();stopSelectedTask();
+    }
+  });
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   $('settings-open').addEventListener('click',()=>{
@@ -5174,6 +5633,7 @@
     if(taskSidebarPreview)show('settings');
     else{$('settings-dialog').showModal();loadServer();}
   });
+  $('settings-dialog').addEventListener('close',renderNotices);
   if(taskSidebarPreview){
     const dialog=$('settings-dialog');
     const previousBody=dialog.querySelector('.am-dialog-body');
@@ -5261,7 +5721,7 @@
   $('project-page-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('title');}});
   $('project-page-folder').addEventListener('change',()=>saveProjectField('folder'));
   $('project-page-folder').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('folder');}});
-  $('project-page-remove').addEventListener('click',askRemoveProject);
+  $('project-page-remove').addEventListener('click',()=>askRemoveProject());
   $('confirm-go').addEventListener('click',runConfirm);
   $('confirm-cancel').addEventListener('click',()=>$('confirm-dialog').close());
   $('access-toggle').addEventListener('click',toggleAllAccess);
@@ -5367,8 +5827,145 @@
     });
     $('agents-computer').addEventListener('change',()=>{agentComputer=$('agents-computer').value;renderAgents();});
   }
+  function setupComposerDictation(){
+    const bridge=window.webkit?.messageHandlers?.composerDictation;
+    if(!bridge)return null;
+    const messages={
+      recording:tr('Идёт диктовка. Нажмите на микрофон, чтобы вставить текст.'),
+      processing:tr('Распознаём речь…'),
+      unavailable:tr('Для языка интерфейса недоступно распознавание речи на этом Mac.'),
+      'microphone-denied':tr('Разрешите Kotel доступ к микрофону в настройках macOS.'),
+      'speech-denied':tr('Разрешите Kotel распознавание речи в настройках macOS.'),
+      'microphone-unavailable':tr('Микрофон недоступен.'),
+      empty:tr('Не удалось расслышать речь.'),
+      failed:tr('Не удалось распознать речь. Попробуйте снова.')
+    };
+    const microphone=['M9 6a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z','M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3'];
+    const square=['M7 7h10v10H7z'];
+    const targets=[];
+    let active=null;
+    function context(target){
+      const input=target.input;
+      if(tab!=='tasks'||input.disabled||input.readOnly||input.closest('[hidden],[inert]'))return '';
+      if(input.id==='task-draft-text'){
+        return draftOpen&&!draftSending?JSON.stringify(['draft',...['project','computer','model'].map(key=>$('task-draft-'+key).value)]):'';
+      }
+      return !draftOpen&&!answering&&selectedTask&&$('compose').dataset.task===selectedTask?
+        JSON.stringify(['answer',project,selectedTask]):'';
+    }
+    function paint(target,event=''){
+      const pressed=active?.target===target;
+      const label=event==='recording'?tr('Завершить диктовку'):pressed?tr('Отменить диктовку'):tr('Диктовать');
+      target.button.setAttribute('aria-pressed',String(pressed));
+      target.button.setAttribute('aria-label',label);
+      target.button.title=label;
+      target.button.replaceChildren(svgIcon(event==='recording'?square:microphone));
+      target.status.textContent=messages[event]||'';
+      target.status.hidden=!target.status.textContent;
+      target.status.classList.toggle('am-status-bad',!!event&&event!=='recording'&&event!=='processing');
+    }
+    function send(action,id){
+      bridge.postMessage({action,id,language:document.documentElement.lang});
+    }
+    function cancel(){
+      if(!active)return;
+      const {id,target}=active;
+      active=null;
+      paint(target);
+      send('cancel',id);
+    }
+    function sync(){
+      for(const target of targets){
+        const key=context(target);
+        if(active?.target===target&&active.key!==key)cancel();
+        if(target.key!==key&&active?.target!==target)paint(target);
+        target.key=key;
+        target.button.hidden=!key;
+      }
+    }
+    function finishFor(input){
+      if(active?.target.input!==input)return false;
+      if(active.event==='recording'){
+        active.event='processing';
+        paint(active.target,'processing');
+        send('stop',active.id);
+      }
+      return true;
+    }
+    for(const input of [$('task-draft-text'),$('answer-text')]){
+      const button=el('button',undefined,'am-send-icon am-quiet-button am-dictation-button');
+      const status=el('p',undefined,'am-small am-muted am-dictation-status');
+      button.type='button';
+      button.hidden=true;
+      status.setAttribute('role','status');
+      input.after(button);
+      input.parentElement.after(status);
+      const target={input,button,status,key:''};
+      targets.push(target);
+      paint(target);
+      button.addEventListener('click',()=>{
+        if(active?.target===target){
+          if(active.event==='recording')finishFor(input);else cancel();
+          return;
+        }
+        const key=context(target);
+        if(!key)return;
+        cancel();
+        active={id:crypto.randomUUID(),target,key,event:'',value:input.value,start:input.selectionStart,end:input.selectionEnd};
+        paint(target);
+        send('start',active.id);
+      });
+    }
+    window.messengerDictationEvent=({id,event,text})=>{
+      if(active?.id!==id)return;
+      const {target,key,value,start,end}=active;
+      if(context(target)!==key){cancel();return;}
+      if(event==='recording'||event==='processing'){
+        active.event=event;
+        paint(target,event);
+        return;
+      }
+      active=null;
+      paint(target,event);
+      if(event!=='text'||!text)return;
+      const input=target.input;
+      const from=value===input.value?start:input.selectionStart;
+      const to=value===input.value?end:input.selectionEnd;
+      const before=input.value.slice(0,from),after=input.value.slice(to);
+      const insertion=(before&&!/\s$/.test(before)?' ':'')+text+(/^\S/.test(after)?' ':'');
+      const limit=input.maxLength-before.length-after.length;
+      if(limit>0){
+        input.setRangeText(insertion.slice(0,limit),from,to,'end');
+        input.dispatchEvent(new Event('input',{bubbles:true}));
+      }
+      input.focus();
+    };
+    window.messengerCancelDictation=cancel;
+    document.addEventListener('keydown',event=>{
+      if(event.key!=='Escape'||!active||event.isComposing)return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      cancel();
+    },true);
+    window.addEventListener('pagehide',cancel);
+    return {cancel,sync,finishFor};
+  }
+  composerDictation=setupComposerDictation();
   centreControlText();
   applyTheme(initialTheme||'system');
+  const chatFont=$('chat-font-select');
+  chatFont.value=window.messengerInitialChatFont||recall('messenger-chat-font');
+  applyChatFont();
+  enhanceSelect(chatFont);
+  chatFont.addEventListener('change',()=>applyChatFont(true));
+  const noticeDismissal=$('notice-dismissal');
+  noticeDismissal.value=autoCloseNotices?'automatic':'manual';
+  enhanceSelect(noticeDismissal);
+  noticeDismissal.addEventListener('change',()=>{
+    autoCloseNotices=noticeDismissal.value==='automatic';
+    remember(noticePreference,noticeDismissal.value);
+    notices.forEach(scheduleNoticeClose);
+  });
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   // The language applies on reload: every text is drawn again in it (T-059).
@@ -5392,10 +5989,22 @@
     chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');
     const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;
   })).observe(chatFooter);
+  new ResizeObserver(()=>{
+    updateNoticeTooltips();
+    const thread=$('thread');if(feedPinned)thread.scrollTop=thread.scrollHeight;
+  }).observe($('notices'));
+  if(taskSidebarPreview){
+    try{
+      for(const saved of JSON.parse(recall('kotel-task-panes')||'[]')){
+        if(saved?.id&&saved.project&&saved.title)openTaskPane(saved,saved.project,saved.placement==='tab'?'tab':'alongside',true);
+      }
+      paneActive=taskPanes.get(recall('kotel-active-pane'))||taskPanes.values().next().value||null;
+    }catch(_){}
+  }
   show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
   setInterval(updateTimers,1000);
   setInterval(loadProjectActivity,3000);
   setInterval(()=>{if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();},2000);
   setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats'&&!document.hidden)loadStats();},15000);
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)return;updateTimers();loadServer();loadProjectActivity();if(tab==='stats')loadStats();});
+  document.addEventListener('visibilitychange',()=>{syncTaskPanes();if(document.hidden)return;updateTimers();loadServer();loadProjectActivity();if(tab==='stats')loadStats();});
 })();

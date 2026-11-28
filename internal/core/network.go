@@ -198,6 +198,8 @@ type netBody struct {
 	SenderAgent      string `json:"sender_agent,omitempty"`
 	SenderModel      string `json:"sender_model,omitempty"`
 	Title            string `json:"title,omitempty"`
+	TitleVersion     int64  `json:"title_version,omitempty"`
+	ArchiveVersion   int64  `json:"archive_version,omitempty"`
 	Description      string `json:"description,omitempty"`
 	Text             string `json:"text,omitempty"`
 	Model            string `json:"model,omitempty"`
@@ -1214,15 +1216,20 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 		if err := advanceNetCursor(tx, broker, m.Seq); err != nil {
 			return err
 		}
+		b, valid := decodeNetIncoming(m)
+		from := netLink{broker: broker, peer: m.From, task: b.Task}
+		if valid && taskMetadataUpdate(b.Kind) {
+			// Match the already bound origin. Its revision guards retries
+			// without letting another peer claim its operation ID or route.
+			return applyTaskMetadata(tx, from, b)
+		}
 		apply, err := claimNetDelivery(tx, broker, m)
 		if err != nil || !apply {
 			return err
 		}
-		b, valid := decodeNetIncoming(m)
 		if !valid {
 			return nil
 		}
-		from := netLink{broker: broker, peer: m.From, task: b.Task}
 		if c := validComputer(b.Computer); c != "" {
 			if err := rebindComputer(tx, c, broker, m.From); err != nil {
 				return err
@@ -1766,7 +1773,7 @@ func NetDescribe(body []byte) (desc string, progress bool) {
 // parkedKinds are the replies of the computer that runs another computer's
 // task. When their recipient is not in the network, they are parked, not
 // dropped (T-146).
-var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "note_refused": true, "output": true, "ran_model": true, "run_usage": true}
+var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "note_refused": true, "output": true, "ran_model": true, "run_usage": true, "rename_task": true, "archive_task": true}
 
 // parkedPrefix marks the broker of a parked message, so it is not sent
 // until its recipient is back.

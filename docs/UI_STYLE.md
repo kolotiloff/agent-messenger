@@ -44,6 +44,8 @@ The composer keeps its surface radius (16 px) at every height. The inset icon co
 
 The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane.
 
+Message actions and the timestamp share a visible row one control gap (8 px) below the message. The executor's row starts at the text edge, with the timestamp after the actions. An outgoing row ends at the bubble edge, with the timestamp before the actions. The next message group starts one region gap (24 px) below the row.
+
 ## Sizes
 
 - Controls: `--am-control` 32 (composer controls and drop-down options), `--am-control-compact` 28 (ordinary one-line fields, buttons, tabs and select triggers in the current layout), `--am-control-chip` 24 (buttons inside an error chip).

@@ -303,7 +303,12 @@ func TestCodexKotelCoordinatorPreservesNamedPermissions(t *testing.T) {
 			if err := os.Mkdir(filepath.Dir(path), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			before := "[mcp_servers." + name + "]\r\ncommand = " + old + " # keep\r\nargs = [\"--root\"," + tomlBasic(root) + ",\"coordinator\",\"--project\",\"Game\"]\r\ndisabled_tools=[\"cancel\"]\r\n[mcp_servers." + name + ".tools.wait]\r\napproval_mode=\"prompt\"\r\n"
+			before := "[mcp_servers." + name + "] # project coordinator\r\n" +
+				"command = " + old + " # keep\r\n" +
+				"args = [\"--root\"," + tomlBasic(root) + ",\"coordinator\",\"--project\",\"Game\"]\r\n" +
+				"disabled_tools=[\"cancel\"]\r\n" +
+				"[mcp_servers." + name + ".tools.wait] # rule = keep\r\n" +
+				"approval_mode=\"prompt\"\r\n"
 			if err := os.WriteFile(path, []byte(before), 0o600); err != nil {
 				t.Fatal(err)
 			}

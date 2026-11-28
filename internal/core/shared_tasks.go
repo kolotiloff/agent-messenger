@@ -53,6 +53,7 @@ type NetTask struct {
 	WaitsForLock  string `json:"waits_for_lock,omitempty"`
 	Model         string `json:"model,omitempty"`
 	FinishedAt    string `json:"finished_at,omitempty"`
+	Archived      bool   `json:"archived,omitempty"`
 	Report        string `json:"report,omitempty"`
 	Tokens        int64  `json:"tokens,omitempty"`
 	// RunsOnPeer and RunsOn: the computer the task was sent to (T-186).
@@ -116,7 +117,7 @@ func (s *Store) SharedTasks(since time.Time) ([]NetTask, error) {
 // A task sent in an earlier network is left out: its peer id there may
 // name another computer of this one (linkComputer).
 func tasksForSharing(db *sql.DB, since time.Time, broker string) ([]NetTask, error) {
-	rows, err := db.Query(`SELECT t.id,t.project,t.title,t.provider,t.state,t.created_at,COALESCE(t.finished_at,''),t.usage_input+t.usage_output,COALESCE(t.remote_peer,''),
+	rows, err := db.Query(`SELECT t.id,t.project,t.title,t.provider,t.state,t.created_at,COALESCE(t.finished_at,''),t.archive_state='archived',t.usage_input+t.usage_output,COALESCE(t.remote_peer,''),
  COALESCE(CASE WHEN launch.kind='launch_observed' THEN launch.text END,
   (SELECT MIN(launched_at) FROM task_runs WHERE task_id=t.id),''),
  COALESCE(t.state='running' AND launch.kind='launch_queued',0),
@@ -136,7 +137,7 @@ func tasksForSharing(db *sql.DB, since time.Time, broker string) ([]NetTask, err
 	out := []NetTask{}
 	for rows.Next() {
 		var t NetTask
-		if err := rows.Scan(&t.ID, &t.Project, &t.Title, &t.Agent, &t.State, &t.CreatedAt, &t.FinishedAt, &t.Tokens, &t.RunsOnPeer, &t.StartedAt,
+		if err := rows.Scan(&t.ID, &t.Project, &t.Title, &t.Agent, &t.State, &t.CreatedAt, &t.FinishedAt, &t.Archived, &t.Tokens, &t.RunsOnPeer, &t.StartedAt,
 			&t.PendingLaunch, &t.WaitsForLock, &t.Model, &t.Report); err != nil {
 			return nil, err
 		}
@@ -196,16 +197,19 @@ func (s *Store) SetNetTasks(peers []NetPeerTasks) error {
 // has not finished is refused: the owner stops it first.
 func (s *Store) HideTask(id string) error {
 	return s.taskTx(id, func(_ *sql.Tx, tx *sql.Tx) error {
-		var state string
-		err := tx.QueryRow(`SELECT state FROM tasks WHERE id=?`, id).Scan(&state)
+		var state, archive string
+		err := tx.QueryRow(`SELECT state,archive_state FROM tasks WHERE id=?`, id).Scan(&state, &archive)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: unknown task", ErrRejected)
 		}
 		if err != nil {
 			return err
 		}
-		if state != "done" && state != "failed" && state != "cancelled" {
+		if !finishedTask(state) {
 			return fmt.Errorf("%w: stop the task before removing it", ErrRejected)
+		}
+		if archive == archiveStored {
+			return fmt.Errorf("%w: архивную задачу можно убрать только из архива", ErrRejected)
 		}
 		_, err = tx.Exec(`UPDATE tasks SET hidden_at=COALESCE(hidden_at,?) WHERE id=?`, now(), id)
 		return err

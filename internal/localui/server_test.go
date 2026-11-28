@@ -138,7 +138,7 @@ func TestUIUnavailableIsNotEmptySuccess(t *testing.T) {
 
 func TestUIAssetsEmbeddedWithoutPrivateCapability(t *testing.T) {
 	h := newHandler("127.0.0.1:1234", "secret-token", nil, nil)
-	for _, path := range []string{"/", "/app.js", "/i18n.js", "/app.css", "/design-v1.css"} {
+	for _, path := range []string{"/", "/app.js", "/i18n.js", "/app.css", "/design-v1.css", "/fonts/Inter.woff2", "/fonts/SourceSans3.woff2"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", "http://127.0.0.1:1234"+path, nil))
 		if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "secret-token") {
@@ -146,6 +146,11 @@ func TestUIAssetsEmbeddedWithoutPrivateCapability(t *testing.T) {
 		}
 		if path == "/" && !strings.Contains(w.Body.String(), `id="am-concept" class="am-task-sidebar-preview"`) {
 			t.Fatal("the regular window route must use the current task layout")
+		}
+		if strings.HasSuffix(path, ".woff2") &&
+			(w.Header().Get("Content-Type") != "font/woff2" || !strings.HasPrefix(w.Body.String(), "wOF2") ||
+				!strings.Contains(w.Header().Get("Content-Security-Policy"), "font-src 'self'")) {
+			t.Fatalf("font asset %s invalid", path)
 		}
 	}
 }
