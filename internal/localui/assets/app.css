@@ -822,8 +822,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 }
 #am-concept #task-draft { position:relative; }
 #am-concept #task-draft > .am-dictation-status { inset-block-start:0; inset-block-end:auto; translate:0 calc(-100% - var(--am-space-2)); }
-/* T-124: stop and send light up the same way on hover, with a gap between. */
 #am-concept .am-stop-btn { position:relative; width:var(--am-control); height:var(--am-control); padding:0; flex-shrink:0; border-radius:var(--am-radius-m); background:transparent; }
+#am-concept.am-task-sidebar-preview .am-compose-field > :is(#task-stop,#answer-send,#task-draft-send) { border-radius:calc(var(--am-control) / 2); }
+#am-concept.am-task-sidebar-preview .am-compose-field > :is(#task-stop,#answer-send,#task-draft-send):enabled { background:var(--am-active); color:var(--am-onactive); }
+#am-concept.am-task-sidebar-preview .am-compose-field > :is(#task-stop,#answer-send,#task-draft-send):enabled:is(:hover,:focus-visible) { background:var(--am-active-hover); }
 #am-concept .am-stop-square { width:var(--am-action-icon-size); height:var(--am-action-icon-size); fill:currentColor; }
 #am-concept .am-compose-field :is(.am-send-icon,.am-stop-btn) > svg { width:var(--am-action-icon-size); height:var(--am-action-icon-size); stroke-width:var(--am-action-icon-stroke); }
 #am-concept .am-tip { position:absolute; top:50%; right:calc(100% + var(--am-space-2)); transform:translateY(-50%); display:none; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-composer); color:var(--am-text); white-space:nowrap; box-shadow:var(--am-shadow-s); pointer-events:none; }
@@ -834,16 +836,19 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept #answer-live-tokens { margin:0 var(--am-space-4) var(--am-gap-control); text-align:end; }
 #am-concept.am-task-sidebar-preview .am-compose-field:has(textarea:focus-visible) { border-color:var(--am-check); }
 #am-concept.am-task-sidebar-preview .am-compose-field textarea { padding-inline:var(--am-space-2); }
-#am-concept .am-draft-options { display:flex; align-items:center; flex-wrap:wrap; gap:var(--am-gap-control); }
-#am-concept .am-draft-options [aria-controls="task-draft-model-menu"] { margin-inline-start:auto; }
-#am-concept .am-answer-context { display:flex; align-items:center; justify-content:flex-end; gap:var(--am-gap-content); padding-inline:var(--am-space-2); margin-block-start:var(--am-space-2); }
+#am-concept .am-composer-context { display:flex; align-items:center; gap:var(--am-gap-control); margin-block-start:var(--am-space-2); padding-inline-end:var(--am-space-2); }
+#am-concept .am-composer-context > div { display:flex; align-items:center; gap:var(--am-gap-control); min-width:0; }
+#am-concept .am-composer-route { flex:1 1 auto; }
+#am-concept .am-composer-details { justify-content:flex-end; }
+#am-concept .am-composer-route-label { display:flex; align-items:center; gap:var(--am-gap-control); min-width:0; min-height:var(--am-control-compact); padding-inline:var(--am-space-2); }
+#am-concept .am-composer-route-label > span,
+#am-concept .am-composer-details > #answer-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept #answer-model { color:var(--am-text); }
 #am-concept #answer-model { translate:0 var(--am-reply-label-offset,0px); }
 #am-concept .am-compose-access { display:inline-flex; align-items:center; justify-content:center; flex:none; color:var(--am-text); }
-#am-concept .am-answer-context > .am-compose-access { width:var(--am-control-compact); height:var(--am-control-compact); }
+#am-concept .am-composer-details > .am-compose-access { width:var(--am-control-compact); height:var(--am-control-compact); }
 #am-concept .am-compose-access.am-full-access { color:var(--am-full-access); }
 #am-concept .am-compose-access > svg { width:var(--am-space-4); height:var(--am-space-4); flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
-#am-concept .am-answer-context > #answer-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept button.am-token-indicator { display:grid; place-items:center; flex:none; width:var(--am-control-compact); height:var(--am-control-compact); min-height:var(--am-control-compact); padding:0; border-radius:var(--am-radius-s); color:var(--am-muted); }
 #am-concept .am-token-indicator svg { display:block; width:var(--am-space-4); height:var(--am-space-4); fill:none; stroke:currentColor; stroke-width:2.5; }
 #am-concept .am-token-indicator[data-context-known] .am-context-track { opacity:.35; }
@@ -860,7 +865,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept #task-draft .am-select-trigger { justify-content:flex-start; border:0; background:transparent; padding-inline:var(--am-space-2); font:inherit; }
 #am-concept #task-draft .am-select-trigger:enabled { color:inherit; }
 #am-concept #task-draft .am-select-trigger:is(:hover,:focus-visible,[aria-expanded=true]):enabled { background:var(--am-field-hover); color:var(--am-text); }
-#am-concept .am-draft-options .am-select-trigger > svg { width:var(--am-space-4); height:var(--am-space-4); flex:none; fill:none; stroke:currentColor; stroke-width:var(--am-action-icon-stroke); stroke-linecap:round; stroke-linejoin:round; }
+#am-concept :is(.am-draft-options .am-select-trigger,.am-composer-route-label) > svg { width:var(--am-space-4); height:var(--am-space-4); flex:none; fill:none; stroke:currentColor; stroke-width:var(--am-action-icon-stroke); stroke-linecap:round; stroke-linejoin:round; }
 #am-concept #task-draft-status { margin:var(--am-gap-control) 0 0; }
 #am-concept #task-draft-status:empty { display:none; }
 #am-concept :is(#answer-status,#task-stop-status) { margin:0 var(--am-space-4) var(--am-gap-control); font-size:var(--am-text-s); line-height:1.45; }
@@ -1501,12 +1506,13 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-chat-layout[data-split-caption] { grid-template-rows:var(--am-caption-height) minmax(0,1fr); }
 #am-concept [data-split-caption] > .am-pane-board { grid-row:1 / -1; }
 #am-concept .am-pane-toolbar { display:flex; align-self:stretch; gap:var(--am-gap-control); min-width:0; flex:1; }
-#am-concept .am-task-toolbar:has(> .am-pane-toolbar:not([hidden])) { min-block-size:var(--am-caption-height); padding-block:0; padding-inline-start:0; }
+#am-concept .am-task-toolbar:has(> .am-pane-toolbar:not([hidden]), > .am-chat-head > .am-pane-strip) { min-block-size:var(--am-caption-height); padding-block:0; padding-inline-start:0; }
+#am-concept .am-task-toolbar > .am-chat-head:has(> .am-pane-strip) { display:flex; align-items:stretch; align-self:stretch; }
 #am-concept [data-split-caption] > .am-task-toolbar { z-index:6; justify-content:flex-end; padding-block:0; pointer-events:none; }
 #am-concept [data-split-caption] > .am-task-toolbar > #list-toggle { pointer-events:auto; }
 #am-concept .am-pane-strip { display:flex; flex:1; min-width:0; overflow:auto; }
 #am-concept .am-pane-tab { display:flex; flex:0 0 auto; align-items:center; max-inline-size:calc(var(--am-control) * 7); padding-inline-end:var(--am-space-1); border-inline-end:1px solid var(--am-line); cursor:grab; }
-#am-concept .am-pane-tab > [role=tab] { align-self:stretch; flex:1; min-width:0; display:block; overflow:hidden; text-align:start; text-overflow:ellipsis; white-space:nowrap; cursor:grab; min-height:var(--am-control-compact); padding:var(--am-space-1) var(--am-space-2) var(--am-space-1) var(--am-space-3); border-radius:0; }
+#am-concept .am-pane-tab > [role=tab] { align-self:stretch; flex:1; min-width:0; display:block; overflow:hidden; text-align:start; text-overflow:ellipsis; white-space:nowrap; cursor:grab; min-height:var(--am-control-compact); padding:var(--am-space-1) var(--am-space-2) var(--am-space-1) var(--am-space-3); border-radius:0; line-height:var(--am-computer-heading-line); }
 #am-concept .am-pane-tab:is(:hover,:has(:focus-visible)) { background:var(--am-list-row-hover); }
 #am-concept .am-pane-tab[data-active] { background:var(--am-task-selected); }
 #am-concept .am-pane-tab > [role=tab]:is(:hover,:focus-visible,:active):enabled { background:transparent; }
@@ -1527,7 +1533,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 }
 body.am-frameless #am-concept .am-pane-header[data-caption-end] { padding-inline-end:calc(3 * var(--am-window-button-width) + var(--am-control-compact) + 2 * var(--am-space-1)); }
 @media (min-width:621px) {
-  body.am-mac-titlebar #am-concept.am-nav-collapsed :is(.am-task-toolbar:has(> .am-pane-toolbar:not([hidden])), .am-pane-header[data-caption-start]) {
+  body.am-mac-titlebar #am-concept.am-nav-collapsed :is(.am-task-toolbar:has(> .am-pane-toolbar:not([hidden]), > .am-chat-head > .am-pane-strip), .am-pane-header[data-caption-start]) {
     padding-inline-start:calc(var(--am-mac-caption-reserve) + var(--am-control-compact) + var(--am-gap-content));
   }
 }
@@ -1553,8 +1559,8 @@ body.am-frameless #am-concept .am-pane-header[data-caption-end] { padding-inline
 #am-concept .am-model-group-title { display:flex; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); color:var(--am-muted); font-size:var(--am-text-s); }
 #am-concept .am-model-group-title svg { width:var(--am-space-4); height:var(--am-space-4); }
 #am-concept .am-model-group:not([hidden]) ~ .am-model-group:not([hidden]) { border-block-start:1px solid var(--am-menu-line); }
-#am-concept .am-compose-field > :is(#task-draft-add,#answer-add,#task-draft-access):not([hidden]) ~ textarea,
-#am-concept .am-compose-field > :is(#task-draft-add,#answer-add,#task-draft-access):not([hidden]) ~ .am-dictation-entry > textarea { padding-inline-start:0; }
+#am-concept .am-compose-field > :is(#task-draft-add,#answer-add):not([hidden]) ~ textarea,
+#am-concept .am-compose-field > :is(#task-draft-add,#answer-add):not([hidden]) ~ .am-dictation-entry > textarea { padding-inline-start:0; }
 #am-concept .am-context-menu > button.am-select-option { width:100%; text-align:start; }
 @media (hover:hover) {
   #am-concept .am-message-group:not(:hover):not(:focus-within) > .am-message-actions { opacity:0; }

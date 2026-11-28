@@ -305,7 +305,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				return
 			}
 			limit := int64(64 << 10)
-			if r.URL.Path == "/api/task-start" {
+			if r.URL.Path == "/api/task-start" || r.URL.Path == "/api/task-answer" || r.URL.Path == "/api/task-note" {
 				// Include task text, escaping and base64 attachment overhead.
 				limit = 512 << 10
 			}
@@ -830,27 +830,28 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			cmd = "task-owner-start-with-attachments"
 		}
 		return control.Request{Cmd: cmd, Access: in.Access, Project: in.Project, Computer: in.Computer, Provider: in.Agent, Model: in.Model, Confirmation: in.OpID, Text: in.Text, Attachments: in.Attachments}, true
-	case "/api/task-answer":
+	case "/api/task-answer", "/api/task-note":
 		var in struct {
-			Task     string `json:"task"`
-			Question string `json:"question"`
-			OpID     string `json:"op_id"`
-			Text     string `json:"text"`
+			Task        string                `json:"task"`
+			Question    string                `json:"question,omitempty"`
+			OpID        string                `json:"op_id"`
+			Text        string                `json:"text"`
+			Attachments []core.TaskAttachment `json:"attachments,omitempty"`
 		}
-		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 || in.Question == "" || len(in.Question) > 128 || in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
+		answer := path == "/api/task-answer"
+		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 ||
+			answer != (in.Question != "") || len(in.Question) > 128 ||
+			in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
 			return control.Request{}, false
 		}
-		return control.Request{Cmd: "task-owner-answer", MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text}, true
-	case "/api/task-note":
-		var in struct {
-			Task string `json:"task"`
-			OpID string `json:"op_id"`
-			Text string `json:"text"`
+		cmd := "task-owner-note"
+		if answer {
+			cmd = "task-owner-answer"
 		}
-		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 || in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
-			return control.Request{}, false
+		if len(in.Attachments) != 0 {
+			cmd = "task-owner-message-with-attachments"
 		}
-		return control.Request{Cmd: "task-owner-note", MessageID: in.Task, Confirmation: in.OpID, Text: in.Text}, true
+		return control.Request{Cmd: cmd, MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text, Attachments: in.Attachments}, true
 	case "/api/server-action":
 		var in struct {
 			Action    string `json:"action,omitempty"`

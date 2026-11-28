@@ -149,6 +149,15 @@ func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, vi
 		if waiting+len(text) > 4*MaxTaskText {
 			return fmt.Errorf("%w: too much is already waiting for the worker", ErrRejected)
 		}
+		var fileMessages int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM message_attachments AS a WHERE a.task_id=? AND (
+ a.op_id=? OR a.op_id IN (SELECT op_id FROM task_owner_notes WHERE task_id=? AND state='pending')
+ )`, task, opID, task).Scan(&fileMessages); err != nil {
+			return err
+		}
+		if fileMessages > 4 {
+			return fmt.Errorf("%w: too many messages with attachments are already waiting for the worker", ErrRejected)
+		}
 		id, err := randomID()
 		if err != nil {
 			return err

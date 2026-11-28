@@ -94,3 +94,45 @@ func TestPersonalConversationStaysInSidebarUntilArchived(t *testing.T) {
 	}
 	check(true)
 }
+
+func TestStoppedPersonalConversationStaysWithActiveTasks(t *testing.T) {
+	f := newTaskFixture(t)
+	direct, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "direct-stop", Provider: "codex", Text: "Personal conversation", ByOwner: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordinated := f.start(t, "coordinator-stop", "codex", "Coordinated task")
+	for i, task := range []string{direct, coordinated} {
+		run := f.launch(t, task, []string{"019a0000-0000-7000-8000-0000000000a1", "019a0000-0000-7000-8000-0000000000a2"}[i])
+		if state, err := f.st.CancelTask(task); err != nil || state != "cancelling" {
+			t.Fatalf("request stop: %s, %v", state, err)
+		}
+		exit := cleanExit
+		exit.Cancelled = true
+		if state, err := f.st.FinishTaskRun(run.ID, exit); err != nil || state != "cancelled" {
+			t.Fatalf("finish stop: %s, %v", state, err)
+		}
+	}
+	view, err := f.st.WindowView("Game", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := map[string]bool{}
+	for _, task := range view.Tasks {
+		open[task.ID] = task.KeepOpen
+	}
+	if !open[direct] || open[coordinated] {
+		t.Fatalf("stopped direct and coordinated tasks: %v", open)
+	}
+	archive, err := f.st.WindowTaskHistory("Game", "", "", "")
+	if err != nil || len(archive.Tasks) != 1 || archive.Tasks[0].ID != coordinated {
+		t.Fatalf("only the coordinated task should be archived: %+v, %v", archive, err)
+	}
+	if err := f.st.SetTaskArchive(direct, "archive", 0); err != nil {
+		t.Fatal(err)
+	}
+	archive, err = f.st.WindowTaskHistory("Game", "", "", "")
+	if err != nil || len(archive.Tasks) != 2 {
+		t.Fatalf("archive after manual action: %+v, %v", archive, err)
+	}
+}

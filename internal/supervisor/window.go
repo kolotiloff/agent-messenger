@@ -219,6 +219,14 @@ func (s *Supervisor) OwnerNote(task, op, text string) error {
 	return s.store.AddOwnerNote(task, op, text)
 }
 
+func (s *Supervisor) OwnerMessageWithAttachments(task, question, op, text string, files []core.TaskAttachment) error {
+	if err := s.store.AddOwnerMessageWithAttachments(task, question, op, text, files); err != nil {
+		return err
+	}
+	s.wakeTaskDispatch()
+	return nil
+}
+
 // SetAgent registers an agent program for tasks with the worker profile.
 func (s *Supervisor) SetAgent(provider, cli, environment string) error {
 	return s.store.SetComputerAgent(provider, cli, environment, "worker")

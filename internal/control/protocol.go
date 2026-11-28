@@ -507,6 +507,17 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true, Overview: json.RawMessage(strconv.Quote(id))}
+	case "task-owner-message-with-attachments":
+		h, ok := handler.(interface {
+			OwnerMessageWithAttachments(task, question, op, text string, files []core.TaskAttachment) error
+		})
+		if !ok {
+			return Response{Error: "sending attachments requires an updated background client"}
+		}
+		if err := h.OwnerMessageWithAttachments(request.MessageID, request.ConversationID, request.Confirmation, request.Text, request.Attachments); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "task-owner-note":
 		h, ok := handler.(interface {
 			OwnerNote(string, string, string) error

@@ -314,8 +314,8 @@ if (require.main === module) (async()=>{
     const oldDate=await chatDate.getAttribute('datetime');
     const sameDate=tasks.game.find(t=>t.id==='game-1').created_at;
     const otherDate=tasks.tools.find(t=>t.id==='tools-1').created_at;
-    assert.equal(await preview.locator('#task-head > h3').innerText(),'Параллельная задача');
-    assert.deepEqual(await preview.locator('#task-head > *').evaluateAll(nodes=>nodes.map(node=>node.tagName)),['H3']);
+    await preview.locator('#task-head').getByRole('tab',{name:'Параллельная задача',exact:true}).waitFor();
+    await preview.locator('#task-head').getByRole('button',{name:'Закрыть вкладку Параллельная задача',exact:true}).waitFor();
     assert.equal(await chatDate.evaluate(node=>getComputedStyle(node).alignSelf),'center');
     assert.equal(await thread.locator('.am-outgoing .am-message-content').first().evaluate(node=>getComputedStyle(node).padding),'12px');
     const reportStatus=thread.locator('.am-delivery-close');
@@ -608,15 +608,20 @@ if (require.main === module) (async()=>{
         return mode.height>0&&mode.top>=field.bottom&&mode.left>=model.right&&mode.right<=field.right;
       });
       assert.equal(await accessBelow(replyAccess),true);
-      assert.deepEqual(await draftPage.locator('#compose .am-compose-field').evaluate(field=>{
-        const stopButton=field.querySelector('#task-stop'),sendButton=field.querySelector('#answer-send');
-        const stop=stopButton.getBoundingClientRect(),send=sendButton.getBoundingClientRect();
-        const icons=Array.from(field.querySelectorAll('#task-stop > svg,#answer-send > svg'),svg=>svg.getBoundingClientRect().width);
-        const box=field.getBoundingClientRect();
-        return [stop.width,stop.height,send.width,send.height,send.left-stop.right,
-          box.right-send.right,box.bottom-send.bottom,send.top-box.top,
-          ...icons,getComputedStyle(sendButton).borderRadius,getComputedStyle(stopButton).borderRadius];
-      }),[32,32,32,32,8,9,9,9,16,16,'12px','12px']);
+      assert.equal(await draftPage.locator('#answer-project').textContent(),'Игра');
+      assert.equal(await draftPage.locator('#answer-computer').textContent(),'Мак');
+      const replyStop=draftPage.locator('#task-stop'),replySend=draftPage.locator('#answer-send');
+      const replyInput=draftPage.locator('#answer-text');
+      assert.equal(await replySend.isVisible(),false);
+      const stopBounds=await replyStop.boundingBox();
+      assert.equal(await replyStop.evaluate(button=>getComputedStyle(button).borderRadius),'16px');
+      await replyInput.fill('Проверка кнопки отправки');
+      assert.equal(await replyStop.isVisible(),false);
+      assert.deepEqual(await replySend.boundingBox(),stopBounds);
+      assert.equal(await replySend.evaluate(button=>getComputedStyle(button).borderRadius),'16px');
+      await replyInput.fill('');
+      assert.equal(await replySend.isVisible(),false);
+      assert.deepEqual(await replyStop.boundingBox(),stopBounds);
       const disclosure=local.locator('.am-sidebar-disclosure');
       assert.equal(await disclosure.locator('svg').count(),0);
       assert.deepEqual(await disclosure.boundingBox(),await local.locator('.am-machine-name').boundingBox());
@@ -1046,8 +1051,8 @@ if (require.main === module) (async()=>{
       const modelTrigger=form.getByRole('button',{name:'Модель',exact:true});
       assert.equal(await modelTrigger.evaluate(node=>{
         const context=node.closest('.am-draft-options'),field=context.previousElementSibling;
-        const [plus,shield,text,send]=Array.from(field.children,item=>item.getBoundingClientRect());
-        return plus.right<=shield.left&&shield.right<=text.left&&text.right<=send.left&&plus.top===shield.top&&shield.top===text.top&&text.top===send.top&&
+        const [plus,text,mic]=Array.from(field.children).filter(item=>!item.hidden).map(item=>item.getBoundingClientRect());
+        return plus.right<=text.left&&text.right<=mic.left&&plus.top===text.top&&text.top===mic.top&&
           context.querySelectorAll('.am-select-trigger').length===3&&
           field.getBoundingClientRect().bottom<context.getBoundingClientRect().top;
       }),true);
@@ -1076,8 +1081,12 @@ if (require.main === module) (async()=>{
       }));
       await select(draftPage,'task-draft-computer','Мак');
       assert.equal(await form.locator('#task-draft-access').getAttribute('aria-label'),'С ограничениями');
-      assert.equal(await form.locator('.am-compose-field > #task-draft-access').isVisible(),true);
       const shield=form.locator('#task-draft-access');
+      assert.equal(await shield.evaluate(node=>{
+        const foot=node.closest('.am-composer-context');
+        const field=foot.previousElementSibling;
+        return node.getBoundingClientRect().top>=field.getBoundingClientRect().bottom;
+      }),true);
       await shield.press('Space');
       const defaultAccess=draftPage.getByRole('menuitemradio',{name:'Как на компьютере исполнителя'});
       await defaultAccess.waitFor();
@@ -1228,6 +1237,9 @@ if (require.main === module) (async()=>{
       assert.equal(await replyAccess.getAttribute('aria-label'),'Доступ на ПК-1');
       assert.equal(await replyAccess.getAttribute('title'),'Доступ задаётся на ПК-1');
       assert.equal(await accessBelow(replyAccess),true);
+      assert.equal(await draftPage.locator('#answer-project').textContent(),'Инструменты');
+      assert.equal(await draftPage.locator('#answer-computer').textContent(),'ПК-1');
+      assert.equal(await draftPage.locator('#answer-context .am-composer-route button').count(),0);
       const footerCenters=await draftPage.locator('#answer-context').evaluate(async footer=>{
         await document.fonts.ready;
         const canvas=document.createElement('canvas').getContext('2d');
@@ -1284,7 +1296,7 @@ if (require.main === module) (async()=>{
         }});
       }
       await draftPage.locator('#answer-add').click();
-      assert.equal(await pathMenu.getByRole('button',{name:'Добавить файл…'}).isVisible(),false);
+      await pathMenu.getByRole('button',{name:'Добавить файл…'}).waitFor();
       await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
       await remotePath.fill('docs/reply.md');
       await remotePath.press('Enter');
@@ -1389,7 +1401,7 @@ if (require.main === module) (async()=>{
       await draftPage.getByRole('button',{name:'Отмена',exact:true}).click();
       assert.equal(hides(),initialHides);
       const headingStyles=()=>draftPage.evaluate(()=>{
-        return ['#project-heading','#task-head > h3','#task-list-heading'].map(selector=>{
+        return ['#project-heading','#task-head :is(h3,[role=tab])','#task-list-heading'].map(selector=>{
           const heading=document.querySelector(selector),style=getComputedStyle(heading);
           const bounds=heading.getBoundingClientRect();
           return [style.fontSize,style.fontWeight,style.lineHeight,bounds.top+bounds.height/2];
@@ -1398,7 +1410,7 @@ if (require.main === module) (async()=>{
       const [projectHeading,taskHeading,archiveHeading]=await headingStyles();
       assert.deepEqual(projectHeading.slice(0,3),['14px','400','21px']);
       assert.deepEqual(taskHeading.slice(0,3),['14px','400','21px']);
-      assert.equal(taskHeading[3],await verticalCenter(plus));
+      assert.equal(taskHeading[3],await verticalCenter(draftPage.locator('#list-toggle')));
       assert.deepEqual(archiveHeading.slice(0,3),taskHeading.slice(0,3));
       assert(archiveHeading[3]>taskHeading[3]);
       await archive.getByText('Инструменты, Готовый отчёт',{exact:true}).waitFor();
@@ -1601,7 +1613,7 @@ if (require.main === module) (async()=>{
       const start=await date.boundingBox();
       assert.equal(start.y-box.y-box.height,12);
       await mac.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
-      await mac.locator('#task-head h3').getByText('Экран настроек').waitFor();
+      await mac.locator('#task-head').getByRole('tab',{name:'Экран настроек',exact:true}).waitFor();
       await mac.locator('#thread').getByText('Принято на компьютере ПК-1 $&',{exact:true}).waitFor();
       assert.equal(await date.getAttribute('datetime'),tasks.game[0].created_at);
       assert(await date.evaluate(n=>n===n.parentNode.firstElementChild&&n.parentNode.id==='thread'));
@@ -1956,8 +1968,8 @@ if (require.main === module) (async()=>{
         const microphone=field.querySelector('.am-dictation-button');
         const mic=microphone.getBoundingClientRect();
         const input=field.querySelector('textarea').getBoundingClientRect();
-        return [add.left-box.left,box.right-send.right,box.bottom-send.bottom,add.top-box.top,input.width>32,
-          mic.width,send.left-mic.right,getComputedStyle(microphone).borderRadius];
+        return [add.left-box.left,box.right-mic.right,box.bottom-send.bottom,add.top-box.top,input.width>32,
+          mic.width,mic.left-send.right,getComputedStyle(microphone).borderRadius];
       }),[9,9,9,9,true,32,8,'12px']);
     }finally{await compactPreview.close();}
 

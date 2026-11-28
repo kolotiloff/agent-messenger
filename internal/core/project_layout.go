@@ -73,7 +73,7 @@ func (p *projectLayout) open(file string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("upgrade project task usage: %w", err)
 	}
-	if _, err := db.Exec(taskAnalyticsSchema + taskAttachmentsSchema); err != nil {
+	if _, err := db.Exec(taskAnalyticsSchema + taskAttachmentsSchema + messageAttachmentsSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize project statistics: %w", err)
 	}

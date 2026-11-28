@@ -132,6 +132,7 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		{"task_outputs", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_images", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_attachments", "task_id IN (SELECT id FROM snapshot.tasks)"},
+		{"message_attachments", "task_id IN (SELECT id FROM snapshot.tasks)"},
 	}
 	if withDelivery {
 		tables = append(tables, struct{ name, where string }{
@@ -215,6 +216,10 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 func copyProjectTable(ctx context.Context, tx *sql.Tx, source, table, where, project string) error {
 	var ddl string
 	if err := tx.QueryRowContext(ctx, "SELECT sql FROM "+source+".sqlite_schema WHERE type='table' AND name=?", table).Scan(&ddl); err != nil {
+		if errors.Is(err, sql.ErrNoRows) && (table == "message_attachments" || table == "task_attachments") {
+			// The source can predate either attachment table.
+			return nil
+		}
 		return err
 	}
 	definition, ok := strings.CutPrefix(ddl, "CREATE TABLE ")

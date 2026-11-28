@@ -521,10 +521,21 @@
       if(selection)focused.setSelectionRange(...selection);
     }
   }
+  function clearTaskWorkspace(){
+    taskWorkspaceCleared=true;
+    selectedTask='';selectedShared=null;feed=null;topTaskScope='';
+    renderThread();renderTaskList();startWindowWatch();
+  }
+  function focusEmptyWorkspace(){
+    if(draftOpen)$('task-draft-text').focus({preventScroll:true});
+    else $('thread').focus({preventScroll:true});
+  }
   function closePane(pane){
     const before=openPanes(),index=before.indexOf(pane);
     const primary=$('task-primary-pane');
     const hadFocus=pane.tab.contains(document.activeElement)||pane.cell.contains(document.activeElement);
+    const closedDraft=draftOpen&&pane===paneActive;
+    if(closedDraft)closeTaskDraft();
     if(pane.header.contains(paneStrip))placePaneCaption([]);
     pane.chat.contentWindow?.messengerCancelDictation?.();
     taskPanes.delete(pane.id);
@@ -534,22 +545,18 @@
     pane.tab.remove();pane.cell.remove();
     if(paneActive===pane)paneActive=before[index+1]||before[index-1]||null;
     if(before.length===1&&paneBoard){
-      taskWorkspaceCleared=true;
-      selectedTask='';selectedShared=null;feed=null;topTaskScope='';
       primary.hidden=false;
       primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
       $('task-head').hidden=false;paneToolbar.remove();
       preservePaneFocus(()=>paneBoard.replaceWith(primary));
       taskPanes.clear();
       paneBoard=paneStrip=paneToolbar=paneGrid=null;
-      renderThread();renderTaskList();startWindowWatch();
-    }
+      clearTaskWorkspace();
+    }else if(closedDraft)renderThread();
     syncTaskPanes();renderMachines();
     if(hadFocus){
       if(paneActive)paneActive.label.focus({preventScroll:true});
-      else if(draftOpen)$('task-draft-text').focus({preventScroll:true});
-      else if(!$('compose').hidden&&!$('answer-text').disabled)$('answer-text').focus({preventScroll:true});
-      else $('thread').focus({preventScroll:true});
+      else focusEmptyWorkspace();
     }
     savePanes();
   }
@@ -619,7 +626,7 @@
     const last=taskPanes.get(top.at(-1)?.node)?.header;
     const destination=last||paneToolbar;
     layout.toggleAttribute('data-split-caption',!!last);
-    paneToolbar.hidden=!!last||draftOpen;
+    paneToolbar.hidden=!!last||(draftOpen&&!paneActive);
     for(const {header} of taskPanes.values()){
       header.toggleAttribute('data-caption',top.some(position=>taskPanes.get(position.node).header===header));
       header.toggleAttribute('data-caption-start',header===first);
@@ -632,8 +639,8 @@
   if(!paneHost)window.messengerPaneTitle=(frame,title)=>{
     const pane=taskPanes.get(frame.closest('.am-pane-cell')?.dataset.taskPane);
     if(!pane||pane.chat!==frame)return;
-    pane.title=pane.label.textContent=pane.label.title=title;
-    pane.close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+title);
+    pane.title=title;
+    if(!draftOpen||pane!==paneActive)setTaskTabTitle(pane,title);
     savePanes();
   };
   function forEachPaneWindow(action){
@@ -646,18 +653,18 @@
     const primary=$('task-primary-pane');
     const current=taskPanes.get(selectedTask);
     const usePrimary=!!current&&current.project===project;
-    const showPrimary=!draftOpen&&usePrimary&&(current===paneActive||current.placement==='alongside');
-    primary.hidden=!!paneActive&&!draftOpen&&!showPrimary;
-    if(showPrimary){
+    const primaryPane=draftOpen?paneActive:usePrimary&&(current===paneActive||current.placement==='alongside')?current:null;
+    primary.hidden=!!paneActive&&!primaryPane;
+    if(primaryPane){
       primary.setAttribute('role','tabpanel');
-      primary.setAttribute('aria-labelledby',current.label.id);
+      primary.setAttribute('aria-labelledby',primaryPane.label.id);
     }
-    if(!showPrimary){primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');}
-    $('task-head').hidden=!draftOpen;
-    const shown=pane=>!draftOpen&&!!paneActive&&(pane===paneActive||pane.placement==='alongside');
+    if(!primaryPane){primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');}
+    $('task-head').hidden=!!paneActive||!draftOpen;
+    const shown=pane=>!!paneActive&&(pane===paneActive||pane.placement==='alongside');
     const ordered=[...taskPanes.values()];
     const visibleIDs=ordered.filter(shown).map(pane=>pane.id),visible=visibleIDs.length;
-    const primaryParent=showPrimary?current.cell:paneGrid;
+    const primaryParent=primaryPane?.cell||paneGrid;
     preservePaneFocus(()=>{
       if(primary.parentNode!==primaryParent)primaryParent.append(primary);
       let nextTab=null;
@@ -678,6 +685,7 @@
           nextTab=pane.tab;
         }
         pane.tab.toggleAttribute('data-active',active);
+        setTaskTabTitle(pane,draftOpen&&active?tr('Новая задача'):pane.title);
         pane.label.setAttribute('aria-controls',full?primary.id:pane.node.id);
         pane.label.setAttribute('aria-selected',String(active||localTab));
         pane.label.tabIndex=active||visible>1?0:-1;
@@ -704,6 +712,9 @@
   function switchActivePane(task,name){
     const previous=paneActive,pane=taskPanes.get(task.id);
     if(pane&&!pane.cell.hidden){activatePane(pane);return;}
+    replacePaneTask(previous,task,name);
+  }
+  function replacePaneTask(previous,task,name){
     let layout=null;
     if(previous){
       // Keep the displaced document for its draft without adding a tab.
@@ -725,8 +736,49 @@
     syncTaskPanes();
     savePanes();
   }
+  function createTaskTab(title,controls){
+    const tab=el('div',undefined,'am-pane-tab');
+    const label=el('button',undefined,'am-quiet-button');
+    const close=el('button',undefined,'am-icon-btn am-close-x');
+    label.type=close.type='button';
+    label.setAttribute('role','tab');label.setAttribute('aria-controls',controls);
+    tab.setAttribute('role','presentation');
+    close.append(svgIcon(closeIconPaths));
+    tab.append(label,close);
+    const result={tab,label,close};
+    setTaskTabTitle(result,title);
+    return result;
+  }
+  function setTaskTabTitle({label,close},title){
+    if(label.title===title&&label.textContent===title)return;
+    label.textContent=label.title=title;
+    close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+title);
+  }
+  let primaryTab=null;
+  function showPrimaryTaskTab(task,draggable){
+    const head=$('task-head');
+    if(!primaryTab){
+      const strip=el('div',undefined,'am-pane-strip');
+      strip.setAttribute('role','tablist');strip.setAttribute('aria-label',tr('Вкладки задач'));
+      primaryTab={...createTaskTab(task.title,'thread'),strip};
+      const {tab,label,close}=primaryTab;
+      tab.setAttribute('data-active','');label.setAttribute('aria-selected','true');
+      strip.append(tab);
+      const dismiss=()=>{clearTaskWorkspace();renderMachines();focusEmptyWorkspace();};
+      close.onclick=dismiss;
+      label.onkeydown=event=>{
+        if(event.key==='Delete'){event.preventDefault();dismiss();}
+      };
+      tab.ondragend=finishPaneDrag;
+    }
+    setTaskTabTitle(primaryTab,task.title);
+    primaryTab.tab.draggable=draggable;
+    primaryTab.tab.ondragstart=draggable?event=>startPaneDrag(event,task,project,true):null;
+    if(primaryTab.strip.parentNode!==head)head.replaceChildren(primaryTab.strip);
+  }
   function openTaskPane(task,name,placement='tab',restore=false,layout=null,target=''){
     if(!paneBoard){
+      primaryTab?.strip.remove();
       paneBoard=el('div',undefined,'am-pane-board');
       paneGrid=el('div',undefined,'am-pane-grid');
       paneStrip=el('div',undefined,'am-pane-strip');
@@ -765,23 +817,22 @@
       pane.placement=placement;activatePane(pane);return;
     }
     const cell=el('div',undefined,'am-pane-cell'),header=el('div',undefined,'am-pane-header');
-    const node=el('section',undefined,'am-pane-conversation'), tabNode=el('div',undefined,'am-pane-tab');
-    const label=el('button',task.title,'am-quiet-button');
-    const close=el('button',undefined,'am-icon-btn am-close-x');
+    const node=el('section',undefined,'am-pane-conversation');
     const chat=el('iframe',undefined,'am-pane-chat');chat.title=task.title;
     const uid=crypto.randomUUID();
     node.id='kotel-pane-'+uid;node.setAttribute('role','tabpanel');
     header.setAttribute('role','tablist');header.setAttribute('aria-label',tr('Вкладки задач'));
-    label.type=close.type='button';label.id='kotel-tab-'+uid;
-    label.title=task.title;label.setAttribute('role','tab');label.setAttribute('aria-controls',node.id);
+    const {tab:tabNode,label,close}=createTaskTab(task.title,node.id);
+    label.id='kotel-tab-'+uid;
     node.setAttribute('aria-labelledby',label.id);
-    tabNode.setAttribute('role','presentation');tabNode.draggable=true;
-    close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+task.title);
-    close.append(svgIcon(closeIconPaths));
+    tabNode.draggable=true;
     const pane={id:task.id,project:name,title:task.title,placement,cell,header,node,chat,tab:tabNode,label,close};
     cell.dataset.taskPane=task.id;
     chat.addEventListener('load',()=>paneVisibility(pane,!node.hidden));
-    label.onclick=()=>activatePane(pane);
+    label.onclick=()=>{
+      if(draftOpen&&pane===paneActive)$('task-draft-text').focus({preventScroll:true});
+      else activatePane(pane);
+    };
     close.onclick=()=>closePane(pane);
     label.onkeydown=event=>{
       const ordered=openPanes(),index=ordered.indexOf(pane);
@@ -816,7 +867,7 @@
       }
     };
     tabNode.ondragend=finishPaneDrag;
-    tabNode.append(label,close);node.append(chat);
+    node.append(chat);
     header.hidden=true;cell.hidden=true;cell.append(header,node);
     paneStrip.append(tabNode);paneGrid.append(cell);taskPanes.set(task.id,pane);
     if(!restore)activatePane(pane);
@@ -2924,6 +2975,12 @@
     const icon=svgIcon(['M12 2.25 3.75 6v5.25c0 4.5 3 7.5 8.25 10.5 5.25-3 8.25-6 8.25-10.5V6z']);
     node.append(icon);
   }
+  function showComposerRoute(node,icon,label,detail=label){
+    const name=node.lastElementChild;
+    if(name)name.textContent=label;
+    else node.append(svgIcon(icon),el('span',label));
+    node.title=detail;
+  }
   function taskDraftComputers(name){
     const local={id:'',name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents||[]};
     return [...((view?.projects||[]).find(p=>p.name===name)?.folder&&!['queued','updating'].includes(view.local_update?.state)?[local]:[]),
@@ -2958,6 +3015,14 @@
   }
   function canDraftTask(name){
     return online&&taskDraftComputers(name).some(computer=>taskDraftModels(computer).length);
+  }
+  let draftCanSend=false;
+  function renderDraftAction(){
+    const input=$('task-draft-text');
+    const dictation=composerDictation?.submissionState(input);
+    const send=$('task-draft-send');
+    send.hidden=!dictation&&!composerMessage(input);
+    send.disabled=send.hidden||!draftCanSend||!!composerAttachmentProblem(input)||dictation==='queued';
   }
   function renderTaskDraft(preferredProject,preferredComputer){
     const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
@@ -2994,7 +3059,8 @@
     input.readOnly=draftSending;
     $('task-draft-add').disabled=draftSending;
     const attachmentProblem=composerAttachmentProblem(input);
-    $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!composerMessage(input)||!!attachmentProblem;
+    draftCanSend=!draftSending&&online&&!!name&&!!computer&&!!model;
+    renderDraftAction();
     const status=$('task-draft-status');
     status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||attachmentProblem||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
     status.classList.toggle('am-status-bad',!draftSending&&!!(draftAttempt?.error||attachmentProblem));
@@ -3029,7 +3095,7 @@
     draftOpen=true;
     $('task-new').setAttribute('aria-expanded','true');
     $('task-draft').hidden=false;
-    if(!$('task-draft-text').value)$('task-draft-project').value=sidebarProject||project;
+    if(!$('task-draft-text').value)$('task-draft-project').value=paneActive?.project||sidebarProject||project;
     renderThread();
     if(name){draftAttachmentContext++;renderTaskDraft(name,computer);}
     if(focus)$('task-draft-text').focus();
@@ -3046,7 +3112,7 @@
     const bytes=files.reduce((sum,file)=>sum+(file.data?atob(file.data).length:0),0);
     if(files.length>64||bytes>112*1024)return tr('Вложения превышают лимит: 112 КБ или 64 файла и папки.');
     if(input.id==='task-draft-text'&&attachments.some(item=>item.computer!==undefined&&item.computer!==$('task-draft-computer').value))return tr('Вложения находятся на другом компьютере.');
-    return composerMessage(input).length>input.maxLength?tr('Сообщение с вложениями слишком длинное.'):'';
+    return (input.id==='answer-text'?replyContent(input).text:composerMessage(input)).length>input.maxLength?tr('Сообщение с вложениями слишком длинное.'):'';
   }
   function updateComposerAttachments(input,items){
     composerAttachments.set(input,items);
@@ -3115,12 +3181,11 @@
         if(isOpen()){menu.hidePopover();return;}
         if(busy)return;
         target={trigger,input,isDraft,computer:draftComputer.value,task:selectedTask};
-        const local=isDraft?!draftComputer.disabled&&!draftComputer.value:!selectedTaskRow()?.remote;
-        $('task-draft-local-pick').hidden=!isDraft&&!local;
+        $('task-draft-local-pick').hidden=false;
         manual.hidden=true;showPath.setAttribute('aria-expanded','false');
         status.textContent='';pathInput.value='';insertButton.disabled=true;
         menu.showPopover();trigger.setAttribute('aria-expanded','true');place(trigger);
-        (isDraft||local?pickers[0][1]:showPath).focus({preventScroll:true});
+        pickers[0][1].focus({preventScroll:true});
       });
     }
     menu.addEventListener('toggle',()=>{
@@ -3146,7 +3211,6 @@
       busy=true;for(const [,picker] of pickers)picker.disabled=true;
       status.textContent='';
       try{
-        if(!current.isDraft){insert(await requestPath(kind,pathInput.value.trim()),current);return;}
         const {attachments}=await choosePath('attach-'+kind,pathInput.value.trim());
         if(!valid(current)||!attachments?.length)return;
         const error=addComposerReferences(current.input,[{name:attachments[0].path.split('/')[0],files:attachments}]);
@@ -3211,9 +3275,9 @@
       const input=dropTarget();
       if(!input)return;
       const data=event.dataTransfer;
-      if(input.id==='task-draft-text'&&(data.files.length||[...data.items].some(item=>item.kind==='file'))){
-        const context=draftAttachmentContext;
-        const current=()=>context===draftAttachmentContext&&input===dropTarget();
+      if(data.files.length||[...data.items].some(item=>item.kind==='file')){
+        const context=draftAttachmentContext,task=selectedTask;
+        const current=()=>input===dropTarget()&&(input.id==='task-draft-text'?context===draftAttachmentContext:task===selectedTask);
         try{
           const items=await readComposerDrop(data);
           if(items.length&&current())report(input,addComposerReferences(input,items));
@@ -3228,20 +3292,7 @@
         }catch(_){return [];}
       });
       if(paths.length&&isLocal(input)){addPaths(input,paths);return;}
-      const files=[...data.files];
-      if(!files.length||files.length>16||files.some(file=>file.size>input.maxLength)){
-        report(input,tr('Перетащите файл из Finder или выберите его через меню вложений.'));return;
-      }
-      const task=selectedTask,computer=draftComputer.value;
-      try{
-        const decoder=new TextDecoder('utf-8',{fatal:true});
-        const items=await Promise.all(files.map(async file=>{
-          const text=decoder.decode(await file.arrayBuffer());
-          if(text.includes('\0'))throw Error();
-          return {name:file.name,text:tr('Файл {name}').replace('{name}',()=>file.name)+'\n'+text};
-        }));
-        if(input===dropTarget()&&task===selectedTask&&computer===draftComputer.value)report(input,addComposerReferences(input,items));
-      }catch(_){if(input===dropTarget())report(input,tr('Браузер передаёт только содержимое текстовых файлов. Выберите файл в приложении.'));}
+      report(input,tr('Перетащите файл из Finder или выберите его через меню вложений.'));
     });
   }
   async function readComposerDrop(data){
@@ -3417,9 +3468,10 @@
     if(menu.matches(':popover-open'))positionPopover(menu,trigger,null,true);
   }
   async function sendTaskDraft(event){
-    event.preventDefault();
-    if(composerDictation?.finishFor($('task-draft-text')))return;
+    event?.preventDefault();
     if(!draftOpen||$('task-draft-send').disabled)return;
+    if(composerDictation?.finishFor($('task-draft-text'),sendTaskDraft))return;
+    const originPane=paneActive;
     const selection=$('task-draft-model').value;
     const split=selection.indexOf(':');
     const payload={
@@ -3438,7 +3490,12 @@
       draftAttempt=null;
       $('task-draft-access').value='';
       const input=$('task-draft-text');input.value='';updateComposerAttachments(input,[]);sizeComposer(input);
-      if(draftOpen){
+      if(originPane&&taskPanes.get(originPane.id)===originPane&&!originPane.cell.hidden){
+        const active=paneActive;
+        replacePaneTask(originPane,{id,title:payload.text.split('\n',1)[0].slice(0,160)},payload.project);
+        if(active===originPane)selectProject(payload.project,id,'');
+        else activatePane(active);
+      }else if(!originPane&&draftOpen){
         if(sidebarProject)sidebarProject=payload.project;
         selectProject(payload.project,id,'');
         if(tab!=='tasks')show('tasks');
@@ -3561,7 +3618,8 @@
   function renderSharedTask(t,p){
     t=sharedDisplayTask(t);
     const thread=$('thread'),head=$('task-head');
-    head.replaceChildren(taskSidebarPreview?conversationTitle(t.title):sharedTaskHeader(t,p));
+    if(taskSidebarPreview&&!paneHost&&!paneBoard)showPrimaryTaskTab(t,false);
+    else head.replaceChildren(taskSidebarPreview?conversationTitle(t.title):sharedTaskHeader(t,p));
     const box=el('div',undefined,'am-settings');
     if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
@@ -3813,7 +3871,6 @@
     const status=$('task-stop-status');
     const canStop=canStopTask(t),progress=canStop?stopProgress(t):'';
     const text=stopMessage(progress);
-    $('task-stop').hidden=!canStop||!!text;
     if(status.textContent!==text)status.textContent=text;
     answerControls();
   }
@@ -3833,7 +3890,8 @@
     });
   }
   function stopSelectedTask(){
-    if(!$('compose').hidden&&!$('task-stop').hidden)void stopTask(selectedTaskRow());
+    const task=selectedTaskRow();
+    if(task&&!$('compose').hidden&&!$('compose').inert&&canStopTask(task)&&!stopProgress(task))void stopTask(task);
   }
   async function stopTask(row,name=project){
     if(!row)return;
@@ -4344,7 +4402,8 @@
       if(date)out.unshift(date);
       if(quiet)out.push(quiet);
     }
-    head.replaceChildren(header);
+    if(taskSidebarPreview&&!paneHost&&!paneBoard)showPrimaryTaskTab(t,true);
+    else head.replaceChildren(header);
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // T-131: a task sent to another computer can be closed here also when
@@ -4377,13 +4436,16 @@
       const model=$('answer-model');
       model.textContent=displayModel;
       model.title=displayModel?taskModelDetail(t):'';
+      const name=t.project||project;
+      const computer=taskComputer(t);
+      showComposerRoute($('answer-project'),folderIconPaths,projectTitle(name),t.folder||projectTitle(name));
+      showComposerRoute($('answer-computer'),serverIconPaths,computerName(computer)||t.remote?.name||computer);
       showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'',true,t.agent);
       renderComposerTokens(t,displayModel,!compose.hidden);
-      $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden&&$('answer-access').hidden;
+      $('answer-context').hidden=false;
     }
     box.disabled=!canDraft;
     box.placeholder=taskMessagePlaceholder(t);
-    $('answer-send').hidden=!canDraft;
     $('answer-add').hidden=!taskSidebarPreview||!canDraft;
     if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';updateComposerAttachments(box,[]);$('answer-status').textContent='';}
     renderStopControls(t);
@@ -4459,39 +4521,68 @@
   }
   function canSendTaskMessage(t){return !!t&&!t.archived&&!t.remote?.from&&!stopProgress(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
   function answerControls(){
-    const task=selectedTaskRow(),box=$('answer-text'),send=$('answer-send');
+    const task=selectedTaskRow(),box=$('answer-text');
     const available=canSendTaskMessage(task);
     box.title=canDraftTaskMessage(task)&&!available?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
-    send.title=box.title||tr('Отправить ответ');
     const problem=composerAttachmentProblem(box);
-    send.disabled=answering||!available||!composerMessage(box)||!!problem;
+    renderAnswerAction();
     if(problem)$('answer-status').textContent=problem;
     else if($('answer-status').textContent===tr('Сообщение с вложениями слишком длинное.'))$('answer-status').textContent='';
     composerDictation?.sync();
   }
-  async function sendNote(){
-    const t=selectedTaskRow();if(!canNote(t)||answering)return;
-    const box=$('answer-text'),text=composerMessage(box);if(!text||composerAttachmentProblem(box))return;
-    const key='messenger-note-op:'+t.id+':'+text;
-    let op=recall(key);
-    if(!op){op='window-'+t.id+'-'+crypto.randomUUID();remember(key,op);}
-    answering=true;answerControls();$('answer-status').textContent=tr('Отправляем сообщение…');
-    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});try{localStorage.removeItem(key);}catch(_){}if(selectedTask===t.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
-    catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
-    finally{answering=false;answerControls();}
+  function renderAnswerAction(){
+    const task=selectedTaskRow(),box=$('answer-text'),send=$('answer-send'),stop=$('task-stop');
+    const dictation=composerDictation?.submissionState(box);
+    const hasText=!!replyContent(box).text;
+    const showStop=!!task&&canStopTask(task)&&!stopProgress(task)&&
+      (!taskSidebarPreview||!hasText&&!dictation&&!answering);
+    stop.hidden=!showStop;
+    send.hidden=!canDraftTaskMessage(task)||(taskSidebarPreview&&!hasText&&!dictation&&!answering);
+    send.title=box.title||tr('Отправить сообщение');
+    send.disabled=answering||!canSendTaskMessage(task)||!!composerAttachmentProblem(box)||
+      (dictation?dictation==='queued':!hasText);
   }
+  function replyContent(input){
+    const groups=(composerAttachments.get(input)||[]).filter(item=>item.files);
+    const names=groups.length?tr('Вложения')+'\n'+groups.map(item=>item.name).join('\n'):'';
+    const text=[composerMessage(input),names].filter(Boolean).join('\n\n');
+    return {text,attachments:groups.flatMap(item=>item.files)};
+  }
+  let attachedReplyAttempt;
   async function sendAnswer(){
-    if(composerDictation?.finishFor($('answer-text')))return;
-    const t=selectedTaskRow(),q=t?.owner_question;
-    if($('compose').inert||!canSendTaskMessage(t))return;
-    if(!q&&canNote(t))return sendNote();
-    if(!q||answering||t.remote?.from)return;
-    const box=$('answer-text'),text=composerMessage(box);if(!text||composerAttachmentProblem(box))return;
-    let op=recall('messenger-answer-op:'+q.id);
-    if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
-    answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
-    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});if(selectedTask===t.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
-    catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
+    const box=$('answer-text');
+    const task=selectedTaskRow(),question=task?.owner_question?.id;
+    if($('compose').inert||answering||!canSendTaskMessage(task))return;
+    if(composerAttachmentProblem(box))return;
+    if(composerDictation?.finishFor(box,sendAnswer))return;
+    const {text,attachments}=replyContent(box);
+    if(!text)return;
+    const payload={task:task.id,text};
+    if(question)payload.question=question;
+    const storageKey=question?'messenger-answer-op:'+question:'messenger-note-op:'+task.id+':'+text;
+    if(attachments.length){
+      payload.attachments=attachments;
+      const identity=JSON.stringify(payload);
+      if(attachedReplyAttempt?.identity!==identity)attachedReplyAttempt={identity,op:'window-'+crypto.randomUUID()};
+      payload.op_id=attachedReplyAttempt.op;
+    }else{
+      payload.op_id=recall(storageKey)||'window-'+(question||task.id)+'-'+crypto.randomUUID();
+      remember(storageKey,payload.op_id);
+    }
+    answering=true;answerControls();
+    $('answer-status').textContent=question?tr('Отправляем ответ…'):tr('Отправляем сообщение…');
+    try{
+      await postAPI(question?'/api/task-answer':'/api/task-note',payload);
+      if(attachments.length)attachedReplyAttempt=null;
+      else if(!question){try{localStorage.removeItem(storageKey);}catch(_){}}
+      if(selectedTask===task.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}
+      await refresh();
+    }
+    catch(error){
+      if(selectedTask===task.id)$('answer-status').textContent='';
+      const message=attachments.length?error.message:error.message+tr(' Повтор с тем же текстом безопасен.');
+      showError({message,command:error.command,hint:error.hint});
+    }
     finally{answering=false;answerControls();}
   }
   // Agent cards (T-061, D-070): the agent's name with a check, settings and
@@ -6672,7 +6763,8 @@
   $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',()=>closeHere());
   document.addEventListener('keydown',e=>{
-    if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&
+    const task=selectedTaskRow();
+    if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&task&&canStopTask(task)&&!stopProgress(task)&&!$('compose').hidden&&!$('compose').inert&&
       !document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true],.am-pane-toolbar,.am-pane-cell')){
       e.preventDefault();stopSelectedTask();
     }
@@ -7090,6 +7182,8 @@
       target.caption.textContent=recording||processing?messages[event]:'';
       target.status.textContent=recording||processing?'':messages[event]||'';
       target.status.hidden=!target.status.textContent;
+      if(target.input.id==='task-draft-text')renderDraftAction();
+      else renderAnswerAction();
     }
     function paintLevel(target,level){
       const bars=target.meter.children;
@@ -7119,13 +7213,20 @@
         target.button.hidden=!key;
       }
     }
-    function finishFor(input){
+    function submissionState(input){
+      if(active?.target.input===input)return active.submit?'queued':'recording';
+    }
+    function finishFor(input,submit){
       if(active?.target.input!==input)return false;
+      if(submit){
+        active.submit=submit;
+        paint(active.target,active.event);
+      }
       if(active.event==='recording'){
         active.event='processing';
         paint(active.target,'processing');
         send('stop',active.id);
-      }
+      }else if(!active.event)active.stopOnStart=true;
       return true;
     }
     function start(target){
@@ -7210,7 +7311,8 @@
       status.setAttribute('role','status');
       input.before(entry);
       entry.append(input,display);
-      entry.after(button);
+      if(taskSidebarPreview)entry.parentElement.append(button);
+      else entry.after(button);
       const statusAnchor=input.form||entry.parentElement;
       statusAnchor.append(status);
       const target={input,button,status,display,caption,meter,key:''};
@@ -7275,7 +7377,7 @@
         if(active.event==='recording'&&Number.isFinite(level))paintLevel(active.target,Math.max(0,Math.min(100,level)));
         return;
       }
-      const {target,key,value,start,end}=active;
+      const {target,key,value,start,end,submit}=active;
       if(context(target)!==key){cancel();return;}
       if(event==='recording'||event==='processing'){
         active.event=event;
@@ -7285,7 +7387,7 @@
       }
       active=null;
       paint(target,event);
-      if(event!=='text'||!text)return;
+      if(event!=='text'||!text?.trim())return;
       const input=target.input;
       const from=value===input.value?start:input.selectionStart;
       const to=value===input.value?end:input.selectionEnd;
@@ -7295,8 +7397,9 @@
       if(limit>0){
         input.setRangeText(insertion.slice(0,limit),from,to,'end');
         input.dispatchEvent(new Event('input',{bubbles:true}));
+        if(submit)void submit();
       }
-      input.focus();
+      if(!submit)input.focus();
     };
     window.messengerCancelDictation=cancel;
     document.addEventListener('keydown',event=>{
@@ -7329,7 +7432,7 @@
     },true);
     window.addEventListener('pagehide',cancel);
     refreshModels();
-    return {cancel,sync,finishFor,refreshModels};
+    return {cancel,sync,finishFor,submissionState,refreshModels};
   }
   composerDictation=setupComposerDictation();
   if(!paneHost){

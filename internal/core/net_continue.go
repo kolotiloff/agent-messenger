@@ -112,7 +112,7 @@ func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, 
 	if err := insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "", sender); err != nil {
 		return err
 	}
-	return enqueueNet(tx, remote.broker, remote.peer, "continue."+opID, task, netBody{Kind: "continue", Task: task, OpID: opID, Text: text, SenderAgent: sender.Agent, SenderModel: sender.Model})
+	return enqueueTaskMessage(machine, tx, remote, "continue."+opID, task, opID, netBody{Kind: "continue", Task: task, OpID: opID, Text: text, SenderAgent: sender.Agent, SenderModel: sender.Model})
 }
 
 // applyContinue resumes the mirror of another computer's task.
@@ -124,7 +124,10 @@ func applyContinue(machine, tx *sql.Tx, from netLink, b netBody, gone WorkerGone
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return continueTaskTx(machine, tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		op := "net:" + from.broker + ":" + from.peer + ":" + b.OpID
+		return withMessageAttachments(tx, t.ID, op, "continue", b.Text, b.Attachments, func() error {
+			return continueTaskTx(machine, tx, t.ID, op, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		})
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "continue-refused."+b.OpID, t.ID, netBody{Kind: "continue_refused", Task: from.task, Reason: refusalText(err)})

@@ -2,9 +2,27 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+
+## 2026-11-28 — T-372 Composer context alignment
+
+Codex moved the draft access control below the field and showed the assigned project and computer in the same row of existing conversations. The split fixture checks matching row height and alignment while a task is drafted beside a conversation.
+
+## 2026-11-28 — T-380 Composer action and dictation submission
+
+Codex kept the microphone at the right edge and used the neighboring action for Stop while a task is active and the chat field is empty. Text and dictation show Send in the same position. Send during dictation waits for successful transcription before submitting.
+
+## 2026-11-28 — T-372 Start tasks in the active pane
+
+Codex kept the new-task composer and the submitted conversation in the active pane in draft PR #261. The pane fixture submits a task in a split and checks that both columns keep their positions.
+
+## 2026-11-28 — T-372 and T-389
+
+- Use a closeable, full-height caption tab for the default conversation. Closing the last tab opens New Task.
+- Add reply attachments to notes, answers and continuations. Local and peer fixtures exercise retry validation, an outdated executor and receipt-scoped delivery. Stopped personal chats stay in Projects until the owner archives them. A coordinated stop still goes to history. Local build 119 needs a background update for the current archive behavior and binary replies.
+
 ## 2026-11-28 — T-372 Sidebar switching and split drops
 
-Codex made task clicks in the sidebar, Statistics, and Archive reuse the active pane and separated task drag sources from computer reordering in draft PR #261. The conversation body and caption accept split drops. The pane fixture covers selection, preserved layout and drafts, and previews near the middle and on the heading. Closing the last tab by mouse or keyboard returns to the new-task screen, which stays open on refresh.
+Codex made task clicks in the sidebar, Statistics, and Archive reuse the active pane and separated task drag sources from computer reordering in draft PR #261. The conversation body and caption accept split drops. The pane fixture covers selection, preserved layout and drafts, and previews near the middle and on the heading. The default conversation uses the same closeable tab. Closing the last tab by mouse or keyboard returns to the new-task screen, which stays open on refresh.
 
 ## 2026-11-28 — T-375 Full-height chat scrollbar
 

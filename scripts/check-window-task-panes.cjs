@@ -18,6 +18,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const reads = [], writes = [], errors=[];
     page.on('pageerror',error=>errors.push(error.message));
     let stoppedPrimary=false;
+    let startedTask=null;
     await page.addInitScript(macTitlebar => {
       if(window===window.top){
         window.amMacTitlebar=macTitlebar;
@@ -37,9 +38,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         if (url.pathname==='/api/task') reads.push({id:url.searchParams.get('id'),pane:request.frame().parentFrame()!=null});
         if (request.method()==='POST') {
           writes.push({path:url.pathname, body:request.postDataJSON()});
+          if(url.pathname==='/api/pick')return route.fulfill({json:{ok:true,attachments:[{path:'photo.png',data:'AAH/'}]}});
+          if(url.pathname==='/api/task-start'){
+            const payload=request.postDataJSON();
+            const existing=reply(new URL('/api/window',url),payload.project,projects).tasks[0];
+            startedTask={...existing,id:'draft-started',title:payload.text};
+            return route.fulfill({json:{ok:true,result:startedTask.id}});
+          }
           return route.fulfill({json:{ok:true}});
         }
+        if(url.pathname==='/api/task'&&startedTask&&url.searchParams.get('id')===startedTask.id)
+          return route.fulfill({json:{task:startedTask,items:[{kind:'task',author:'owner',at:startedTask.created_at,text:startedTask.title}]}});
         const json=reply(url,url.searchParams.get('project') || 'game',projects);
+        if(url.pathname==='/api/window'&&startedTask?.project===json.project)json.tasks=[...json.tasks,startedTask];
         if(url.pathname==='/api/usage-stats')json.recent.push({
           ...json.recent.find(task=>task.project==='game'),id:'game-3',project:'game',title:'Звуки меню'
         });
@@ -81,8 +92,30 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.goto('https://messenger-preview.test/#preview-only');
     await page.getByText(/Ответ по задаче game-/).waitFor();
     const mainTitle=page.locator('#task-head h3');
+    const initialTab=page.locator('#task-head').getByRole('tab');
+    const initialTitle=await initialTab.textContent();
+    await initialTab.evaluate(button=>{
+      const row=button.closest('.am-task-toolbar').getBoundingClientRect();
+      const tab=button.closest('.am-pane-tab').getBoundingClientRect();
+      if(Math.abs(row.top-tab.top)>=1||Math.abs(row.bottom-tab.bottom)>1)
+        throw new Error('The single tab must fill the caption through its bottom border');
+    });
+    const newTask=page.locator('#task-draft-text');
+    const initialClose=page.getByRole('button',{name:'Закрыть вкладку '+initialTitle,exact:true});
+    await initialClose.click();
+    await newTask.waitFor();
+    assert.equal(await mainTitle.textContent(),'Новая задача');
+    assert.equal(await initialTab.count(),0);
+    await page.waitForResponse(response=>new URL(response.url()).pathname==='/api/window');
+    assert.equal(await mainTitle.textContent(),'Новая задача');
+    const initialRow=page.locator('#machines .am-sidebar-task').filter({hasText:initialTitle});
+    await initialRow.click();
+    await initialTab.waitFor();
+    await initialTab.press('Delete');
+    await newTask.waitFor();
+    await initialRow.click();
+    await initialTab.waitFor();
     const primary=page.locator('#answer-text');
-    const initialTitle=await mainTitle.textContent();
     await primary.fill('Основной черновик');
     const open = async (title, command='Открыть во вкладке') => {
       const task=page.locator('#machines .am-sidebar-task').filter({hasText:title});
@@ -154,10 +187,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await tab(first).click();
     assert.equal(await draft.inputValue(),'Отдельный черновик');
     assert.equal(await primary.inputValue(),'Основной черновик');
-    await content(first).getByRole('button',{name:'Отправить ответ'}).click();
-    assert.deepEqual(writes.filter(write=>write.path==='/api/task-note').map(write=>[
-      write.path,write.body.task,write.body.text
-    ]),[['/api/task-note','game-1','Отдельный черновик']]);
+    await content(first).locator('#answer-add').click();
+    const picker=content(first).getByRole('button',{name:'Добавить файл…',exact:true});
+    await picker.click();
+    await content(first).getByRole('button',{name:'Убрать вложение photo.png',exact:true}).waitFor();
+    const replyRequest=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/task-note');
+    await content(first).getByRole('button',{name:'Отправить сообщение'}).click();
+    const sentReply=(await replyRequest).postDataJSON();
+    assert.equal(sentReply.task,'game-1');
+    assert.equal(sentReply.text,'Отдельный черновик\n\nВложения\nphoto.png');
+    assert.deepEqual(sentReply.attachments,[{path:'photo.png',data:'AAH/'}]);
+    assert.equal(writes.find(write=>write.path==='/api/pick').body.kind,'attach-file');
     assert.equal(await primary.inputValue(),'Основной черновик');
     await tab(first).focus();
     await tab(first).press('Alt+ArrowRight');
@@ -300,7 +340,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.notEqual(closeStyle.color,idleCloseColor);
     for(const title of [first,second,third]){
       const composer=content(title).locator('.am-compose-field:visible');
-      assert(await composer.locator('#answer-send svg').isVisible());
+      assert(await composer.locator(':is(#answer-send,#task-stop):visible > svg').isVisible());
       assert.equal(await content(title).locator('.am-watch-compose').count(),0);
       const thread=content(title).locator('#thread');
       assert(await thread.locator('.am-message-content').count());
@@ -311,7 +351,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     }
     const leftComposer=await content(third).locator('.am-compose-field:visible').boundingBox();
     const rightComposer=await content(second).locator('.am-compose-field:visible').boundingBox();
-    assert(Math.abs(leftComposer.y-rightComposer.y)<2,'same-height panes align their reply fields');
+    assert(Math.abs(leftComposer.y-rightComposer.y)<2,`same-height panes align their reply fields (${leftComposer.y}, ${rightComposer.y})`);
     await page.evaluate(()=>window.messengerDictationModels({enabled:true,ready:true,supported:true,selected:null,models:[]}));
     await content(second).locator('#compose .am-dictation-button').click();
     const recording=await page.evaluate(()=>window.dictationCommands.at(-1));
@@ -321,6 +361,23 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       window.messengerDictationEvent({id,event:'text',text:'Проверочный голос'});
     },recording.id);
     assert.equal(await replyBox(second).inputValue(),'Проверочный голос');
+    await replyBox(second).fill('');
+    await content(second).locator('#compose .am-dictation-button').click();
+    const sendRecording=await page.evaluate(()=>window.dictationCommands.at(-1));
+    await page.evaluate(id=>window.messengerDictationEvent({id,event:'recording'}),sendRecording.id);
+    const sendVoiceReply=content(second).locator('#answer-send');
+    const rightMic=await content(second).locator('#compose .am-dictation-button').boundingBox();
+    assert((await sendVoiceReply.boundingBox()).x<rightMic.x);
+    const voiceReply=page.waitForResponse(res=>new URL(res.url()).pathname==='/api/task-answer');
+    await sendVoiceReply.click();
+    assert.equal(await sendVoiceReply.isDisabled(),true);
+    assert.equal(await page.evaluate(()=>window.dictationCommands.at(-1).action),'stop');
+    await page.evaluate(id=>{
+      window.messengerDictationEvent({id,event:'text',text:'Подтверждаю голосом'});
+      window.messengerDictationEvent({id,event:'text',text:'Дубликат'});
+    },sendRecording.id);
+    assert.equal((await voiceReply).request().postDataJSON().text,'Подтверждаю голосом');
+    assert.equal(writes.filter(write=>write.body?.text==='Подтверждаю голосом').length,1);
     assert.equal(await primary.inputValue(),'Основной черновик');
     assert.equal(await replyBox(first).inputValue(),'Черновик в нижней панели');
     if(output)await page.screenshot({path:path.join(output,'task-split.png')});
@@ -362,7 +419,6 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await tab(title).press('Delete');
     }
     assert.equal(await board.count(),0);
-    const newTask=page.locator('#task-draft-text');
     await newTask.waitFor();
     assert.equal(await mainTitle.textContent(),'Новая задача');
     assert.equal(await newTask.evaluate(input=>input===document.activeElement),true);
@@ -420,7 +476,31 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.deepEqual(await cell('Звуки меню').boundingBox(),otherColumn);
     assert.deepEqual(await cell(first).boundingBox(),statsSlot);
     assert.equal(await tabs.count(),2);
-    await tabChip(first).locator('.am-close-x').click();
+    await tab(first).click();
+    await page.locator('#task-new').click();
+    await newTask.waitFor();
+    assert.deepEqual(await cell('Новая задача').boundingBox(),statsSlot);
+    assert.deepEqual(await cell('Звуки меню').boundingBox(),otherColumn);
+    assert.equal(await tabs.count(),2);
+    const draftFoot=page.locator('#task-draft .am-composer-context');
+    const replyFoot=panel('Звуки меню').frameLocator('iframe').locator('#answer-context');
+    assert.equal((await draftFoot.boundingBox()).y,(await replyFoot.boundingBox()).y);
+    assert.equal((await draftFoot.boundingBox()).height,(await replyFoot.boundingBox()).height);
+    const newTitle='Задача из активной панели';
+    const sendDraft=page.locator('#task-draft-send');
+    await sendDraft.waitFor({state:'hidden'});
+    await page.evaluate(()=>window.messengerDictationModels({enabled:true,ready:true,supported:true,selected:null,models:[]}));
+    await page.locator('#task-draft .am-dictation-button').click();
+    const draftRecording=await page.evaluate(()=>window.dictationCommands.at(-1));
+    await page.evaluate(id=>window.messengerDictationEvent({id,event:'recording'}),draftRecording.id);
+    await sendDraft.click();
+    assert.equal(await page.evaluate(()=>window.dictationCommands.at(-1).action),'stop');
+    await page.evaluate(({id,text})=>window.messengerDictationEvent({id,event:'text',text}),{id:draftRecording.id,text:newTitle});
+    await panel(newTitle).getByText(newTitle,{exact:true}).waitFor();
+    assert.deepEqual(await cell(newTitle).boundingBox(),statsSlot);
+    assert.deepEqual(await cell('Звуки меню').boundingBox(),otherColumn);
+    assert.equal(await tabs.count(),2);
+    await tabChip(newTitle).locator('.am-close-x').click();
     await tabChip('Звуки меню').locator('.am-close-x').click();
     await newTask.waitFor();
     assert.equal(await tabs.count(),0);

@@ -1761,6 +1761,9 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 		if b.Attachments, err = getTaskAttachments(tx, t.ID); err != nil {
 			return err
 		}
+		if b.Attachments, err = appendRunAttachments(tx, r, b.Attachments); err != nil {
+			return err
+		}
 		if b.OwnerNotes, err = ownerNotesOf(tx, r.ID); err != nil {
 			return err
 		}
@@ -2162,6 +2165,9 @@ func answerTask(machine, tx *sql.Tx, task, question, opID, text, by string, from
 			return err
 		}
 		if err := insertTaskRun(tx, task, ordinal+1, "answer", text, sender); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE task_runs SET op_id=? WHERE task_id=? AND ordinal=? AND EXISTS (SELECT 1 FROM message_attachments WHERE task_id=? AND op_id=?)`, opID, task, ordinal+1, task, opID); err != nil {
 			return err
 		}
 		if err := setTaskState(tx, task, "running", "answered; the same conversation resumes"); err != nil {

@@ -388,7 +388,7 @@
   'Запрос на остановку отправлен. Ждём завершения задачи.':'Stop request sent. Waiting for the task to stop.',
   'Ждём завершения задачи…':'Waiting for the task to stop…',
   'Остановка не подтверждена':'Stop unconfirmed',
-  'Отправить ответ':'Send reply',
+  'Отправить сообщение':'Send message',
   'Все компьютеры':'All computers',
   'Полный путь к папке':'Full path to the folder',
   'Например: отчёт до 8 строк, подробности в Docs/Audits/, в отчёте только путь.':'For example: report up to 8 lines, details in Docs/Audits/, only the path in the report.',
