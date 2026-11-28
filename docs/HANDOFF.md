@@ -8,7 +8,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-PR #257 is the candidate for Kotel 1.0.17 (build 120). It adds scoped task shortcuts, grouped agent settings, first-run setup, a compact agent limits popover, and sleep controls in the main window and General settings. General settings place the local and network update checks in consecutive rows. The sidebar gear opens Settings, local update check, and Feedback. Individual connected computers also offer a manual check, and the network update still requires review. Update notices belong to the window and follow it across chats and settings.
+Build 120 is on hold for the owner's native Mac review. The first release run was cancelled before packaging. A local app built with `KOTEL_LOCAL_DESKTOP_PREVIEW=1` uses the real desktop window and connects to the existing background client without registering itself as the installed program or offering to restart the client. Quit the installed Mac window before opening the local bundle. Wait for the owner's approval before restarting publication.
+
+PR #257 is the candidate for Kotel 1.0.17 (build 120). It adds scoped task shortcuts, grouped agent settings, first-run setup, a compact agent limits popover, and sleep controls in the main window and General settings. General settings place the local and network update checks in consecutive rows. The sidebar gear opens Settings, local update check, and Feedback. In General the first-run action fits its label and shares the selectors’ font and height. Individual connected computers also offer a manual check, and the network update still requires review. Update notices belong to the window and follow it across chats and settings.
 
 Personal chats stay in Projects until archived by the owner. The coordinator can still archive its completed tasks. Both Claude Code and the normal Codex worker now send incremental text through the task feed. The window shows activity as soon as a reply is requested and waits one minute before warning about a worker that remains active after a reported result.
 

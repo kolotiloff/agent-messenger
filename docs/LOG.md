@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-28 — T-391 settings follow-up
 
-Codex moved the network update check into General, directly after the local version row. The sidebar gear now opens a menu with Settings, Check for updates, and Feedback. The update review and request flow passed in Chromium and WebKit.
+Codex moved the network update check into General, directly after the local version row. The sidebar gear now opens a menu with Settings, Check for updates, and Feedback. The update review and request flow passed in Chromium and WebKit. A follow-up removes the dropdown width from the first-run action in General. The first build 120 release run was cancelled for local Mac review. The preview packaging option attaches to the installed background client without rebinding the installed executable.
 
 ## 2026-11-28 — T-384, T-386, T-388, T-389, T-391 and T-392
 

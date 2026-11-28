@@ -13,14 +13,18 @@ sparkle="${SPARKLE_DIR:-$out/sparkle-sdk}"
 bash scripts/fetch-sparkle.sh "$sparkle"
 public_key="$(cat desktop/macos/update-public-key.txt)"
 [[ "$public_key" =~ ^[A-Za-z0-9/+]{43}=$ ]] || { echo 'Invalid update public key' >&2; exit 1; }
-CGO_ENABLED=0 "$go_bin" build -trimpath -buildvcs=false -ldflags "-X github.com/kolotiloff/agent-messenger/internal/buildinfo.Version=$version -X github.com/kolotiloff/agent-messenger/internal/buildinfo.Revision=$revision -X github.com/kolotiloff/agent-messenger/internal/buildinfo.UpdatePublicKey=$public_key" -o "$app/Contents/Resources/kotel" ./cmd/messenger
+local_preview="${KOTEL_LOCAL_DESKTOP_PREVIEW:-0}"
+[[ "$local_preview" == 0 || "$local_preview" == 1 ]] || { echo 'KOTEL_LOCAL_DESKTOP_PREVIEW must be 0 or 1' >&2; exit 1; }
+CGO_ENABLED=0 "$go_bin" build -trimpath -buildvcs=false -ldflags "-X github.com/kolotiloff/agent-messenger/internal/buildinfo.Version=$version -X github.com/kolotiloff/agent-messenger/internal/buildinfo.Revision=$revision -X github.com/kolotiloff/agent-messenger/internal/buildinfo.UpdatePublicKey=$public_key -X github.com/kolotiloff/agent-messenger/internal/buildinfo.LocalDesktopPreview=$local_preview" -o "$app/Contents/Resources/kotel" ./cmd/messenger
 xcrun swiftc -target "$(uname -m)-apple-macos15.0" -swift-version 5 -O -F "$sparkle" -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks -framework AppKit -framework WebKit desktop/macos/main.swift desktop/macos/Updater.swift desktop/macos/BundleName.swift desktop/macos/Dictation.swift -o "$app/Contents/MacOS/AgentMessenger"
 cp desktop/macos/Info.plist "$app/Contents/Info.plist"
 mkdir -p "$app/Contents/Frameworks"
 ditto "$sparkle/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framework"
 cp "$sparkle/LICENSE" "$app/Contents/Resources/Sparkle-LICENSE.txt"
 /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $public_key" "$app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool true" "$app/Contents/Info.plist"
+automatic_checks=true
+[[ "$local_preview" == 0 ]] || automatic_checks=false
+/usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool $automatic_checks" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :SUAllowsAutomaticUpdates bool false" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :SUAutomaticallyUpdate bool false" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :SUEnableSystemProfiling bool false" "$app/Contents/Info.plist"

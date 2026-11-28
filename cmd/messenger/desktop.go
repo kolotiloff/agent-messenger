@@ -39,16 +39,27 @@ func runDesktop(root string, args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	go func() { _, _ = io.Copy(io.Discard, os.Stdin); cancel() }()
-	recordProgram(root)
-	if err := ensureDesktopClient(ctx, root); err != nil {
-		return err
+	restart := desktopRestart(root)
+	if buildinfo.LocalDesktopPreview == "1" {
+		statusCtx, stop := context.WithTimeout(ctx, 3*time.Second)
+		response, err := control.CallContext(statusCtx, root, control.Request{Cmd: "status"})
+		stop()
+		if err != nil || !response.OK || response.Status == nil {
+			return errors.New("Для тестового окна нужен запущенный фоновый клиент Kotel. Откройте установленную программу, затем завершите только её окно")
+		}
+		restart = nil
+	} else {
+		recordProgram(root)
+		if err := ensureDesktopClient(ctx, root); err != nil {
+			return err
+		}
 	}
 	home, err := platform.DefaultRoot()
 	if err != nil {
 		return err
 	}
 	channel := &updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
-	return localui.RunDesktop(ctx, root, 0, os.Stdout, channel, desktopRestart(root))
+	return localui.RunDesktop(ctx, root, 0, os.Stdout, channel, restart)
 }
 
 func desktopRestart(root string) localui.Restarter {

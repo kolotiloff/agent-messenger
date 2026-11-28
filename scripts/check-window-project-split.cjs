@@ -733,6 +733,13 @@ if (require.main === module) (async()=>{
         const css=getComputedStyle(item);
         return [css.height,css.borderRadius,css.backgroundColor];
       });
+      const openSetup=general.getByRole('button',{name:'Открыть',exact:true});
+      assert(await openSetup.evaluate(button=>{
+        const label=document.createRange();label.selectNodeContents(button);
+        const style=getComputedStyle(button);
+        return Math.abs(button.getBoundingClientRect().width-label.getBoundingClientRect().width-
+          parseFloat(style.paddingInlineStart)-parseFloat(style.paddingInlineEnd))<1;
+      }),'first-run setup button should fit its label and insets');
       const settingsControl=await controlStyle(general.locator('.am-select-trigger').first());
       const settingsControlWidth=(await general.locator('.am-select-trigger').first().boundingBox()).width;
       const topLeft=async locator=>{
