@@ -1030,7 +1030,7 @@ Show turn activity while waiting for public text and use partial text when the p
 
 ## D-275 — Task shortcuts and composer inputs
 
-A computer heading opens a draft for that computer. A project heading opens a draft for that project. Show the shortcut only on the outermost groups in the current sidebar grouping. Reveal it on row hover or keyboard focus and use the row highlight. Use the standard row inset. Keep it visible on devices without hover. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
+A computer heading opens a draft for that computer. A project heading opens a draft for that project. Show the shortcut only on the outermost groups in the current sidebar grouping when that group has a launchable model. Reveal it on row hover or keyboard focus and use the row highlight. Use the standard row inset. Keep it visible on devices without hover. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
 
 Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Installed rows show the provider, its enable switch and its settings action. In the agent dialog, use the standard divider after Models and status marks for CLI installation and sign-in in place of step numbers. Use 16 px provider artwork in window controls and retain the compact metadata marks.
 
@@ -1057,3 +1057,5 @@ Offer a provider-native action only when the chosen provider and route can execu
 Keep model selection in Voice settings and download weights on explicit request. Enable the composer microphone only when a selected local model is ready and dictation is enabled. The native client captures audio and transcribes it on the user's computer. The first implementation uses a bundled, pinned recognizer with separately verified model weights. Review recording interaction against the owner's forthcoming examples before native acceptance. See T-380.
 
 The microphone check records up to ten seconds, allows an early stop, and offers local replay. If a speech model is selected, show its transcript in the check panel. Revoke the playback URL when leaving Voice or starting a new recording. Show model download progress in the model row with received size, total size, and percentage.
+
+Use standard card headings in Voice. Show the selected model as in use while dictation is enabled. Offer the existing trash icon for downloaded models and clear the selection when its file is removed. Keep weights open by an active recording or transcription until that operation finishes.

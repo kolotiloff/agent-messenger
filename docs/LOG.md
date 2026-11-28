@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-380 and T-387 Review follow-up
+
+Codex moved Voice section headings inside their cards, added status and removal for downloaded models, and hid sidebar task shortcuts for groups without a launchable model. The native removal fixture checked removal of selected and unselected models and refusal during recording. Build 122 predates these changes.
+
 ## 2026-11-28 — T-380 Voice preview feedback
 
 Codex fixed overflowing settings selectors, added received size and percentage to model rows, and added a ten-second microphone check with early stop, local playback and optional transcription. Chromium and WebKit verified selector geometry and the simulated download and microphone flows. The native Swift shell type-checked. Build 121 predates these review changes. The revised Mac preview and live microphone acceptance are pending.

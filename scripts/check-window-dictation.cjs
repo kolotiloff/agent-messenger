@@ -55,6 +55,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.getByText('Диктовка недоступна в этой версии Kotel').waitFor();
     assert.equal(await voiceSwitch.isDisabled(),true);
     await models(state);
+    for (const id of ['voice-models-title','voice-microphone-title']) {
+      assert(await page.locator('#'+id).evaluate(heading=>heading.closest('.am-card')!==null));
+    }
     for (const width of [1200, 800, 600]) {
       await page.setViewportSize({width,height:800});
       const rows = await page.locator('#voice-page .am-inline-setting').evaluateAll(rows => rows.map(row => {
@@ -126,14 +129,28 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.deepEqual(await last(),{action:'download',model:tiny.id});
     const installed = [{...tiny,state:'installed'},{...base,state:'installed'}];
     await models({...enabled,ready:true,selected:tiny.id,models:installed});
-    await page.getByText('Выбрана',{exact:true}).waitFor();
+    await page.getByText('Используется',{exact:true}).waitFor();
+    await page.getByText('Скачана',{exact:true}).waitFor();
+    const deleteTiny=page.getByRole('button',{name:'Удалить модель Whisper Tiny'});
+    assert.equal(await deleteTiny.locator('svg path').getAttribute('d'),
+      await page.locator('#archive-clear svg path').getAttribute('d'));
+    await deleteTiny.click();
+    assert.deepEqual(await last(),{action:'remove-model',model:tiny.id});
+    await models({...enabled,ready:true,selected:tiny.id,models:[{...installed[0],removalError:'recording'},installed[1]]});
+    await page.getByText('Завершите запись перед удалением модели').waitFor();
+    await deleteTiny.click();
+    await models({...enabled,ready:false,selected:null,models:[tiny,installed[1]]});
+    await page.getByRole('button',{name:'Загрузить Whisper Tiny'}).waitFor();
+    assert.equal(await deleteTiny.count(),0);
+    assert.equal(await mic.isDisabled(),true);
     await page.getByRole('button',{name:'Выбрать Whisper Base'}).click();
     assert.deepEqual(await last(),{action:'select',model:base.id});
-    const ready = {...enabled,ready:true,selected:base.id,models:installed};
+    const ready = {...enabled,ready:true,selected:base.id,models:[tiny,installed[1]]};
     await models(ready);
     await voiceSwitch.click();
     assert.deepEqual(await last(),{action:'set-enabled',enabled:'false'});
     await models({...ready,enabled:false,ready:false});
+    await page.getByText('Выбрана',{exact:true}).waitFor();
     assert.equal(await mic.isDisabled(),true);
     await voiceSwitch.click();
     await models(ready);

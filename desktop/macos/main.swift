@@ -531,6 +531,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             if let model = body["model"] as? String { dictation.downloadModel(model) }
         case "select":
             if let model = body["model"] as? String { dictation.selectModel(model) }
+        case "remove-model":
+            if let model = body["model"] as? String { dictation.removeModel(model) }
         case "cancel-download":
             if let model = body["model"] as? String { dictation.cancelDownload(model) }
         case "set-enabled":

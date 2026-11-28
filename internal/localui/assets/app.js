@@ -1773,17 +1773,19 @@
     const candidates=name?[name]:Array.from(new Set([preferred,...projects]));
     const available=candidates.find(candidate=>projects.includes(candidate)&&taskDraftComputers(candidate)
       .some(p=>(computer===undefined||p.id===computer)&&taskDraftModels(p).length));
+    if(!available)return null;
     const label=tr('Новая задача, {group}').replace('{group}',()=>group);
     const plus=iconButton(label,['M12 4v16M4 12h16'],false,()=>{
       show('tasks');openTaskDraft(true,available,computer);loadServer();
     });
     plus.classList.add('am-chrome-icon','am-group-new');
     plus.dataset.sidebarFocus=JSON.stringify(['new',name,computer]);
-    plus.disabled=!online||!available||draftSending;
+    plus.disabled=!online||draftSending;
     return plus;
   }
   function sidebarTaskRows(body,head,card,computer,items=[],projectGroup=''){
-    if(!projectGroup)head.append(sidebarNewTask(computerName(computer)||computer,'',computer==='local'?'':computer));
+    const plus=!projectGroup&&sidebarNewTask(computerName(computer)||computer,'',computer==='local'?'':computer);
+    if(plus)head.append(plus);
     const key=projectGroup?JSON.stringify([projectGroup,computer]):computer;
     if(!items.length)return;
     const rows=el('div',undefined,'am-sidebar-task-rows');
@@ -1870,7 +1872,8 @@
       appendRows(rows,tasks,name);
       const heading=el('div',undefined,'am-folder-row');
       heading.append(button);
-      if(!computer)heading.append(sidebarNewTask(projectTitle(name),name));
+      const plus=!computer&&sidebarNewTask(projectTitle(name),name);
+      if(plus)heading.append(plus);
       folder.append(heading,rows);container.append(folder);
     }
   }
@@ -6798,13 +6801,28 @@
       const size=el('span',undefined,'am-small am-muted');
       const button=el('button');
       button.type='button';
-      const item={row,title,subtitle,progress,size,button,action:''};
+      const remove=el('button',undefined,'am-icon-btn am-chrome-icon');
+      remove.type='button';
+      remove.title=tr('Удалить модель');
+      remove.setAttribute('aria-label',`${remove.title} ${model.name}`);
+      remove.append($('archive-clear').querySelector('svg').cloneNode(true));
+      remove.addEventListener('click',()=>{
+        if(remove.getAttribute('aria-disabled')==='true')return;
+        remove.setAttribute('aria-disabled','true');
+        send('remove-model',{model:model.id});
+      });
+      const selectedLabel=el('span',undefined,'am-small am-muted am-voice-model-selected');
+      const selection=el('span');
+      selectedLabel.append(svgIcon(['M5 12l4 4L19 6']),selection);
+      const actions=el('div',undefined,'am-actions am-actions-end');
+      actions.append(remove,selectedLabel,button);
+      const item={row,title,subtitle,progress,size,button,remove,selectedLabel,selection,action:''};
       button.addEventListener('click',()=>{
         if(button.getAttribute('aria-disabled')==='true')return;
         button.setAttribute('aria-disabled','true');
         send(item.action,{model:model.id});
       });
-      row.append(details,size,button);
+      row.append(details,size,actions);
       modelList.append(row);
       rows.set(model.id,item);
       return item;
@@ -6821,15 +6839,18 @@
       for(const id of ['voice-shortcut-row','voice-mode-row','voice-microphone'])$(id).hidden=!state.supported;
       for(const model of state.models){
         const item=rows.get(model.id)||createRow(model);
-        const selected=model.state==='installed'&&state.selected===model.id;
+        const installed=model.state==='installed';
+        const selected=installed&&state.selected===model.id;
         const downloading=model.state==='downloading';
         const total=sizes.format(model.size/1e6);
         item.size.textContent=total;
         item.title.textContent=model.name;
-        item.subtitle.textContent=selected?tr('Выбрана'):model.state==='installed'?tr('Установлена'):
-          model.state==='error'?tr('Не удалось загрузить модель'):'';
+        const removalError=model.removalError==='recording'?tr('Завершите запись перед удалением модели'):
+          model.removalError?tr('Не удалось удалить модель'):'';
+        item.subtitle.textContent=removalError||(model.state==='error'?tr('Не удалось загрузить модель'):
+          installed&&!selected?tr('Скачана'):'');
         item.subtitle.hidden=!item.subtitle.textContent;
-        item.subtitle.classList.toggle('am-status-bad',model.state==='error');
+        item.subtitle.classList.toggle('am-status-bad',model.state==='error'||!!removalError);
         item.progress.hidden=!downloading;
         if(downloading){
           const bytes=Math.min(model.size,Math.max(0,model.bytesDownloaded??0));
@@ -6850,6 +6871,10 @@
         item.button.setAttribute('aria-label',`${label} ${model.name}`);
         item.button.hidden=selected;
         item.button.removeAttribute('aria-disabled');
+        item.remove.hidden=!installed;
+        item.remove.removeAttribute('aria-disabled');
+        item.selectedLabel.hidden=!selected;
+        item.selection.textContent=selected?tr(state.enabled?'Используется':'Выбрана'):'';
       }
     };
   }

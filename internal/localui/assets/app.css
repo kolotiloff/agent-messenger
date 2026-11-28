@@ -1427,13 +1427,13 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 /* T-270: the project page is a column of cards, like the server page. */
 #am-concept .am-settings-group { display:flex; flex-direction:column; gap:var(--am-gap-section); }
 #am-concept .am-card > .am-setting-row:first-child { padding-top:0; border-top:0; }
-#am-concept #voice-page .am-settings-group > h3 { margin:0; }
+#am-concept #voice-page .am-card-head h3 { margin:0; }
 #am-concept #voice-mode-row { --am-settings-control-width:18em; }
 #am-concept .am-voice-model-details { overflow-wrap:anywhere; }
 #am-concept .am-voice-model-list > .am-setting-row { display:grid; grid-template-columns:minmax(0,1fr) max-content minmax(max-content,var(--am-settings-control-width)); }
-#am-concept .am-voice-model-list > .am-setting-row:first-child { padding-block-start:0; border-block-start:0; }
 #am-concept .am-voice-model-list > .am-setting-row + .am-setting-row { margin-block-start:var(--am-gap-content); }
-#am-concept .am-voice-model-list > .am-setting-row > button { justify-self:end; }
+#am-concept .am-voice-model-selected { display:inline-flex; align-items:center; gap:var(--am-gap-control); }
+#am-concept .am-voice-model-selected svg { flex:none; width:var(--am-action-icon-size); height:var(--am-action-icon-size); fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept #voice-shortcut-row kbd { background:var(--am-soft); border-radius:var(--am-radius-s); padding:var(--am-space-1) var(--am-space-2); white-space:nowrap; }
 #am-concept .am-voice-mic-result { display:grid; gap:var(--am-gap-control); padding:var(--am-gap-content); border:1px solid var(--am-line); border-radius:var(--am-radius-s); }
 #am-concept .am-voice-mic-test-head { display:flex; align-items:center; flex-wrap:wrap; gap:var(--am-gap-control); }

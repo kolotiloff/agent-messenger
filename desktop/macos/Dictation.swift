@@ -90,6 +90,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
     private lazy var downloads = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: .main)
     private var activeDownloads: [String: Download] = [:]
     private var downloadErrors: [String: String] = [:]
+    private var removalErrors: [String: String] = [:]
 
     private var id: String?
     private var engine: AVAudioEngine?
@@ -135,6 +136,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
                 row["bytesDownloaded"] = job.bytesDownloaded
             } else if installedURL(model) != nil {
                 row["state"] = "installed"
+                row["removalError"] = removalErrors[model.id]
             } else if let error = downloadErrors[model.id] {
                 row["state"] = "error"
                 row["error"] = error
@@ -162,6 +164,22 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
         }
         UserDefaults.standard.set(id, forKey: Self.modelKey)
         reportModels()
+    }
+
+    func removeModel(_ id: String) {
+        removalErrors[id] = nil
+        defer { reportModels() }
+        guard let model = Self.catalog.first(where: { $0.id == id }), let url = installedURL(model) else { return }
+        guard modelForRecording != url else {
+            removalErrors[id] = "recording"
+            return
+        }
+        do {
+            try files.removeItem(at: url)
+            if selected == id { UserDefaults.standard.removeObject(forKey: Self.modelKey) }
+        } catch {
+            removalErrors[id] = "storage"
+        }
     }
 
     func downloadModel(_ id: String) {
@@ -337,7 +355,6 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
             complete(id, event: "model-not-ready")
             return
         }
-        modelForRecording = nil
         releaseMicrophone()
         self.audio = nil
         let samples = audio.finish()

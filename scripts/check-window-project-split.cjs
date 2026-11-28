@@ -1661,7 +1661,10 @@ if (require.main === module) (async()=>{
     const browserPreview=await open(projects,{width:1150,height:770},'dark',(url,p)=>{
       if(url.pathname!=='/api/server')return;
       const server=reply(url,p,projects);
-      return {json:{...server,peers:server.peers.map(peer=>peer.id==='pc2'?{...peer,age:90}:peer)}};
+      return {json:{...server,peers:[
+        ...server.peers.map(peer=>peer.id==='pc2'?{...peer,age:90}:peer),
+        {id:'relay',name:'VPS',age:0,agents:[],ready:{accept:true,projects:['game']}},
+      ]}};
     },true,null);
     try{
       const toggle=browserPreview.locator('#list-toggle');
@@ -1780,6 +1783,9 @@ if (require.main === module) (async()=>{
       await reverseLocal.locator('.am-sidebar-disclosure').click();
       if(process.env.SCREENSHOT_DIR)await machines.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'project-computer.png')});
       await group('По компьютеру');
+      const relayHeader=card(browserPreview,'relay').locator('.am-machine-name');
+      await relayHeader.hover();
+      assert.equal(await relayHeader.locator('.am-group-new').count(),0);
       await checkGroupPlus(card(browserPreview,'pc1').locator('.am-machine-name'));
       assert.equal(await browserPreview.locator('#task-draft-computer').inputValue(),'pc1');
       await card(browserPreview,'local').locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
@@ -1877,11 +1883,11 @@ if (require.main === module) (async()=>{
       const modal=compactPreview.locator('#settings-dialog');
       await modal.waitFor();
       assert.equal(await modal.evaluate(node=>node.scrollWidth>node.clientWidth),false);
-      assert.deepEqual(await modal.locator('.am-settings-nav [data-tab]').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.tab)),['settings','project','agents','server']);
+      assert.deepEqual(await modal.locator('.am-settings-nav [data-tab]').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.tab)),['settings','project','agents','voice','server']);
       assert.deepEqual(await modal.locator('.am-settings-nav [data-tab] > svg').evaluateAll(icons=>icons.map(icon=>{
         const {width,height}=icon.getBoundingClientRect();
         return [width,height,icon.getAttribute('aria-hidden')];
-      })),Array(4).fill([16,16,'true']));
+      })),Array(5).fill([16,16,'true']));
       await modal.locator('[data-tab=server]').click();
       const name=modal.getByRole('textbox',{name:'Имя в сети',exact:true});
       const nameLabel=modal.locator('label[for=computer-name] > span');
