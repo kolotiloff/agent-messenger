@@ -39,14 +39,18 @@ func (s *Store) AddCoordinatorNote(project, task, opID, text string, senders ...
 
 func (s *Store) addNote(task, project, opID, text, author string, senders ...MessageSender) error {
 	return s.taskTx(task, func(machine, tx *sql.Tx) error {
-		return addNoteTx(machine, tx, task, project, opID, text, author, false, senders...)
+		gone := s.gone
+		if gone == nil {
+			gone = CheckWorkerGone
+		}
+		return addNoteTx(machine, tx, task, project, opID, text, author, false, gone, senders...)
 	})
 }
 
 // addNoteTx records a note. viaNet is a note that another
 // computer sent for the mirror of its task (T-149); its op id is built
 // here and may be longer.
-func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, viaNet bool, senders ...MessageSender) error {
+func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, viaNet bool, gone WorkerGone, senders ...MessageSender) error {
 	sender := coordinatorSender(author, senders)
 	text = strings.TrimSpace(text)
 	if opID == "" || (len(opID) > 128 && !viaNet) || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
@@ -91,7 +95,7 @@ func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, vi
 				if err != nil {
 					return err
 				}
-				if old != "" || t.State == "done" || t.State == "failed" {
+				if old != "" || canResumeTask(t.State) {
 					return continueRemoteTask(machine, tx, task, *link.remote, opID, text, MessageSender{Agent: AudienceOwner})
 				}
 			}
@@ -112,8 +116,8 @@ func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, vi
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
-			if t.State == "done" || t.State == "failed" {
-				return continueTaskTx(machine, tx, task, opID, text, nil, viaNet, MessageSender{Agent: AudienceOwner})
+			if canResumeTask(t.State) {
+				return continueTaskTx(machine, tx, task, opID, text, gone, viaNet, MessageSender{Agent: AudienceOwner})
 			}
 		}
 		if t.State == "waiting_owner" {

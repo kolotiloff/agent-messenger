@@ -556,6 +556,26 @@ func TestCancelTask(t *testing.T) {
 	if s, err := f.st.CancelTask(b); err != nil || s != "cancelled" {
 		t.Fatalf("repeat cancel %s %v", s, err)
 	}
+	if err := f.st.AddOwnerNote(a, "before-launch", "Continue"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("a task that never saved a session accepted a follow-up: %v", err)
+	}
+	if err := f.st.AddOwnerNote(b, "after-stop", "Continue"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.AddOwnerNote(b, "after-stop", "Continue"); err != nil {
+		t.Fatal(err)
+	}
+	task, _ := f.st.TaskByID(b)
+	if task.CancelRequested || task.SessionID != f.sessionOf(t, b) {
+		t.Fatalf("continuation lost the session or kept the old stop: %+v", task)
+	}
+	second := f.launch(t, b, task.SessionID)
+	if second.Kind != "continue" || second.ID == r.ID {
+		t.Fatalf("expected another turn in the same session: %+v", second)
+	}
+	if state, err := f.st.CancelTask(b); err != nil || state != "cancelling" {
+		t.Fatalf("stop second turn: %s %v", state, err)
+	}
 }
 
 func TestRestartInterruptsRunsButKeepsIntents(t *testing.T) {

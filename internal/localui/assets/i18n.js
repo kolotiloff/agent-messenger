@@ -7,6 +7,10 @@
   let lang='ru';
   try{if(localStorage.getItem('messenger-lang')==='en')lang='en';}catch(_){}
   const EN={
+  'Открытые файлы':'Open files',
+  'Открыть файл':'Open file',
+  'Открыть в отдельном окне':'Open in a separate window',
+  'Не удалось открыть отдельное окно':'Could not open a separate window',
   'Не удалось загрузить задачу':'Could not load task',
   'Загружаем задачу…':'Loading task…',
   'Статус':'Status',
@@ -132,6 +136,10 @@
   'Подключаемся к локальному клиенту…':'Connecting to the local client…',
   'Ответ исполнителю':'Reply to the worker',
   'Остановить':'Stop',
+  'Продолжить в этой сессии…':'Continue in this session…',
+  'Работа остановлена':'Work stopped',
+  'Новое сообщение продолжит сессию после проверки процесса.':'A new message resumes the session after the previous process is checked.',
+  'Не удалось продолжить сессию':'Could not continue the session',
   'Написать исполнителю…':'Write to the worker…',
   'вчера ':'yesterday ',
   'Создана ':'Created ',

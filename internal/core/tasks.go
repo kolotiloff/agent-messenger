@@ -240,6 +240,7 @@ type Task struct {
 	OpenQuestion    *TaskQuestion
 	archiveState    string
 	archiveVersion  int64
+	launchedSession bool
 }
 
 // TaskQuestion is a question that a verified run asked.
@@ -1078,12 +1079,15 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, sen
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model,requested_access,archive_state,archive_version`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model,requested_access,archive_state,archive_version,
+CASE WHEN session_id IS NOT NULL AND state IN ('cancelled','interrupted','blocked')
+ THEN EXISTS(SELECT 1 FROM task_runs WHERE task_id=tasks.id AND ordinal=1 AND (identity_bound=1 OR pid IS NOT NULL))
+ ELSE session_id IS NOT NULL END`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel, origin, full int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel, &t.RequestedAccess, &t.archiveState, &t.archiveVersion)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel, &t.RequestedAccess, &t.archiveState, &t.archiveVersion, &t.launchedSession)
 	t.CancelRequested, t.FromNetwork, t.FullAccess = cancel != 0, origin != 0, full != 0
 	return t, err
 }
@@ -2152,11 +2156,8 @@ func answerTask(machine, tx *sql.Tx, task, question, opID, text, by string, from
 	}
 }
 
-// ContinueTask gives a finished task a follow-up: the next run resumes the
-// same conversation with it (T-051). Only a done or failed task of this
-// computer whose conversation was recorded is continued; a cancelled or
-// blocked one is not, and nothing tries to recover a conversation the agent
-// no longer has: such a run fails like any other. opID makes it idempotent.
+// ContinueTask sends a follow-up in the saved worker conversation.
+// An operation ID makes repeating the same request safe.
 func (s *Store) ContinueTask(task, opID, text, by string) error {
 	return s.ContinueTaskChecked(task, opID, text, by, nil)
 }
@@ -2165,11 +2166,8 @@ func (s *Store) ContinueTask(task, opID, text, by string) error {
 // certainly gone, and why; an error means it is not certain (D-108).
 type WorkerGone func(platform.Observation) (string, error)
 
-// ContinueTaskChecked is ContinueTask that may also continue an interrupted
-// task of this computer (T-118, D-108): only when gone confirms, for every
-// interrupted run of the task, that its worker is gone. Those runs are then
-// closed as failed, their reservations stay as they are, and the same
-// conversation goes on. Anything unclear leaves the task as it was.
+// ContinueTaskChecked also accepts an explicit follow-up after interruption
+// or blockage once the old worker can be confirmed gone (D-108).
 func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone, senders ...MessageSender) error {
 	text = strings.TrimSpace(text)
 	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
@@ -2188,6 +2186,10 @@ func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone
 		}
 		return continueTaskTx(machine, tx, task, opID, text, gone, false, coordinatorSender(by, senders))
 	})
+}
+
+func canResumeTask(state string) bool {
+	return state == "done" || state == "failed" || state == "cancelled" || state == "interrupted" || state == "blocked"
 }
 
 // continueTaskTx continues a task that runs on this computer. fromNet is
@@ -2211,12 +2213,12 @@ func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGon
 	if err != nil {
 		return err
 	}
-	interrupted := t.State == "interrupted" && gone != nil
+	stuck := t.State == "interrupted" || t.State == "blocked"
 	if t.archiveState == archiveRemoved || (!fromNet && t.archiveState == archiveStored) {
 		return fmt.Errorf("%w: продолжить можно после восстановления задачи из архива", ErrRejected)
 	}
-	if t.State != "done" && t.State != "failed" && !interrupted {
-		return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one can be continued; this one is %s", ErrRejected, t.State)
+	if !canResumeTask(t.State) || (stuck && gone == nil) {
+		return fmt.Errorf("%w: this task cannot be continued while it is %s", ErrRejected, t.State)
 	}
 	link, err := taskLink(tx, task)
 	if err != nil {
@@ -2225,12 +2227,7 @@ func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGon
 	if link.remote != nil || (link.origin != nil && !fromNet) {
 		return fmt.Errorf("%w: another computer's coordinator manages this task", ErrRejected)
 	}
-	if interrupted {
-		if err := closeInterruptedRuns(tx, task, gone); err != nil {
-			return err
-		}
-	}
-	if t.SessionID == "" {
+	if !t.launchedSession {
 		return fmt.Errorf("%w: no recorded conversation to continue; start a new task", ErrRejected)
 	}
 	var paused int
@@ -2239,6 +2236,16 @@ func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGon
 	}
 	if paused != 0 {
 		return errAgentPaused(t.Provider)
+	}
+	if t.State == "interrupted" {
+		if err := closeInterruptedRuns(tx, task, gone); err != nil {
+			return err
+		}
+	}
+	if t.State == "blocked" {
+		if _, err := closeStuckRuns(tx, task, gone, "failed", "blocked; closed for a follow-up: "); err != nil {
+			return err
+		}
 	}
 	var open int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND state IN ('intent','launching','running','blocked','interrupted')`, task).Scan(&open); err != nil {
@@ -2260,7 +2267,7 @@ func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGon
 	if err := setTaskState(tx, task, "running", "continued; the same conversation resumes"); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL WHERE id=?`, task); err != nil {
+	if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL,cancel_requested=0 WHERE id=?`, task); err != nil {
 		return err
 	}
 	return insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "", sender)
@@ -2312,10 +2319,10 @@ func closeInterruptedRuns(tx *sql.Tx, task string, gone WorkerGone) error {
 // ErrWorkerMayRun refuses to close a stuck task whose worker may still run.
 var ErrWorkerMayRun = errors.New("the worker may still run")
 
-// closeStuckRuns closes the blocked and interrupted runs of a task whose
+// closeStuckRuns settles the blocked and interrupted runs of a task whose
 // workers are certainly gone (D-120). A run that may still be starting or
 // running, or a worker that may still run, refuses the whole close.
-func closeStuckRuns(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
+func closeStuckRuns(tx *sql.Tx, task string, gone WorkerGone, state, detail string) (string, error) {
 	var open int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND state IN ('intent','launching','running')`, task).Scan(&open); err != nil {
 		return "", err
@@ -2353,7 +2360,7 @@ func closeStuckRuns(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 		whys[i] = why
 	}
 	for i, r := range runs {
-		if err := setRunState(tx, r.id, "cancelled", "closed by an explicit cancel: "+whys[i], "blocked", "interrupted"); err != nil {
+		if err := setRunState(tx, r.id, state, detail+whys[i], "blocked", "interrupted"); err != nil {
 			return "", err
 		}
 	}
@@ -2435,7 +2442,7 @@ func cancelTask(machine, tx *sql.Tx, task string, gone WorkerGone) (string, erro
 			if gone == nil {
 				return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
 			}
-			why, err := closeStuckRuns(tx, task, gone)
+			why, err := closeStuckRuns(tx, task, gone, "cancelled", "closed by an explicit cancel: ")
 			if err != nil {
 				return err
 			}

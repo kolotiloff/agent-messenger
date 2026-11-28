@@ -33,6 +33,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           json.task={...json.task};
           delete json.task.project;
           json.items[1].text='Ответ по задаче '+json.task.id;
+          if(json.task.id==='game-1'){
+            json.task.state='interrupted';
+            json.task.can_continue=true;
+            json.task.remote={name:'Проверочный компьютер'};
+          }
           if(json.task.id==='game-2')json.task.owner_question={id:'fixture-question',text:'Подтвердите проверку'};
         }
         return route.fulfill({json});
@@ -67,6 +72,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await strip.evaluate(node=>!!node.closest('.am-task-toolbar')),true);
     assert.equal(await primary.inputValue(),'Основной черновик');
     const draft=panel(first).getByRole('textbox',{name:'Ответ исполнителю'});
+    assert.equal(await draft.getAttribute('placeholder'),'Продолжить в этой сессии…');
     await draft.fill('Отдельный черновик');
     await draft.press('Escape');
     assert.equal(await page.locator('dialog[open]').count(),0);
@@ -104,6 +110,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     for(const [label,layout] of [['Столбцы','columns'],['Строки','stack'],['Сетка','grid']]){
       await page.locator('.am-task-toolbar').getByRole('button',{name:label,exact:true}).click();
       assert.equal(await board.getAttribute('data-layout'),layout);
+      assert.equal(await board.locator('.am-pane-grid').evaluate(grid=>getComputedStyle(grid).gap),'1px');
+      for(const title of [first,third]) {
+        assert.equal(await panel(title).evaluate(node=>getComputedStyle(node).borderWidth),'0px');
+      }
     }
     await tab(first).focus();
     await tab(first).press('Alt+ArrowRight');

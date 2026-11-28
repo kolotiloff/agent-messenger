@@ -225,9 +225,9 @@ func remoteContact(machine, tx *sql.Tx, task string, link netLink, out *RemoteCo
 	var name, remoteTask sql.NullString
 	var created, updated string
 	var cancel, cancelQueued bool
-	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested,
- CASE WHEN cancel_requested=1 THEN EXISTS(SELECT 1 FROM net_outbox WHERE op_id=?) ELSE 0 END
- FROM tasks WHERE id=?`, safeNetOp("cancel."+task), task).Scan(&name, &remoteTask, &created, &updated, &cancel, &cancelQueued); err != nil {
+	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested=1 AND state IN ('running','waiting_owner','waiting_coordinator'),
+ CASE WHEN cancel_requested=1 AND state IN ('running','waiting_owner','waiting_coordinator') THEN EXISTS(SELECT 1 FROM net_outbox WHERE task_id=tasks.id AND kind='cancel') ELSE 0 END
+ FROM tasks WHERE id=?`, task).Scan(&name, &remoteTask, &created, &updated, &cancel, &cancelQueued); err != nil {
 		return err
 	}
 	if cancel {
@@ -614,7 +614,7 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 		if err := s.fillWindowLaunch(&w); err != nil {
 			return nil, err
 		}
-		w.CanContinue = t.archiveState == "" && canWindowContinue(w, t.SessionID)
+		w.CanContinue = t.archiveState == "" && canWindowContinue(w, t)
 		if w.Usage, err = s.taskUsage(t.ID); err != nil {
 			return nil, err
 		}
@@ -679,21 +679,21 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 		return f, t, err
 	}
 	f.Task.ContextWindow = snapshot.Window
-	f.Task.CanContinue = t.archiveState == "" && canWindowContinue(f.Task, t.SessionID)
+	f.Task.CanContinue = t.archiveState == "" && canWindowContinue(f.Task, t)
 	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
 		return f, t, err
 	}
 	return f, t, nil
 }
 
-func canWindowContinue(t WindowTask, session string) bool {
-	if t.State != "done" && t.State != "failed" {
+func canWindowContinue(t WindowTask, task Task) bool {
+	if !canResumeTask(t.State) {
 		return false
 	}
 	if t.Remote == nil {
-		return session != ""
+		return task.launchedSession
 	}
-	return !t.Remote.From && !t.Remote.Unaccepted && !t.Remote.Lost && !t.Remote.Silent
+	return !t.Remote.From && !t.Remote.Unaccepted && !t.Remote.Lost && !t.Remote.Silent && !remoteCloseUnconfirmed(task)
 }
 
 // TaskFeed builds the feed of one task.
@@ -887,7 +887,7 @@ func (s *Store) remoteEvents(f *TaskFeed) error {
 			f.Items = append(f.Items, FeedItem{Kind: "accepted", Author: "messenger", Text: f.Task.Remote.Name, At: at, Verified: true})
 		case "report", "late_report":
 			f.Items = append(f.Items, FeedItem{Kind: "report", Author: "worker", Text: text, At: at, Verified: true, State: "finished", Images: pics[disposed]})
-		case "failed", "blocked", "interrupted", "cancelled":
+		case "failed", "blocked", "interrupted", "cancelled", "continue_refused":
 			f.Items = append(f.Items, FeedItem{Kind: "outcome", Author: "messenger", Text: text, At: at, State: kind, Verified: true})
 		}
 	}

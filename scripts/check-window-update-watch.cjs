@@ -47,7 +47,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const fixtures = {
         '/api/window':{projects:[{name:'Проект'}],project:'Проект',computer_name:'Мак',agents:[],tasks:[task],coordinator:{},folder:'/fixture'},
         '/api/client-info':{client:'running',client_version:'1.0.0-preview.104'},
-        '/api/self-update':{installed_version:'1.0.0-preview.104'},
+        '/api/self-update':{installed_version:'1.0.1-preview.104'},
         '/api/update-progress':downloadProgress,
         '/api/server':server,
         '/api/task':{task,items:[]},
@@ -95,6 +95,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await row.locator('.am-task-status').evaluate(e=>getComputedStyle(e).color),'rgb(206, 178, 113)');
     assert.match(await arrow.locator('path').getAttribute('d'),/M3 15v4/);
     await shot('available');
+    const menu=page.locator('#device-menu');
+    await card.locator('.am-machine-name').click({button:'right'});
+    const menuOffer=menu.getByRole('menuitem',{name:/Обновить до/});
+    await menuOffer.hover();
+    assert.equal(await menuOffer.locator('svg').count(),0);
+    if(process.env.SCREENSHOT_DIR)await menu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'menu-available.png')});
+    await page.keyboard.press('Escape');
     if(process.env.SCREENSHOT_DIR)await row.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'task-waiting.png')});
     publish('queued', undefined, '');
     const waiting=card.getByRole('img',{name:'Ждёт обновления'});
@@ -118,15 +125,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await cancelUpdate.locator('svg').last().evaluate(e=>getComputedStyle(e).color),'rgb(242, 139, 130)');
     await shot('cancel');
     await card.locator('.am-machine-name').click({button:'right'});
-    const menu=page.locator('#device-menu');
     await menu.locator('.am-version').hover();
     await page.mouse.move(0,0);
     await menu.waitFor({state:'hidden'});
     await card.locator('.am-machine-name').click({button:'right'});
-    const menuCancel=menu.getByRole('button',{name:'Отменить обновление'});
+    const menuCancel=menu.getByRole('menuitem',{name:'Отменить обновление'});
+    await menuCancel.hover();
+    if(process.env.SCREENSHOT_DIR)await menu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'menu-cancel.png')});
     const target=await menuCancel.boundingBox();
     await menuCancel.click();
-    await menu.getByRole('img',{name:'Отправляем запрос на отмену…'}).waitFor();
+    await card.locator('.am-machine-name').click({button:'right'});
+    await menu.getByText('Отправляем запрос на отмену…',{exact:true}).waitFor();
     assert.equal(await menu.locator('.am-version').textContent(),'v1.0');
     publish('queued');
     await page.mouse.dblclick(target.x+target.width/2,target.y+target.height/2);
@@ -244,7 +253,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.locator('#settings-close').click();
     const success=page.locator('.am-window > #notices .am-notice-good').filter({hasText:'ПК-1 обновлён до v1.0.1'});
     await success.waitFor();
-    if(process.env.SCREENSHOT_DIR)await success.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'update-notice.png')});
+    if(process.env.SCREENSHOT_DIR){
+      const clip=await success.boundingBox();
+      if(clip)await page.screenshot({clip,path:path.join(process.env.SCREENSHOT_DIR,'update-notice.png')});
+    }
     assert.equal(await success.locator('.am-notice-timer').count(),0);
     await success.getByRole('button',{name:'Закрыть'}).click();
     server.updates=[];

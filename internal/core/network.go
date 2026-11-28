@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -849,10 +850,18 @@ func cancelRemoteTask(machine, tx *sql.Tx, t Task, remote netLink) (string, erro
 	if t.CancelRequested && !contact.Silent && !contact.Lost {
 		return "cancelling", nil
 	}
+	op := "cancel." + t.ID
+	previous, err := metaValue(tx, "net_continue_prev:"+t.ID)
+	if err != nil {
+		return "", err
+	}
+	if previous != "" {
+		op += "." + strconv.Itoa(t.Version)
+	}
 	// A task the other computer never accepted, or whose cancel it never
 	// answered, closes at once too: nothing here runs it.
 	if contact.Lost || contact.Silent || t.State == "blocked" || t.State == "interrupted" {
-		why := "closed on this computer; what happened on " + contact.Name + " is unknown"
+		why := remoteCloseUnconfirmedPrefix + " what happened on " + contact.Name + " is unknown"
 		if err := setTaskState(tx, t.ID, "cancelled", why); err != nil {
 			return "", err
 		}
@@ -867,14 +876,14 @@ func cancelRemoteTask(machine, tx *sql.Tx, t Task, remote netLink) (string, erro
 			return "", err
 		}
 		if broker == remote.broker && !t.CancelRequested {
-			return "cancelled", enqueueNet(tx, remote.broker, remote.peer, "cancel."+t.ID, t.ID, netBody{Kind: "cancel", Task: t.ID})
+			return "cancelled", enqueueNet(tx, remote.broker, remote.peer, op, t.ID, netBody{Kind: "cancel", Task: t.ID})
 		}
 		return "cancelled", nil
 	}
 	if _, err := tx.Exec(`UPDATE tasks SET cancel_requested=1,updated_at=?,version=version+1 WHERE id=?`, now(), t.ID); err != nil {
 		return "", err
 	}
-	return "cancelling", enqueueNet(tx, remote.broker, remote.peer, "cancel."+t.ID, t.ID, netBody{Kind: "cancel", Task: t.ID})
+	return "cancelling", enqueueNet(tx, remote.broker, remote.peer, op, t.ID, netBody{Kind: "cancel", Task: t.ID})
 }
 
 // ---- executing side ----
@@ -1625,6 +1634,12 @@ WHERE id=? AND (remote_live_ordinal<? OR (remote_live_ordinal=? AND (remote_live
 	// The owner closed it here (T-131): what that computer reports later is
 	// kept in the log and does not reopen the task.
 	if t.State == "cancelled" {
+		if remoteCloseUnconfirmed(t) && (b.State == "cancelled" || b.State == "done" || b.State == "failed") && b.Event != "cancel_refused" {
+			if _, err := tx.Exec(`UPDATE tasks SET detail=?,cancel_requested=0,version=version+1 WHERE id=?`,
+				"executor confirmed the previous run ended", t.ID); err != nil {
+				return err
+			}
+		}
 		// D-120: that computer could not close it; the coordinator and the
 		// owner learn so, since a task there still holds that computer.
 		audience := AudienceLog
@@ -1685,6 +1700,11 @@ WHERE id=? AND (remote_live_ordinal<? OR (remote_live_ordinal=? AND (remote_live
 	}
 	if err := setTaskState(tx, t.ID, b.State, clip(b.Detail, 2000)); err != nil {
 		return err
+	}
+	if t.CancelRequested && canResumeTask(b.State) {
+		if _, err := tx.Exec(`UPDATE tasks SET cancel_requested=0 WHERE id=?`, t.ID); err != nil {
+			return err
+		}
 	}
 	if b.State == "done" || b.State == "failed" || b.State == "cancelled" {
 		var run string

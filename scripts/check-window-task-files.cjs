@@ -8,12 +8,13 @@ const engine = process.env.BROWSER_ENGINE || 'chromium';
 (async () => {
   const browser = await playwright[engine].launch({headless:true});
   try {
-    const page = await browser.newPage({viewport:{width:1100,height:850}});
+    const page = await browser.newPage({viewport:{width:1140,height:760}, colorScheme:'dark'});
+    page.setDefaultTimeout(6000);
     await page.route('http://localhost/**', async route => {
       const file = new URL(route.request().url()).pathname;
       if (file === '/') return route.fulfill({contentType:'text/html; charset=utf-8',body:`<!doctype html><meta charset="utf-8">
         <link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/file-viewer.css">
-        <div id="am-concept"><div id="report"></div></div>
+        <div id="am-concept" class="am-task-sidebar-preview" data-chat-font="inter"><div id="task-layout" class="am-chat-layout am-queue-collapsed"><header class="am-task-toolbar"><h3 class="am-chat-head">Отчёт о проверке</h3><span></span></header><div class="am-chat"><div class="am-chat-body"><div id="report" class="am-thread"></div></div></div></div></div>
         <script src="/i18n.js"></script><script src="/file-viewer.js"></script>`});
       return route.fulfill({path:path.join(assets,file.slice(1))});
     });
@@ -36,14 +37,24 @@ const engine = process.env.BROWSER_ENGINE || 'chromium';
       };
       const report = document.querySelector('#report');
       report.append(
-        window.taskFiles.paragraph(document.createElement('p'), 'See [Roadmap](Docs/PLAN.md#L3).\nFiles: Docs/PLAN.md,\nDocs/Sub/More.txt', source, true),
+        window.taskFiles.paragraph(document.createElement('p'), 'See [Roadmap]\n(Docs/PLAN.md#L3).\nFiles: Docs/PLAN.md,\nDocs/Sub/More.txt', source, true),
         window.taskFiles.paragraph(document.createElement('p'), '[Remote](Docs/PLAN.md)', {...source,remote:'Remote fixture'}, true),
       );
     });
     assert.equal(await page.getByRole('button',{name:'Docs/PLAN.md'}).count(),1);
     assert.equal(await page.getByRole('button',{name:'Docs/Sub/More.txt'}).count(),1);
-    await page.getByRole('button',{name:'Roadmap'}).click();
-    const viewer = page.getByRole('dialog');
+    const roadmap=page.getByRole('button',{name:'Roadmap'});
+    await roadmap.hover();
+    assert.deepEqual(await roadmap.evaluate(node=>{
+      const style=getComputedStyle(node);
+      return [style.backgroundColor,style.boxShadow,style.outlineStyle,style.textDecorationStyle];
+    }),['rgba(0, 0, 0, 0)','none','none','solid']);
+    await roadmap.click();
+    const viewer = page.locator('.am-file-viewer');
+    const first = page.getByRole('tab',{name:'PLAN.md'});
+    await first.waitFor();
+    assert.equal(await page.getByRole('dialog').count(),0);
+    assert.equal(await page.locator('#report').isVisible(),true);
     await viewer.getByRole('heading',{name:'Plan',exact:true}).waitFor();
     assert.equal(await viewer.locator('.am-file-target strong').textContent(),'A marked line');
     assert.equal(await viewer.locator('script').count(),0);
@@ -68,7 +79,29 @@ const engine = process.env.BROWSER_ENGINE || 'chromium';
     await viewer.getByRole('button',{name:'More'}).click();
     await viewer.locator('pre .am-file-target').waitFor();
     assert.equal(await viewer.locator('pre .am-file-target').textContent(),'second');
-    await viewer.getByRole('button',{name:'Закрыть'}).click();
+    const second = page.getByRole('tab',{name:'More.txt'});
+    assert.equal(await second.getAttribute('aria-selected'),'true');
+    await first.click();
+    await viewer.getByRole('heading',{name:'Plan',exact:true}).waitFor();
+    await second.click();
+    await viewer.locator('pre .am-file-target').waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'file-tabs.png')});
+    const popout = viewer.getByRole('button',{name:'Открыть в отдельном окне'});
+    const popupPromise = page.waitForEvent('popup');
+    await popout.click();
+    const popup = await popupPromise;
+    assert.equal(await popup.locator('mark').textContent(),'second');
+    await popup.setViewportSize({width:600,height:500});
+    assert.equal(await popup.locator('mark').isVisible(),true);
+    await popup.close();
+    await page.evaluate(() => {
+      window.webkit.messageHandlers.reportFileWindow = {postMessage: payload => { window.separatePreview = payload; }};
+    });
+    await viewer.getByRole('button',{name:'Открыть в отдельном окне'}).click();
+    assert.deepEqual(await page.evaluate(() => window.separatePreview),{name:'More.txt',text:'first\nsecond',line:2});
+    await page.getByTitle('Закрыть More.txt',{exact:true}).click();
+    await page.getByTitle('Закрыть PLAN.md',{exact:true}).click();
+    assert.equal(await viewer.isVisible(),false);
     await page.getByRole('button',{name:'Remote',exact:true}).click();
     await viewer.getByText('Файл находится на компьютере «Remote fixture».').waitFor();
     assert.equal(await viewer.getByRole('button',{name:'Копировать путь'}).count(),1);

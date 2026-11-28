@@ -93,8 +93,7 @@ func TestContinueFinishedTask(t *testing.T) {
 	}
 }
 
-// Cancelled and blocked tasks are not continued: a blocked task's outcome is
-// unclear, and unknown is not success.
+// A task stopped before launch has no conversation to resume.
 func TestContinueRefusesUnclearTasks(t *testing.T) {
 	f := newTaskFixture(t)
 	id := f.start(t, "op", "codex", "Fix the menu")

@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     lazy var updates = DesktopUpdater()
     let dictation = ComposerDictation()
     var statusItem: NSStatusItem?
+    private var reportWindows: [NSWindow] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let renamed = BundleName.migrate(Bundle.main.bundleURL) {
@@ -93,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         config.userContentController.add(self, name: "titlebar")
         config.userContentController.add(self, name: "composerDictation")
         config.userContentController.add(self, name: "reportFileSave")
+        config.userContentController.add(self, name: "reportFileWindow")
         dictation.onEvent = { [weak self] id, event, text in
             let payload = ["id": id, "event": event, "text": text ?? ""]
             guard let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -213,8 +215,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     @objc func showWindow() {
         if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
         if window?.isMiniaturized == true { window?.deminiaturize(nil) }
-        window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        positionWindowButtons()
+        NSApp.activate(ignoringOtherApps: true)
     }
+    // Keep the native controls on the web toolbar's 44-point row.
+    private func positionWindowButtons() {
+        guard let window, let content = window.contentView, !window.styleMask.contains(.fullScreen) else { return }
+        let controls: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        for (index, type) in controls.enumerated() {
+            guard let button = window.standardWindowButton(type), let bar = button.superview else { continue }
+            let center = NSPoint(x: 24 + CGFloat(index) * 23, y: content.isFlipped ? 22 : content.bounds.maxY - 22)
+            let point = bar.convert(center, from: content)
+            button.setFrameOrigin(NSPoint(x: point.x - button.frame.width / 2, y: point.y - button.frame.height / 2))
+        }
+    }
+    func windowDidResize(_ notification: Notification) { positionWindowButtons() }
+    func windowDidBecomeKey(_ notification: Notification) { positionWindowButtons() }
+    func windowDidExitFullScreen(_ notification: Notification) { positionWindowButtons() }
+
     @objc func chooseData() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.allowsMultipleSelection = false; panel.canCreateDirectories = false
@@ -340,8 +359,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let defaults = UserDefaults.standard
         let savedTheme = defaults.string(forKey: "appearance") ?? "system"
         let theme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
-        let savedFont = defaults.string(forKey: "chatFont") ?? "system"
-        let font = Self.chatFonts.contains(savedFont) ? savedFont : "system"
+        let savedFont = defaults.string(forKey: "chatFont") ?? "inter"
+        let font = Self.chatFonts.contains(savedFont) ? savedFont : "inter"
         controller.removeAllUserScripts()
         let source = "window.messengerInitialTheme = '\(theme)'; window.messengerInitialChatFont = '\(font)'; window.amMacTitlebar = true"
         let preferences = defaults.dictionary(forKey: preferencesKey) as? [String: String] ?? [:]
@@ -375,6 +394,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             catch { finish("failed") }
         }
     }
+    private func openReportWindow(_ body: [String: Any]) {
+        guard let name = body["name"] as? String, !name.isEmpty, name.utf8.count <= 1024,
+              let text = body["text"] as? String, text.utf8.count <= 1_048_576,
+              window.isKeyWindow else { return }
+        let preview = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 680),
+                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                               backing: .buffered, defer: false)
+        preview.title = name
+        preview.isReleasedWhenClosed = false
+        preview.minSize = NSSize(width: 340, height: 240)
+        let scroll = NSTextView.scrollableTextView()
+        guard let content = scroll.documentView as? NSTextView else { return }
+        content.isEditable = false
+        content.textContainerInset = NSSize(width: 16, height: 16)
+        content.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        content.string = text
+        preview.contentView = scroll
+        reportWindows.removeAll { !$0.isVisible && !$0.isMiniaturized }
+        reportWindows.append(preview)
+        preview.center()
+        preview.makeKeyAndOrderFront(nil)
+        if let line = body["line"] as? Int, line > 0 {
+            let source = text as NSString
+            var start = 0
+            for _ in 1..<line {
+                if start >= source.length { return }
+                start = NSMaxRange(source.lineRange(for: NSRange(location: start, length: 0)))
+            }
+            if start < source.length {
+                let range = source.lineRange(for: NSRange(location: start, length: 0))
+                content.setSelectedRange(range)
+                content.scrollRangeToVisible(range)
+            }
+        }
+    }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame,
               let page = message.frameInfo.request.url, let origin = origin,
@@ -382,6 +436,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if message.name == "updates", message.body as? String == "check" { updates.check() }
         if message.name == "updates", message.body as? String == "install" { updates.install() }
         if message.name == "folder", message.body as? String == "pick" { pickProjectFolder() }
+        if message.name == "reportFileWindow", let body = message.body as? [String: Any] { openReportWindow(body) }
         if message.name == "reportFileSave", let body = message.body as? [String: String] { saveReportFile(body) }
         if message.name == "composerDictation", let body = message.body as? [String: String],
            let id = body["id"], UUID(uuidString: id) != nil {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 	"unsafe"
@@ -27,6 +28,8 @@ import (
 func init() { runtime.LockOSThread() }
 
 var webkitLibraries = []string{"libwebkit2gtk-4.1.so.0", "libwebkit2gtk-4.0.so.37"}
+
+type gdkRGBA struct{ red, green, blue, alpha float64 }
 
 type gtkAPI struct {
 	initCheck       func(argc, argv uintptr) bool
@@ -49,6 +52,8 @@ type gtkAPI struct {
 	valueSetBool    func(value unsafe.Pointer, on bool)
 	objectSet       func(object uintptr, name string, value unsafe.Pointer)
 	webViewNew      func() uintptr
+	webBackground   func(view uintptr, color *gdkRGBA)
+	webRunScript    func(view uintptr, script string, cancellable, callback, data uintptr)
 	loadURI         func(view uintptr, uri string)
 	contentManager  func(view uintptr) uintptr
 	registerHandler func(manager uintptr, name string) bool
@@ -59,24 +64,28 @@ type gtkAPI struct {
 	valueToString   func(value uintptr) uintptr
 	free            func(p uintptr)
 	// The window without the system title bar (T-082).
-	setTitlebar    func(window, widget uintptr)
-	boxNew         func(orientation, spacing int32) uintptr
-	styleContext   func(widget uintptr) uintptr
-	addClass       func(context uintptr, name string)
-	cssNew         func() uintptr
-	cssLoad        func(provider uintptr, data string, length int, err uintptr) bool
-	screenDefault  func() uintptr
-	addProvider    func(screen, provider uintptr, priority uint32)
-	beginMoveDrag  func(window uintptr, button, x, y int32, time uint32)
-	iconify        func(window uintptr)
-	maximize       func(window uintptr)
-	unmaximize     func(window uintptr)
-	isMaximized    func(window uintptr) bool
-	closeWindow    func(window uintptr)
-	displayDefault func() uintptr
-	defaultSeat    func(display uintptr) uintptr
-	seatPointer    func(seat uintptr) uintptr
-	devicePosition func(device, screen uintptr, x, y *int32)
+	setTitlebar      func(window, widget uintptr)
+	boxNew           func(orientation, spacing int32) uintptr
+	styleContext     func(widget uintptr) uintptr
+	addClass         func(context uintptr, name string)
+	cssNew           func() uintptr
+	cssLoad          func(provider uintptr, data string, length int, err uintptr) bool
+	screenDefault    func() uintptr
+	screenComposited func(screen uintptr) bool
+	screenRGBAVisual func(screen uintptr) uintptr
+	setVisual        func(widget, visual uintptr)
+	setAppPaintable  func(widget uintptr, paintable bool)
+	addProvider      func(screen, provider uintptr, priority uint32)
+	beginMoveDrag    func(window uintptr, button, x, y int32, time uint32)
+	iconify          func(window uintptr)
+	maximize         func(window uintptr)
+	unmaximize       func(window uintptr)
+	isMaximized      func(window uintptr) bool
+	closeWindow      func(window uintptr)
+	displayDefault   func() uintptr
+	defaultSeat      func(display uintptr) uintptr
+	seatPointer      func(seat uintptr) uintptr
+	devicePosition   func(device, screen uintptr, x, y *int32)
 	// The tray icon (T-184). GtkStatusIcon shows only where the desktop
 	// has a tray; without one closing the window closes it, as before.
 	hide           func(widget uintptr)
@@ -139,6 +148,8 @@ func loadGTK() (*gtkAPI, bool) {
 	bind(&g.valueSetBool, gtk, "g_value_set_boolean")
 	bind(&g.objectSet, gtk, "g_object_set_property")
 	bind(&g.webViewNew, webkit, "webkit_web_view_new")
+	bind(&g.webBackground, webkit, "webkit_web_view_set_background_color")
+	bind(&g.webRunScript, webkit, "webkit_web_view_run_javascript")
 	bind(&g.loadURI, webkit, "webkit_web_view_load_uri")
 	bind(&g.contentManager, webkit, "webkit_web_view_get_user_content_manager")
 	bind(&g.registerHandler, webkit, "webkit_user_content_manager_register_script_message_handler")
@@ -155,6 +166,10 @@ func loadGTK() (*gtkAPI, bool) {
 	bind(&g.cssNew, gtk, "gtk_css_provider_new")
 	bind(&g.cssLoad, gtk, "gtk_css_provider_load_from_data")
 	bind(&g.screenDefault, gtk, "gdk_screen_get_default")
+	bind(&g.screenComposited, gtk, "gdk_screen_is_composited")
+	bind(&g.screenRGBAVisual, gtk, "gdk_screen_get_rgba_visual")
+	bind(&g.setVisual, gtk, "gtk_widget_set_visual")
+	bind(&g.setAppPaintable, gtk, "gtk_widget_set_app_paintable")
 	bind(&g.addProvider, gtk, "gtk_style_context_add_provider_for_screen")
 	bind(&g.beginMoveDrag, gtk, "gtk_window_begin_move_drag")
 	bind(&g.iconify, gtk, "gtk_window_iconify")
@@ -208,7 +223,8 @@ window.amWindow = function (action) { window.webkit.messageHandlers.amwindow.pos
 
 // gtkNoTitleCSS makes the empty title bar widget take no room; GTK keeps its
 // own window border, so the window still resizes from its edges.
-const gtkNoTitleCSS = `.am-no-title { min-height: 0; padding: 0; margin: 0; border: 0; box-shadow: none; background: none; }`
+const gtkNoTitleCSS = `.am-no-title { min-height: 0; padding: 0; margin: 0; border: 0; box-shadow: none; background: none; }
+window.am-alpha, window.am-alpha decoration { background-color: transparent; background-image: none; }`
 
 // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION
 const gtkStyleApplication = 600
@@ -216,13 +232,14 @@ const gtkStyleApplication = 600
 var (
 	gtkOnce  sync.Once
 	gtkState struct {
-		api       *gtkAPI
-		window    uintptr
-		closing   bool
-		destroyed uintptr
-		quit      uintptr
-		theme     uintptr
-		action    uintptr
+		api        *gtkAPI
+		window     uintptr
+		closing    bool
+		destroyed  uintptr
+		quit       uintptr
+		theme      uintptr
+		action     uintptr
+		windowSize uintptr
 		// T-184: the tray icon, its menu and the window's close.
 		icon     uintptr
 		menu     uintptr
@@ -266,6 +283,11 @@ func showGTKWindow(ctx context.Context, home string, page windowPage) bool {
 	}
 	// Callbacks cannot be freed, and the window opens once per process.
 	gtkOnce.Do(func() {
+		gtkState.windowSize = purego.NewCallback(func(win, property, view uintptr) uintptr {
+			script := "document.documentElement.classList.toggle('am-window-maximized', " + strconv.FormatBool(gtkState.api.isMaximized(win)) + ");"
+			gtkState.api.webRunScript(view, script, 0, 0, 0)
+			return 0
+		})
 		gtkState.destroyed = purego.NewCallback(func(widget, data uintptr) uintptr {
 			if !gtkState.closing {
 				gtkState.api.mainQuit()
@@ -338,14 +360,22 @@ func showGTKWindow(ctx context.Context, home string, page windowPage) bool {
 	g.setTitle(win, "Kotel")
 	g.setDefaultSize(win, 1280, 820)
 	g.setPosition(win, gtkWinPosCenter)
-	removeGTKTitleBar(g, win)
+	alpha := removeGTKTitleBar(g, win)
 	view := g.webViewNew()
+	if alpha {
+		g.webBackground(view, &gdkRGBA{})
+		g.signalConnect(win, "notify::is-maximized", gtkState.windowSize, view, 0, 0)
+	}
 	manager := g.contentManager(view)
 	g.signalConnect(manager, "script-message-received::amtheme", gtkState.theme, 0, 0, 0)
 	g.registerHandler(manager, "amtheme")
 	g.signalConnect(manager, "script-message-received::amwindow", gtkState.action, 0, 0, 0)
 	g.registerHandler(manager, "amwindow")
-	g.addScript(manager, g.userScriptNew(gtkPageScript, webkitTopFrame, webkitDocumentStart, 0, 0))
+	pageScript := gtkPageScript
+	if alpha {
+		pageScript += "\nwindow.amTransparentWindow = true;"
+	}
+	g.addScript(manager, g.userScriptNew(pageScript, webkitTopFrame, webkitDocumentStart, 0, 0))
 	g.containerAdd(win, view)
 	g.signalConnect(win, "destroy", gtkState.destroyed, 0, 0, 0)
 	g.signalConnect(win, "delete-event", gtkState.deleted, 0, 0, 0)
@@ -442,16 +472,24 @@ func setGTKDark(g *gtkAPI, dark bool) {
 
 // removeGTKTitleBar gives the window an empty title bar, so the page runs to
 // the top edge (T-082). It must run before the window is shown.
-func removeGTKTitleBar(g *gtkAPI, win uintptr) {
+func removeGTKTitleBar(g *gtkAPI, win uintptr) bool {
+	alpha := false
 	if screen := g.screenDefault(); screen != 0 {
 		css := g.cssNew()
 		if g.cssLoad(css, gtkNoTitleCSS, len(gtkNoTitleCSS), 0) {
 			g.addProvider(screen, css, gtkStyleApplication)
+			if visual := g.screenRGBAVisual(screen); visual != 0 && g.screenComposited(screen) {
+				g.setVisual(win, visual)
+				g.setAppPaintable(win, true)
+				g.addClass(g.styleContext(win), "am-alpha")
+				alpha = true
+			}
 		}
 	}
 	box := g.boxNew(0, 0)
 	g.addClass(g.styleContext(box), "am-no-title")
 	g.setTitlebar(win, box)
+	return alpha
 }
 
 // gtkWindowAction is what the page's controls ask for: minimise, maximise or

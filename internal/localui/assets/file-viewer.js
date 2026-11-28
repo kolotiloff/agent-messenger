@@ -7,7 +7,7 @@ window.taskFiles = (() => {
     return node;
   };
   const slash = /[\\/]/;
-  const markdownLink = /\[([^\]\n]+)\]\((<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+)\)/g;
+  const markdownLink = /\[([^\]\n]+)\][ \t]*(?:\r?\n[ \t]*)?\((<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+)\)/g;
   const legacyHeading = /^\s*(?:\*\*)?(?:файлы|files|changed files|modified files)(?:\*\*)?\s*:(?:\*\*)?/i;
   const filename = /(?:\.[\p{L}\p{N}][\p{L}\p{N}_-]{0,19}|^(?:Dockerfile|Makefile|LICENSE|NOTICE|README|CHANGELOG|AGENTS))$/iu;
 
@@ -26,13 +26,16 @@ window.taskFiles = (() => {
   }
 
   function fileButton(label, ref, source) {
+    if (source.directory && !/^(?:[/\\]|[a-z]:[\\/])/i.test(ref.path)) {
+      ref = {...ref, path:source.directory + ref.path};
+    }
     const link = make('button', label, 'am-file-link');
     link.type = 'button';
     link.title = ref.path;
     link.addEventListener('click', () => open(ref, source));
     link.addEventListener('contextmenu', event => {
       event.preventDefault();
-      open(ref, source);
+      showLinkMenu(ref, source, link, event.clientX, event.clientY);
     });
     return link;
   }
@@ -82,7 +85,9 @@ window.taskFiles = (() => {
 
   function paragraph(parent, text, source, report) {
     let listing = false;
-    text.split('\n').forEach((line, index) => {
+    // Keep a hard break in prose while accepting a wrapped file reference.
+    const joined=text.replace(markdownLink,(raw,label,path)=>reference(path)?'['+label+']('+path+')':raw);
+    joined.split('\n').forEach((line, index) => {
       if (index) parent.append('\n');
       const heading = report ? line.match(legacyHeading) : null;
       if (heading) { parent.append(heading[0]); line = line.slice(heading[0].length); listing = true; }
@@ -173,32 +178,102 @@ window.taskFiles = (() => {
     return target;
   }
 
-  let dialog, title, pathLabel, body, status, actions;
-  let selected = 0;
-  let nativeSave;
+  let panel, tabs, pathLabel, body, status, actions, linkMenu;
+  const documents = [];
+  const nativeSaves = new Map();
+  let active;
+
   function setup() {
-    dialog = make('dialog', undefined, 'am-viewer am-file-viewer');
-    dialog.setAttribute('aria-labelledby', 'am-file-title');
-    const header = make('div', undefined, 'am-viewer-head');
-    title = make('h3');
-    title.id = 'am-file-title';
-    const close = make('button', '×', 'am-icon-btn am-close-x');
-    close.type = 'button';
-    close.autofocus = true;
-    close.setAttribute('aria-label', tr('Закрыть'));
-    close.title = tr('Закрыть');
-    close.addEventListener('click', () => dialog.close());
-    header.append(title, close);
+    const layout = document.getElementById('task-layout') || document.getElementById('am-concept');
+    panel = make('section', undefined, 'am-file-viewer');
+    panel.hidden = true;
+    panel.setAttribute('aria-label', tr('Содержимое файла'));
+    tabs = make('div', undefined, 'am-pane-strip am-file-tabs');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', tr('Открытые файлы'));
+    tabs.hidden = true;
+    const toolbar = layout.querySelector('.am-task-toolbar');
+    if (toolbar) toolbar.insertBefore(tabs, toolbar.lastElementChild);
+    else panel.append(tabs);
     pathLabel = make('div', undefined, 'am-file-path am-muted');
     actions = make('div', undefined, 'am-file-actions');
     status = make('p', undefined, 'am-file-status am-muted');
     status.setAttribute('role', 'status');
     body = make('div', undefined, 'am-dialog-body am-file-content');
+    body.id = 'am-file-content';
     body.tabIndex = 0;
-    body.setAttribute('aria-label', tr('Содержимое файла'));
-    dialog.append(header, pathLabel, actions, status, body);
-    dialog.addEventListener('close', () => { selected++; body.replaceChildren(); actions.replaceChildren(); });
-    document.getElementById('am-concept').append(dialog);
+    body.setAttribute('role', 'tabpanel');
+    panel.append(pathLabel, actions, status, body);
+    layout.append(panel);
+  }
+
+  function closeTab(doc) {
+    const index = documents.indexOf(doc);
+    documents.splice(index, 1);
+    doc.tab.remove();
+    if (doc !== active) { active?.button.focus(); return; }
+    const next = documents[index] || documents[index - 1];
+    if (next) { show(next); next.button.focus(); return; }
+    active = null;
+    panel.hidden = tabs.hidden = true;
+    body.replaceChildren();
+    actions.replaceChildren();
+    (doc.opener?.isConnected ? doc.opener : document.getElementById('thread'))?.focus({preventScroll:true});
+  }
+
+  function addTab(ref, source, key) {
+    const tab = make('div', undefined, 'am-pane-tab');
+    const button = make('button', ref.name, 'am-quiet-button');
+    button.type = 'button';
+    button.id = 'am-file-tab-' + crypto.randomUUID();
+    button.title = ref.path;
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-controls', body.id);
+    const close = make('button', undefined, 'am-icon-btn am-close-x');
+    close.type = 'button';
+    close.setAttribute('aria-label', tr('Закрыть'));
+    close.title = tr('Закрыть') + ' ' + ref.name;
+    close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    const doc = {ref, source, key, tab, button, opener:document.activeElement, scroll:0};
+    button.onclick = () => show(doc);
+    button.onkeydown = event => {
+      const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+      if (!offset) return;
+      event.preventDefault();
+      const next = documents[(documents.indexOf(doc) + offset + documents.length) % documents.length];
+      show(next);
+      next.button.focus();
+    };
+    close.onclick = () => closeTab(doc);
+    tab.append(button, close);
+    tabs.append(tab);
+    documents.push(doc);
+    return doc;
+  }
+
+  function showLinkMenu(ref, source, target, x, y) {
+    if (!linkMenu) {
+      linkMenu = make('div', undefined, 'am-select-menu am-context-menu');
+      linkMenu.setAttribute('popover', 'auto');
+      linkMenu.setAttribute('role', 'menu');
+      document.getElementById('am-concept').append(linkMenu);
+    }
+    if (linkMenu.matches(':popover-open')) linkMenu.hidePopover();
+    const item = (label, run) => {
+      const button = make('button', tr(label), 'am-select-option');
+      button.type = 'button';
+      button.setAttribute('role', 'menuitem');
+      button.onclick = () => { linkMenu.hidePopover(); target.focus(); run(); };
+      return button;
+    };
+    linkMenu.replaceChildren(
+      item('Открыть файл', () => open(ref, source)),
+      item('Копировать путь', () => { void navigator.clipboard.writeText(ref.path).catch(() => {}); }),
+    );
+    linkMenu.showPopover();
+    linkMenu.style.left = Math.max(0, Math.min(x, innerWidth - linkMenu.offsetWidth)) + 'px';
+    linkMenu.style.top = Math.max(0, Math.min(y, innerHeight - linkMenu.offsetHeight)) + 'px';
+    linkMenu.firstElementChild.focus({preventScroll:true});
   }
 
   function action(label, listener) {
@@ -208,88 +283,140 @@ window.taskFiles = (() => {
     actions.append(button);
     return button;
   }
-  function copy(value) {
-    const original = selected;
+  function setStatus(doc, message) {
+    doc.message = message;
+    if (active === doc) status.textContent = message;
+  }
+  function copy(doc, value) {
     return async () => {
-      try { await navigator.clipboard.writeText(value); if (selected === original) status.textContent = tr('Скопировано'); }
-      catch (_) { if (selected === original) status.textContent = tr('Не удалось скопировать'); }
+      try { await navigator.clipboard.writeText(value); setStatus(doc, tr('Скопировано')); }
+      catch (_) { setStatus(doc, tr('Не удалось скопировать')); }
     };
   }
-  function save(data, name) {
+  function save(doc, data, name) {
     const handler = window.webkit?.messageHandlers?.reportFileSave;
     if (handler) {
       const id = crypto.randomUUID();
-      nativeSave = {id, selection:selected};
+      nativeSaves.set(id, doc);
       handler.postMessage({id, name, data:data || ''});
       return;
     }
     const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(data || ''), ch => ch.charCodeAt(0))], {type:'application/octet-stream'}));
     const a = make('a'); a.download = name; a.href = url;
-    dialog.append(a);
+    panel.append(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   function saved(id, result) {
-    if (nativeSave?.id !== id) return;
-    const selection = nativeSave.selection;
-    nativeSave = null;
-    if (selection !== selected || result === 'cancelled') return;
-    status.textContent = tr(result === 'saved' ? 'Файл сохранён' : 'Не удалось сохранить файл');
-  }
-
-  function relativeSource(src, path) {
-    const dir = path.slice(0, Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
-    return {...src, request: (ref, action) => src.request({...ref, path:/^(?:[/\\]|[a-z]:[\\/])/i.test(ref.path) ? ref.path : dir + ref.path}, action)};
+    const doc = nativeSaves.get(id);
+    nativeSaves.delete(id);
+    if (!doc || result === 'cancelled') return;
+    setStatus(doc, tr(result === 'saved' ? 'Файл сохранён' : 'Не удалось сохранить файл'));
   }
 
   async function open(ref, source) {
-    if (!dialog) setup();
-    const current = ++selected;
-    title.textContent = ref.name;
-    pathLabel.textContent = ref.path;
-    status.textContent = '';
+    if (!panel) setup();
+    const key = JSON.stringify([source.scope, source.remote, ref.path]);
+    const existing = documents.find(doc => doc.key === key);
+    const doc = existing || addTab(ref, source, key);
+    if (ref.line && ref.line !== doc.ref.line) {
+      doc.ref = ref;
+      doc.scroll = 0;
+    }
+    if (!existing) doc.message = source.remote
+      ? tr('Файл находится на компьютере «{computer}».').replace('{computer}', () => source.remote)
+      : tr('Открываем файл…');
+    show(doc);
+    doc.button.focus({preventScroll:true});
+    if (existing || source.remote) return;
+    try {
+      doc.file = await source.request(ref, 'preview');
+      doc.message = !doc.file.format ? tr(doc.file.can_save ? 'Этот формат нельзя прочитать в окне.' : 'Файл слишком большой для просмотра.') : '';
+    } catch (error) { doc.message = error.message; }
+    if (doc === active) render(doc, true);
+  }
+
+  function show(doc) {
+    if (active && active !== doc) active.scroll = body.scrollTop;
+    active = doc;
+    panel.hidden = tabs.hidden = false;
+    for (const item of documents) {
+      item.button.tabIndex = item === doc ? 0 : -1;
+      item.button.setAttribute('aria-selected', String(item === doc));
+    }
+    body.setAttribute('aria-labelledby', doc.button.id);
+    render(doc, !doc.scroll);
+  }
+
+  function openSeparate(doc) {
+    const {file, ref} = doc;
+    const handler = window.webkit?.messageHandlers?.reportFileWindow;
+    if (handler) {
+      handler.postMessage({name:file.name || ref.name, text:file.text || '', line:ref.line});
+      return;
+    }
+    const popup = window.open('', '_blank', 'popup,resizable,width=860,height=680');
+    if (!popup) { setStatus(doc, tr('Не удалось открыть отдельное окно')); return; }
+    popup.opener = null;
+    const preview = popup.document;
+    preview.title = file.name || ref.name;
+    const theme = getComputedStyle(document.getElementById('am-concept'));
+    preview.documentElement.style.colorScheme = theme.colorScheme;
+    const pre = preview.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.overflowWrap = 'anywhere';
+    pre.style.fontFamily = theme.getPropertyValue('--am-mono');
+    pre.style.fontSize = theme.getPropertyValue('--am-text-m');
+    pre.style.lineHeight = '1.5';
+    pre.style.margin = theme.getPropertyValue('--am-space-6');
+    const text = file.text || '';
+    const lines = ref.line ? text.split('\n') : [];
+    const target = ref.line <= lines.length ? lines[ref.line - 1] : undefined;
+    if (target !== undefined) {
+      const marker = preview.createElement('mark');
+      marker.textContent = target;
+      pre.append(lines.slice(0,ref.line - 1).join('\n') + (ref.line > 1 ? '\n' : ''), marker, '\n' + lines.slice(ref.line).join('\n'));
+      preview.body.append(pre);
+      marker.scrollIntoView({block:'center'});
+    } else {
+      pre.textContent = text;
+      preview.body.append(pre);
+    }
+  }
+
+  function render(doc, revealLine) {
+    const {ref, source, file} = doc;
+    const path = file?.path || ref.path;
+    pathLabel.textContent = path;
+    status.textContent = doc.message || '';
     body.replaceChildren();
     actions.replaceChildren();
-    action('Копировать путь', copy(ref.path));
-    if (!dialog.open) dialog.showModal();
-    if (source.remote) {
-      status.textContent = tr('Файл находится на компьютере «{computer}».').replace('{computer}', () => source.remote);
-      return;
+    action('Копировать путь', copy(doc, path));
+    if (!file) return;
+    if (file.format) {
+      action('Открыть в отдельном окне', () => openSeparate(doc));
+      action('Копировать содержимое файла', copy(doc, file.text || ''));
     }
-    status.textContent = tr('Открываем файл…');
-    let file;
-    try { file = await source.request(ref, 'preview'); }
-    catch (error) {
-      if (current === selected) status.textContent = error.message;
-      return;
-    }
-    if (current !== selected) return;
-    pathLabel.textContent = file.path;
-    status.textContent = !file.format ? tr(file.can_save ? 'Этот формат нельзя прочитать в окне.' : 'Файл слишком большой для просмотра.') : '';
-    actions.replaceChildren();
-    action('Копировать путь', copy(file.path));
-    if (file.format) action('Копировать содержимое файла', copy(file.text || ''));
     const run = (verb, label, then) => {
       const button = action(label, async () => {
         button.disabled = true;
         try {
           const result = await source.request(ref, verb);
-          if (current === selected) then?.(result);
-        } catch (error) {
-          if (current === selected) status.textContent = error.message;
-        } finally { button.disabled = false; }
+          then?.(result);
+        } catch (error) { setStatus(doc, error.message); }
+        finally { button.disabled = false; }
       });
     };
-    if (file.can_save) run('download', 'Сохранить как…', value => save(value.data, value.name));
+    if (file.can_save) run('download', 'Сохранить как…', value => save(doc, value.data, value.name));
     if (file.can_edit) run('edit', 'Открыть в текстовом редакторе');
     if (file.can_reveal) run('reveal', 'Показать в папке');
-    const target = file.format === 'markdown' ? markdown(body, file.text || '', relativeSource(source, ref.path), ref.line)
+    const directory = ref.path.slice(0, Math.max(ref.path.lastIndexOf('/'), ref.path.lastIndexOf('\\')) + 1);
+    const target = file.format === 'markdown' ? markdown(body, file.text || '', {...source, directory}, ref.line)
       : file.format === 'text' ? plain(body, file.text || '', ref.line) : null;
-    if (target) {
-      target.classList.add('am-file-target');
-      target.scrollIntoView({block:'center'});
-    } else body.scrollTop = 0;
+    if (target) target.classList.add('am-file-target');
+    body.scrollTop = doc.scroll;
+    if (target && revealLine) body.scrollTop = target.getBoundingClientRect().top - body.getBoundingClientRect().top - body.clientHeight / 2;
   }
   function link(label, path, source) {
     const name = path.split(slash).pop();

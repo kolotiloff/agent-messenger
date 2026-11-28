@@ -45,7 +45,7 @@ function reply(url,p,available){
     ]};
   }
   if(url.pathname==='/api/server')return {host:{addresses:[],devices:[]},member:{},peers:[
-    {...pc1,ready:{projects:['game','tools']}},
+    {...pc1,ready:{projects:['game','tools']},agents:[...agents,{agent:'cursor',models:['composer-2.5[effort=medium]']}]},
     {...pc2,ready:{projects:['game']}},
     {...linux,ready:{projects:['tools','site']},agents:[{agent:'codex',paused:true},{agent:'claude'}]},
     {id:'vps',name:'VPS-PC2',host:true,ready:{projects:[]},agents:[]}
@@ -420,6 +420,7 @@ if (require.main === module) (async()=>{
         const style=getComputedStyle(node);
         return [style.fontFamily,style.fontSize,style.fontWeight,style.lineHeight];
       });
+      assert.equal(await draftPage.locator('#am-concept').getAttribute('data-chat-font'),'inter');
       const replyModelStyle=await labelStyle(draftPage.locator('#answer-model'));
       const replyAccess=draftPage.locator('#answer-access');
       await replyAccess.getByText('Любые команды',{exact:true}).waitFor();
@@ -580,7 +581,10 @@ if (require.main === module) (async()=>{
       const workerActions=workerMessage.locator('.am-message-actions');
       const workerTimestamp=workerActions.locator('time');
       assert.equal(await workerTimestamp.textContent(),'5 минут назад');
+      await draftPage.mouse.move(0,0);
+      assert.equal(await workerActions.evaluate(node=>getComputedStyle(node).opacity),'0');
       for(const [time,outgoing] of [[timestamp,true],[workerTimestamp,false]]){
+        await time.locator('xpath=../..').hover();
         const layout=await time.evaluate(node=>{
           const actions=node.parentElement, body=actions.previousElementSibling;
           const footer=actions.getBoundingClientRect(), message=body.getBoundingClientRect();
@@ -597,6 +601,7 @@ if (require.main === module) (async()=>{
         assert.equal(layout.first,outgoing);
         assert.match(await time.getAttribute('title'),/\d{2}:\d{2}$/);
       }
+      if(process.env.SCREENSHOT_DIR)await workerMessage.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'message-hover.png')});
       assert.equal(await workerMessage.evaluate(node=>node.getBoundingClientRect().top-node.previousElementSibling.getBoundingClientRect().bottom),24);
       const settingsDialog=draftPage.getByRole('dialog',{name:'Настройки программы'});
       const settingsOpen=draftPage.locator('#settings-open');
@@ -662,6 +667,9 @@ if (require.main === module) (async()=>{
       assert.equal(standard.size,readable.size);
       assert.equal(readable.line,standard.line);
       assert.notEqual(readable.color,standard.color);
+      await select(draftPage,'chat-font-select','Inter');
+      assert.equal(await settingsNav.evaluate(node=>node.getBoundingClientRect().width/parseFloat(getComputedStyle(node).fontSize)),15);
+      if(process.env.SCREENSHOT_DIR)await settingsDialog.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'settings-inter.png')});
       assert.equal(await general.locator('.am-card h3').count(),0);
       const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
       const dialogHeaderHeight=await headerHeight('#settings-dialog .am-dialog-header');
@@ -840,6 +848,13 @@ if (require.main === module) (async()=>{
       await draftPage.locator('#task-head').getByRole('heading',{name:'Новая задача',exact:true}).waitFor();
       assert.equal(await form.locator('.am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
       assert.equal(await draftPage.locator('#compose .am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
+      const balanced=field=>field.evaluate(node=>{
+        const svg=node.querySelector('button svg').getBoundingClientRect();
+        const text=node.querySelector('textarea');
+        const start=text.getBoundingClientRect().left+parseFloat(getComputedStyle(text).paddingLeft);
+        return Math.abs((svg.left-node.getBoundingClientRect().left)-(start-svg.right))<=1;
+      });
+      assert.equal(await balanced(form.locator('.am-compose-field')),true);
       const oneLineHeight=(await form.locator('textarea').boundingBox()).height;
       assert.equal(oneLineHeight,32);
       await form.locator('textarea').fill('Первая строка\nВторая строка\nТретья строка');
@@ -906,11 +921,18 @@ if (require.main === module) (async()=>{
       assert.equal(await draftSearch.evaluate(node=>node===document.activeElement),true);
       assert.deepEqual(await form.locator('#task-draft-model option').evaluateAll(nodes=>nodes.map(n=>n.value).filter(key=>key.startsWith('codex:'))),orderedCodex.map(id=>'codex:'+id));
       const checkedModel=modelMenu.locator('[aria-selected=true]');
-      assert.equal(await checkedModel.textContent(),'Codex Sol 6.2 Medium');
+      assert.equal(await checkedModel.textContent(),'Sol 6.2 Medium');
+      assert.deepEqual(await modelMenu.locator('.am-model-group-title').allTextContents(),['Claude Code','Codex','Cursor']);
+      if(process.env.SCREENSHOT_DIR){
+        await draftPage.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'model-groups.png')});
+      }
       assert.equal(await checkedModel.locator('.am-select-check svg').count(),1);
       assert.equal(await checkedModel.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
       const [searchBox,optionBox]=await Promise.all([draftSearch.boundingBox(),checkedModel.boundingBox()]);
       assert.deepEqual([searchBox.x,searchBox.width],[optionBox.x,optionBox.width]);
+      await draftSearch.fill('cursor composer');
+      assert.equal(await modelMenu.getByRole('group',{name:'Cursor'}).count(),1);
+      assert.equal(await modelMenu.getByRole('group',{name:'Claude Code'}).count(),0);
       await draftSearch.fill('неизвестная модель');
       assert.equal(await modelMenu.getByRole('option').count(),0);
       assert.equal(await modelMenu.getByRole('status').textContent(),'Модели не найдены');
@@ -1431,7 +1453,7 @@ if (require.main === module) (async()=>{
       await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');
       const computerMenu=browserPreview.locator('#device-menu');
       await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
-      const peerUpdate=computerMenu.getByRole('button',{name:'Обновить до v1.0.9'});
+      const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить до v1.0.9'});
       await peerUpdate.click();
       await browserPreview.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
       await browserPreview.locator('#confirm-cancel').click();
@@ -1648,7 +1670,7 @@ if (require.main === module) (async()=>{
     await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).click({button:'right'});
     const peerMenu=page.locator('#device-menu');
     await peerMenu.getByText('v1.0.5',{exact:true}).waitFor();
-    await peerMenu.getByRole('button',{name:'Обновить до v1.0.9'}).click();
+    await peerMenu.getByRole('menuitem',{name:'Обновить до v1.0.9'}).click();
     await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
     await page.locator('#confirm-cancel').click();
     assert.equal(await cells(page,'pc1').nth(1).getAttribute('aria-pressed'),'false');

@@ -986,3 +986,11 @@ The computer that created a task writes its display title to the task record. Th
 ## D-265 — Open concurrent task views inside the main window
 
 Use tabs for switching and closing task views. Use Open alongside to keep concurrent conversations visible in the same workspace, with side-by-side, stacked and grid layouts. Every pane addresses an existing task and keeps its own draft and scroll position. See T-372.
+
+## D-266 — Stop a turn and keep the conversation available
+
+The owner or coordinator can send another message in the same saved worker conversation after a completed, failed, stopped or interrupted turn. Resuming a blocked or interrupted turn requires proof that its previous worker can no longer run. A local close on an unreachable computer needs a terminal acknowledgement before that conversation can resume. Nothing retries automatically. A new turn clears the previous stop request and can be stopped independently. See T-373.
+
+## D-267 — Project reference tabs
+
+A project file link opens a tab in the existing task toolbar and a reader alongside the conversation. Explicit separate windows display a read-only text preview. File resolution continues to use the executor task and its registered local workspace. Relative references inside a document use that document's folder. A remote reference shows which computer holds the file.

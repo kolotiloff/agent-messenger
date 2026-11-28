@@ -90,7 +90,7 @@ func applyNote(machine, tx *sql.Tx, from netLink, b netBody) error {
 		author = AudienceOwner
 	}
 	err = savepoint(tx, func() error {
-		return addNoteTx(machine, tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, author, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		return addNoteTx(machine, tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, author, true, nil, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "note-refused."+b.OpID, t.ID, netBody{Kind: "note_refused", Task: from.task, OpID: b.OpID, Reason: refusalText(err)})

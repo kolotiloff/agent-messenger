@@ -121,7 +121,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-button-height:var(--am-control);
   --am-control-chip:24px;
   --am-settings-control-width:12em;
-  --am-settings-nav-width:10em;
+  --am-settings-nav-width:15em;
   --am-agent-action-width:88px;
   --am-agent-step-height:56px;
   --am-agent-mark-width:22px;
@@ -706,6 +706,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-shell-number { color:var(--am-command-number); }
 #am-concept .am-shell-variable { color:var(--am-command-variable); }
 #am-concept .am-disposition { margin-top:var(--am-space-2); }
+#am-concept .am-outcome-stop { font-size:var(--am-text-s); }
 #am-concept .am-outcome { padding:var(--am-space-3); border-radius:var(--am-radius-s); background:var(--am-soft); }
 
 /* Composer and the error chips above it */
@@ -1057,6 +1058,8 @@ body.am-resizing { cursor:col-resize; user-select:none; }
 body.am-native { padding:0; }
 body.am-native #am-concept { max-width:none; margin:0; }
 body.am-native #am-concept .am-window { border:0; border-radius:0; }
+body.am-transparent-window { background:transparent; }
+:root:not(.am-window-maximized) body.am-native.am-transparent-window #am-concept .am-window { border-radius:var(--am-radius-m); }
 body.am-native #am-concept .am-titlebar { display:none; }
 
 /* Narrow and short windows, touch and motion */
@@ -1174,12 +1177,11 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
   #am-concept #computer-sidebar-toggle {
     display:inline-flex; position:absolute; z-index:3;
     inset-block-start:calc((var(--am-caption-height) - var(--am-control-compact)) / 2);
-    inset-inline-start:calc(var(--am-nav-rail) - var(--am-gap-section) - var(--am-control-compact));
+    inset-inline-start:var(--am-mac-caption-reserve);
   }
   #am-concept #computer-sidebar-toggle svg { transform:scaleX(-1); }
   body.am-mac-titlebar #am-concept.am-nav-collapsed .am-shell { grid-template-columns:minmax(0,1fr); }
   #am-concept.am-nav-collapsed .am-sidebar { display:none; }
-  #am-concept.am-nav-collapsed #computer-sidebar-toggle { inset-inline-start:var(--am-mac-caption-reserve); }
   #am-concept.am-nav-collapsed .am-task-toolbar { padding-inline-start:calc(var(--am-mac-caption-reserve) + var(--am-control-compact) + var(--am-gap-content)); }
   body.am-mac-titlebar #am-concept { --am-mac-caption-reserve:calc(3 * var(--am-control-compact)); }
 }
@@ -1361,9 +1363,10 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-pane-tab .am-close-x { flex:none; }
 #am-concept .am-pane-layouts { display:flex; flex:none; overflow:auto; max-inline-size:100%; }
 #am-concept .am-pane-layouts [aria-pressed=true] { background:var(--am-field-hover); }
-#am-concept .am-pane-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(calc(var(--am-control) * 7),1fr); gap:var(--am-space-1); overflow:auto; min-height:0; }
+#am-concept .am-pane-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(calc(var(--am-control) * 7),1fr); gap:1px; background:var(--am-line); overflow:auto; min-height:0; }
 #am-concept.am-task-sidebar-preview .am-pane-grid > .am-chat { grid-area:auto; }
-#am-concept .am-pane-board:not([data-single]) .am-chat { border:1px solid var(--am-line); }
+#am-concept .am-pane-grid > :is(.am-chat,.am-watch-pane) { background:var(--am-bg); }
+#am-concept .am-pane-board[data-layout=grid][data-odd-grid] .am-pane-grid::after { content:""; order:var(--am-watch-order); background:var(--am-bg); }
 #am-concept .am-pane-board[data-layout=columns] .am-pane-grid { grid-template-columns:repeat(var(--am-watch-visible),minmax(min(100%, calc(var(--am-control) * 7)),1fr)); grid-template-rows:minmax(0,1fr); }
 #am-concept .am-pane-board[data-layout=grid][data-single] .am-pane-grid { grid-template-columns:minmax(0,1fr); }
 #am-concept .am-pane-targets { display:none; }
@@ -1373,13 +1376,23 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-pane-target-preview svg { inline-size:var(--am-control); block-size:var(--am-control); fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-pane-target.am-pane-drop { border-color:var(--am-check); background:var(--am-selected); opacity:1; }
 #am-concept .am-pane-board[data-layout=stack] .am-pane-grid { grid-template-columns:minmax(0,1fr); }
-#am-concept .am-watch-pane { min-width:0; min-height:0; display:flex; flex-direction:column; border:1px solid var(--am-line); padding:var(--am-gap-control); gap:var(--am-space-1); }
+#am-concept .am-watch-pane { min-width:0; min-height:0; display:flex; flex-direction:column; padding:var(--am-gap-control); gap:var(--am-space-1); }
 #am-concept .am-watch-pane > h3 { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:0; font-size:var(--am-text-m); }
 #am-concept .am-watch-body { overflow:auto; flex:1; min-height:0; overflow-wrap:anywhere; }
 #am-concept .am-watch-compose { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--am-space-1); }
 #am-concept .am-watch-input { flex:1 0 100%; min-width:0; resize:vertical; }
 #am-concept .am-pane-message + .am-pane-message { margin-block-start:var(--am-gap-content); }
 @media (max-width:780px) {
+  #am-concept .am-pane-board[data-layout=grid][data-odd-grid] .am-pane-grid::after { content:none; }
   #am-concept .am-pane-layouts button { padding-inline:var(--am-space-1); font-size:var(--am-text-xs); }
   #am-concept .am-pane-board:is([data-layout=columns],[data-layout=grid]) .am-pane-grid { grid-template-columns:minmax(0,1fr); grid-template-rows:none; }
+}
+
+#am-concept .am-model-group-title { display:flex; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-2) var(--am-space-3); color:var(--am-muted); font-size:var(--am-text-s); }
+#am-concept .am-model-group-title svg { width:var(--am-space-4); height:var(--am-space-4); }
+#am-concept .am-model-group:not([hidden]) ~ .am-model-group:not([hidden]) { border-block-start:1px solid var(--am-menu-line); margin-block-start:var(--am-space-1); }
+#am-concept .am-compose-field > :is(#task-draft-add,#answer-add):not([hidden]) + textarea { padding-inline-start:0; }
+#am-concept .am-context-menu > button.am-select-option { width:100%; text-align:start; }
+@media (hover:hover) {
+  #am-concept .am-message-group:not(:hover):not(:focus-within) > .am-message-actions { opacity:0; }
 }

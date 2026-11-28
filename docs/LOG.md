@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-374 Project reference tabs and compact controls
+
+Codex added document tabs, a separate preview action, provider sections in model search, and text actions in update menus. Inter is the initial font, Settings navigation is wider, and message actions appear on hover and keyboard focus. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
+## 2026-11-27 — T-373 Resumable conversations and window edges
+
+A saved chat accepts another message after Stop. Core tests exercised local and remote continuation, duplicate submission, and stopping a resumed turn. The comparison board uses single dividers, the macOS chrome shares one row, and composited Linux windows use a transparent underlay. Chromium and WebKit exercised split views and the resumed composer. Native appearance remains to be observed.
+
 ## 2026-11-27 — T-372 Task panes and update feedback
 
 Codex fixed secondary feeds to match the window API and verified simultaneous task messages, independent drafts, the top tab strip, and direct sidebar drops in Chromium and WebKit. Update controls share a centered spinner. Update menus close on pointer exit, and compact confirmations sit at the top right of the window.

@@ -3,6 +3,7 @@
   const root = document.getElementById('am-concept');
   const taskSidebarPreview=root.classList.contains('am-task-sidebar-preview');
   // The Mac app and the Windows window draw their own frame and title (D-054).
+  if(window.amTransparentWindow)document.body.classList.add('am-transparent-window');
   if(window.webkit?.messageHandlers?.updates||window.amDesktop)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
   const selectViews = new Map();
@@ -15,7 +16,8 @@
     menu.style.maxHeight='none';
     const below=innerHeight-rect.bottom-gap-margin,above=rect.top-gap-margin;
     const upwards=below<Math.min(300,menu.scrollHeight)&&above>below;
-    menu.style.maxHeight=Math.max(0,Math.min(360,upwards?above:below))+'px';
+    const maxHeight=menu.classList.contains('am-searchable-select')?460:360;
+    menu.style.maxHeight=Math.max(0,Math.min(maxHeight,upwards?above:below))+'px';
     const width=menu.getBoundingClientRect().width,left=alignEnd?rect.right-width:rect.left;
     menu.style.left=Math.max(margin,Math.min(left,innerWidth-width-margin))+'px';
     menu.style.top=upwards?'auto':rect.bottom+gap+'px';
@@ -34,6 +36,8 @@
     const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role',searchable?'dialog':'listbox');menu.setAttribute('aria-label',label);menu.tabIndex=-1;
     let search,empty;
     const list=searchable?el('div'):menu;
+    const grouped=select.id==='task-draft-model';
+    const groups=new Map();
     if(searchable){
       menu.classList.add('am-searchable-select');
       const field=el('div',undefined,'am-field am-model-search');
@@ -45,7 +49,8 @@
       menu.append(field,list,empty);
       search.addEventListener('input',()=>{
         const query=search.value.trim().toLocaleLowerCase();
-        for(const row of options)row.hidden=!row.textContent.toLocaleLowerCase().includes(query);
+        for(const row of options)row.hidden=!row.dataset.searchLabel.includes(query);
+        for(const group of groups.values())group.hidden=!group.querySelector('[role=option]:not([hidden])');
         empty.hidden=options.some(row=>!row.hidden);
         menu.scrollTop=0;
       });
@@ -59,8 +64,10 @@
     let options=[];
     const isOpen=()=>menu.matches(':popover-open');
     function close(restore=false){if(isOpen())menu.hidePopover();trigger.setAttribute('aria-expanded','false');if(restore)trigger.focus();}
-    function renderLabel(node,option){
-      const label=option?.textContent||tr('Нет данных');
+    function renderLabel(node,option,provider=''){
+      const fullLabel=option?.textContent||tr('Нет данных');
+      const prefix=provider?names[provider]+' ':'';
+      const label=prefix&&fullLabel.startsWith(prefix)?fullLabel.slice(prefix.length):fullLabel;
       const effort=searchable&&option?.value.match(/\[effort=([a-z]+)\]$/)?.[1];
       node.textContent=label;
       if(effort&&label.toLowerCase().endsWith(' '+effort)){
@@ -85,14 +92,35 @@
     }
     function choose(index){if(select.disabled||select.options[index]?.disabled)return;select.selectedIndex=index;sync();close(true);select.dispatchEvent(new Event('change',{bubbles:true}));}
     function open(keyboard){
-      if(select.disabled||isOpen())return;list.replaceChildren();options=[];
-      Array.from(select.options).forEach((option,index)=>{
+      if(select.disabled||isOpen())return;list.replaceChildren();options=[];groups.clear();
+      const indexes=Array.from(select.options,(_,index)=>index);
+      if(grouped){
+        const order=Object.keys(names);
+        const rank=index=>order.indexOf(select.options[index].value.split(':',1)[0]);
+        indexes.sort((left,right)=>rank(left)-rank(right));
+      }
+      indexes.forEach(index=>{
+        const option=select.options[index];
         const row=document.createElement('div');row.className='am-select-option';row.setAttribute('role','option');row.setAttribute('aria-selected',String(option.selected));row.tabIndex=-1;
-        const text=document.createElement('span');renderLabel(text,option);
+        const provider=grouped?option.value.split(':',1)[0]:'';
+        let section=list;
+        if(provider&&names[provider]){
+          section=groups.get(provider);
+          if(!section){
+            section=el('div',undefined,'am-model-group');section.setAttribute('role','group');
+            const header=el('div',undefined,'am-model-group-title');header.id=menu.id+'-'+provider;
+            header.append(providerIcon(provider),names[provider]);
+            section.setAttribute('aria-labelledby',header.id);section.append(header);
+            groups.set(provider,section);list.append(section);
+          }
+          row.setAttribute('aria-label',option.textContent);
+        }
+        row.dataset.searchLabel=option.textContent.toLocaleLowerCase();
+        const text=document.createElement('span');renderLabel(text,option,provider);
         if(option.dataset.provider)row.append(providerIcon(option.dataset.provider));
         const check=document.createElement('span');check.className='am-select-check';check.setAttribute('aria-hidden','true');if(option.selected)check.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';row.append(text,check);
         if(option.disabled)row.setAttribute('aria-disabled','true');
-        row.addEventListener('click',()=>choose(index));list.append(row);options.push(row);
+        row.addEventListener('click',()=>choose(index));section.append(row);row.dataset.index=String(index);options.push(row);
       });
       if(search){search.value='';empty.hidden=options.length>0;}
       menu.showPopover();trigger.setAttribute('aria-expanded','true');
@@ -126,7 +154,7 @@
       else if(event.key==='Enter'||event.key===' '){
         event.preventDefault();
         const choice=visible[index]||(fromSearch&&visible.length===1?visible[0]:null);
-        if(choice)choose(options.indexOf(choice));
+        if(choice)choose(Number(choice.dataset.index));
         return;
       }else return;
       event.preventDefault();visible[next]?.focus();
@@ -170,7 +198,7 @@
   }
   function applyChatFont(persist=false){
     const select=$('chat-font-select');
-    if(!select.value)select.value='system';
+    if(!select.value)select.value='inter';
     root.dataset.chatFont=select.value;
     if(persist){
       if(window.webkit?.messageHandlers?.chatFont)window.webkit.messageHandlers.chatFont.postMessage(select.value);
@@ -494,7 +522,8 @@
   }
   function renderPaneControls(pane){
     const task=pane.task;
-    const canSend=task&&!task.remote?.from&&!stopProgress(task)&&!taskUnreachable(task)&&(task.owner_question||canNote(task));
+    const canSend=canSendTaskMessage(task);
+    pane.input.placeholder=task?.can_continue?tr('Продолжить в этой сессии…'):tr('Написать исполнителю…');
     pane.compose.hidden=!canSend&&!pane.input.value.trim();
     pane.input.readOnly=pane.busy;
     pane.send.disabled=!canSend||pane.busy||!pane.input.value.trim();
@@ -515,13 +544,14 @@
   }
   function renderPaneSnapshot(pane,snapshot,offset=0){
     const scroll=pane.body.scrollTop;
+    const fileSource=taskFileSource(snapshot.task);
     const stick=pane.body.scrollHeight-scroll-pane.body.clientHeight<32;
     if(!offset)pane.body.replaceChildren();
     for(const it of snapshot.items||[]){
-      if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||!it.text)continue;
+      if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||(!it.text&&it.kind!=='outcome'))continue;
       const message=el('div',undefined,'am-pane-message');
       const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
-      message.append(el('span',role,'am-small am-muted'),richText(it.kind==='outcome'&&it.text===restartOutcome?restartLabel():it.text));
+      message.append(el('span',role,'am-small am-muted'),richText(it.kind==='outcome'&&it.text===restartOutcome?restartLabel():it.kind==='outcome'&&it.state==='cancelled'?tr('Работа остановлена'):it.text,undefined,fileSource));
       pane.body.append(message);
     }
     pane.count=offset+(snapshot.items?.length||0);
@@ -586,6 +616,8 @@
     }
     paneBoard.style.setProperty('--am-watch-visible',Math.max(1,visible));
     paneBoard.toggleAttribute('data-single',visible<=1);
+    paneBoard.style.setProperty('--am-watch-order',index);
+    paneBoard.toggleAttribute('data-odd-grid',visible>1&&visible%2!==0);
     if(!enabled&&paneTimer){clearInterval(paneTimer);paneTimer=null;}
     if(enabled&&!paneTimer)paneTimer=setInterval(()=>taskPanes.forEach(updatePane),5000);
   }
@@ -982,10 +1014,7 @@
     }
     const items=[];
     for(const it of entries){
-      const item=el('div',it.text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
-      const run=()=>{menu.hidePopover();it.pick();};
-      item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
-      items.push(item);
+      items.push(contextMenuItem(menu,it.text,it.pick));
     }
     menu.setAttribute('role',status?'status':'menu');
     menu.dataset.stopTask=status?.task||'';
@@ -999,7 +1028,12 @@
     menu.showPopover();
     menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
     menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
-    (items[0]||menu.querySelector('.am-context-device button:not(:disabled)')||menu).focus();
+    (menu.querySelector('[role=menuitem]')||menu).focus();
+  }
+  function contextMenuItem(menu,text,pick){
+    const item=el('button',text,'am-select-option');item.type='button';item.setAttribute('role','menuitem');
+    item.onclick=()=>{menu.hidePopover();pick();};
+    return item;
   }
   function deviceMenu(d,x,y,can){
     const peer=(server?.peers||[]).find(other=>other.id===d.id);
@@ -1015,31 +1049,35 @@
     const local=device==='local';
     const peer=local?null:server?.peers?.find(item=>item.id===device);
     const version=local?$('app-installed-version').textContent:(peer?versionName(peerInstalledVersion(peer)||''):'');
-    let control;
-    if(local){
-      const mark=updateMark(null);
-      if(updateInProgress(mark))control=updateControl(null,mark);
-      else{
-        const original=$('app-update-button');
-        if(!original.hidden){
-          control=original.cloneNode(true);
-          control.removeAttribute('id');
-          control.classList.add('am-local-update-copy');
-          control.addEventListener('click',()=>original.click());
-        }
+    const menu=footer.parentNode,mark=local||peer?updateMark(peer):null;
+    const original=$('app-update-button');
+    let caption='',pick=null;
+    if(updateInProgress(mark)){
+      const state=updatePresentation(peer,mark);
+      caption=state.canCancel?tr('Отменить обновление'):state.caption;
+      if(state.canCancel)pick=()=>void cancelUpdate(state);
+    }else if(local&&!original.hidden){
+      caption=original.title;
+      if(!original.disabled)pick=()=>original.click();
+    }else if(peer){
+      const newest=peerUpdateOffer(peer,peerInstalledVersion(peer),mark);
+      if(newest){
+        caption=tr('Обновить до ')+newest;
+        pick=()=>confirmPeerUpdate(peer,newest);
       }
-    }else if(peer)control=peerUpdateButton(peer,peerInstalledVersion(peer));
-    if(control?.matches('button:not(.am-update-cancel)')){
-      control.addEventListener('click',()=>$('device-menu').hidePopover(),{capture:true});
     }
     const label=el('span',version||'—','am-version');
     label.title=version?tr('Версия ')+version.replace(/^v/,''):tr('Версия неизвестна');
-    const parts=control?[control,label]:[label];
-    if(parts.length===footer.children.length&&parts.every((part,index)=>part.isEqualNode(footer.children[index])))return;
-    const restoreFocus=footer.contains(document.activeElement);
-    if(restoreFocus)$('device-menu').focus({preventScroll:true});
-    footer.replaceChildren(...parts);
-    if(restoreFocus)footer.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
+    if(!label.isEqualNode(footer.firstChild))footer.replaceChildren(label);
+    const next=caption?(pick?contextMenuItem(menu,caption,pick):el('div',caption,'am-context-status')):null;
+    const previous=menu.querySelector('[data-device-update]');
+    if(next)next.dataset.deviceUpdate=JSON.stringify([device,mark?.id]);
+    if((!next&&!previous)||next?.isEqualNode(previous))return;
+    const restoreFocus=previous===document.activeElement;
+    if(restoreFocus)menu.focus({preventScroll:true});
+    previous?.remove();
+    if(next)footer.before(next);
+    if(restoreFocus&&pick)next.focus({preventScroll:true});
   }
   // Asking another computer to update itself (T-078). Its answers arrive
   // with the server status and show as notices in the window;
@@ -2559,7 +2597,8 @@
     if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
     if(link.state==='connected'){
       let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Kotel'):tr('Подключён. Откройте папку проекта в новом чате');
-      if(agent==='cursor'&&link.server_name==='messenger')sub=tr('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.');
+      if(link.server_name==='messenger')sub=tr('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.');
+      if(agent==='claude'&&link.server_name==='kotel')sub+=' · kotel';
       if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».');
       return stepRow('ok',title,sub,null);
     }
@@ -2987,6 +3026,22 @@
       else if(part)p.append(document.createTextNode(part));
     }
     return p;
+  }
+  function taskFileSource(t){
+    if(!t)return undefined;
+    return {
+      scope:t.id,
+      remote:t.remote&&!t.remote.from?(t.remote.name||t.remote.id||tr('Другой компьютер')):'',
+      request:async(ref,action)=>{
+        const response=await fetch('/api/task-file',{
+          method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+          body:JSON.stringify({task:t.id,path:ref.path,action}),cache:'no-store',signal:AbortSignal.timeout(4500),
+        });
+        if(response.status===502)throw outdatedMessage();
+        if(!response.ok)throw Error(tr('Файл недоступен в локальной папке этой задачи.'));
+        return response.json();
+      },
+    };
   }
   function richText(text,cls,fileSource){
     const box=el('div',undefined,'am-rich'+(cls?' '+cls:''));
@@ -3560,6 +3615,7 @@
         meta.append(time);
       }
     };
+    const reportFiles=taskFileSource(t);
     const outgoing=(author,role,text,at,model,provider)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
@@ -3567,7 +3623,7 @@
       if(author)meta.append(messageAuthor(author,model?modelName(model):'',role));
       if(role&&!taskSidebarPreview)meta.append(roleTag(role));
       if(author)body.append(meta);
-      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(content);row.append(body);g.append(row);
+      const content=el('div',undefined,'am-message-content');content.append(richText(text,undefined,reportFiles));body.append(content);row.append(body);g.append(row);
       appendMessageTime(g,meta,at,text);out.push(g);
     };
     const outgoingOwner=it=>outgoing(taskSidebarPreview?'':tr('Вы'),'',it.text,it.at);
@@ -3586,22 +3642,10 @@
       if(!taskSidebarPreview)appendMessageTime(g,meta,at);
       out.push(g);group=content;return content;
     };
-    const reportFiles={
-      remote:t.remote&&!t.remote.from?(t.remote.name||t.remote.id||tr('Другой компьютер')):'',
-      request:async(ref,action)=>{
-        const response=await fetch('/api/task-file',{
-          method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-          body:JSON.stringify({task:t.id,path:ref.path,action}),cache:'no-store',signal:AbortSignal.timeout(4500),
-        });
-        if(response.status===502)throw outdatedMessage();
-        if(!response.ok)throw Error(tr('Файл недоступен в локальной папке этой задачи.'));
-        return response.json();
-      },
-    };
     const workerMessages=new Map();
     function appendWorkerText(it,cls){
       const content=workerGroup(it.at);
-      content.append(richText(it.text,cls,it.kind==='report'&&it.verified?reportFiles:null));
+      content.append(richText(it.text,cls,reportFiles));
       if(taskSidebarPreview&&it.text){
         const article=content.closest('article');
         const message=workerMessages.get(article)||{parts:[]};
@@ -3688,11 +3732,12 @@
         group=null;
         const overloaded=it.state==='failed'&&capacityFailure(it.text);
         const failedTitle=overloaded?tr('Завершение запуска не подтверждено'):t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой');
-        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:restartLabel(),cancelled:tr('Задача отменена')}[it.state]||it.state;
-        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad')),line=el('p',text);
+        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:restartLabel(),cancelled:tr('Работа остановлена'),continue_refused:tr('Не удалось продолжить сессию')}[it.state]||it.state;
+        const stopped=it.state==='cancelled';
+        const note=el('div',undefined,stopped?'am-outcome-stop am-muted':'am-outcome am-status-bad'),line=el('p',text);
         appendEventTime(line,it.at,t.remote&&!t.remote.from);note.append(line);
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
-        if(it.text&&it.text!==restartOutcome)note.append(el('p',it.text,'am-small am-muted'));
+        if(it.text&&it.text!==restartOutcome&&(!stopped||!t.can_continue))note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
     }
@@ -3723,6 +3768,7 @@
       else if(!t.remote.lost&&['interrupted','blocked'].includes(t.state))$('lost-text').textContent=(t.state==='interrupted'?tr('Клиент перезапустился во время работы, и исход задачи неизвестен.'):tr('Процесс исполнителя не завершился полностью, исход задачи неизвестен.'));
       else $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
     }
+    if(t.can_continue&&(unreachable||stuckHere))$('lost-text').textContent+=' '+tr('Новое сообщение продолжит сессию после проверки процесса.');
     const active=activeStates.includes(t.state),box=$('answer-text'),compose=$('compose');
     if(compose.dataset.task!==t.id&&$('answer-add').getAttribute('aria-expanded')==='true')$('task-draft-add-menu').hidePopover();
     const note=canNote(t),canDraft=!t.remote?.from&&(!!q||active||note);
@@ -3742,11 +3788,11 @@
       $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden;
     }
     box.disabled=!canDraft;
-    box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):t.remote?.from?tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»':tr('Написать исполнителю…');
+    box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):t.can_continue?tr('Продолжить в этой сессии…'):t.remote?.from?tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»':tr('Написать исполнителю…');
     $('answer-send').hidden=!canDraft;
     $('answer-add').hidden=!taskSidebarPreview||!canDraft;
     if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';$('answer-status').textContent='';}
-    box.title=canDraft&&(unreachable||!q&&!note)?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
+    box.title=canDraft&&(unreachable&&!t.can_continue||!q&&!note)?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
     $('answer-send').title=box.title||tr('Отправить ответ');
     renderStopControls(t);
     sizeAnswer();answerControls();
@@ -3803,7 +3849,8 @@
     if(!t.remote)return t.state==='running'||t.state==='waiting_coordinator';
     return t.state==='running'&&!t.remote.from&&!t.remote.lost&&!t.remote.silent;
   }
-  function answerControls(){const t=selectedTaskRow();$('answer-send').disabled=answering||!t||taskUnreachable(t)||!!stopProgress(t)||!$('answer-text').value.trim()||!(t.owner_question&&!t.remote?.from||canNote(t));composerDictation?.sync();}
+  function canSendTaskMessage(t){return !!t&&!t.remote?.from&&!stopProgress(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
+  function answerControls(){$('answer-send').disabled=answering||!canSendTaskMessage(selectedTaskRow())||!$('answer-text').value.trim();composerDictation?.sync();}
   async function sendNote(){
     const t=selectedTaskRow();if(!canNote(t)||answering)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -3818,7 +3865,7 @@
   async function sendAnswer(){
     if(composerDictation?.finishFor($('answer-text')))return;
     const t=selectedTaskRow(),q=t?.owner_question;
-    if(!t||$('compose').inert||taskUnreachable(t)||stopProgress(t))return;
+    if($('compose').inert||!canSendTaskMessage(t))return;
     if(!q&&canNote(t))return sendNote();
     if(!q||answering||t.remote?.from)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -3840,7 +3887,7 @@
   function appendUpdateGlyphs(node){node.append(svgIcon(['M12 3v12m-5-5 5 5 5-5M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4']));}
   function updateSpinner(){
     // Keep the rotation axis at the center of the 24-unit viewBox.
-    const icon=svgIcon(['M12 4A8 8 0 1 0 20 12','M17 15l3-3 3 3']);
+    const icon=svgIcon(['M12 4A8 8 0 0 0 4 12M12 20a8 8 0 0 0 8-8','M1 9l3 3 3-3M17 15l3-3 3 3']);
     icon.classList.add('am-update-spin');
     return icon;
   }

@@ -6,17 +6,10 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
-// Continuing a task that ran on another computer (T-113). The coordinator's
-// follow-up travels as a "continue" message; that computer resumes the same
-// worker conversation, or answers continue_refused with its reason. Only a
-// done or failed task of the same network is continued, and only on a
-// computer whose version reads the message: an older one would drop it and
-// the task would look busy forever. An interrupted task is continued too
-// (T-159, D-108): that computer closes the interrupted run only when its
-// worker is certainly gone, and refuses otherwise.
-
+// A follow-up goes to the computer that owns the saved worker conversation.
 // netContinueSince is the first build that reads a "continue" message.
 const netContinueSince = 60
 
@@ -46,6 +39,14 @@ func peerBuildAtLeast(version string, since int) bool {
 	return err == nil && n >= since
 }
 
+// A local close while the executor is unreachable does not establish that
+// its worker stopped. The next terminal event from that executor settles it.
+const remoteCloseUnconfirmedPrefix = "closed on this computer;"
+
+func remoteCloseUnconfirmed(t Task) bool {
+	return t.State == "cancelled" && strings.HasPrefix(t.Detail, remoteCloseUnconfirmedPrefix)
+}
+
 // continueRemoteTask sends the coordinator's follow-up to the computer that
 // ran the task. opID makes it idempotent.
 func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, text string, sender MessageSender) error {
@@ -67,8 +68,17 @@ func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, 
 	if t.archiveState != "" {
 		return fmt.Errorf("%w: продолжить можно после восстановления задачи из архива", ErrRejected)
 	}
-	if t.State != "done" && t.State != "failed" && t.State != "interrupted" {
-		return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one of another computer can be continued; this one is %s", ErrRejected, t.State)
+	if !canResumeTask(t.State) {
+		return fmt.Errorf("%w: this task cannot be continued while it is %s", ErrRejected, t.State)
+	}
+	if t.State == "cancelled" {
+		var accepted bool
+		if err := tx.QueryRow(`SELECT COALESCE(remote_task,'')<>'' FROM tasks WHERE id=?`, task).Scan(&accepted); err != nil {
+			return err
+		}
+		if !accepted || remoteCloseUnconfirmed(t) {
+			return fmt.Errorf("%w: the executor has not confirmed that this task stopped", ErrRejected)
+		}
 	}
 	broker, err := metaValue(machine, "net_broker")
 	if err != nil {
@@ -96,7 +106,7 @@ func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, 
 	if err := setTaskState(tx, task, "running", "follow-up sent to "+peer.Name+"; the same conversation resumes there"); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL,failure_reason=NULL,failure_reset=NULL WHERE id=?`, task); err != nil {
+	if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL,failure_reason=NULL,failure_reset=NULL,cancel_requested=0 WHERE id=?`, task); err != nil {
 		return err
 	}
 	if err := insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "", sender); err != nil {
@@ -112,9 +122,6 @@ func applyContinue(machine, tx *sql.Tx, from netLink, b netBody, gone WorkerGone
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
-	}
-	if b.SenderAgent == AudienceOwner {
-		gone = nil
 	}
 	err = savepoint(tx, func() error {
 		return continueTaskTx(machine, tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
@@ -135,7 +142,7 @@ func continueNotRun(tx *sql.Tx, t Task, why string) error {
 	if err != nil {
 		return err
 	}
-	if prev != "done" && prev != "failed" && prev != "interrupted" {
+	if !canResumeTask(prev) {
 		prev = "failed"
 	}
 	if err := setTaskState(tx, t.ID, prev, why); err != nil {
