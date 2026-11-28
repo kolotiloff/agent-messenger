@@ -5742,8 +5742,9 @@
       newer.title=tr('Kotel проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
       version.append(newer);program=version;
     }
-    const programRow=stepRow(cli?'ok':1,names[provider]+' CLI',program,programNote?null:
+    const programRow=stepRow(cli?'ok':'–',names[provider]+' CLI',program,programNote?null:
       cli?[tr('Удалить'),()=>uninstallAgent(provider)]:[tr('Установить'),()=>installAgent(provider)]);
+    programRow.firstElementChild.setAttribute('aria-hidden','true');
     programRow.querySelector('.am-step-sub')?.setAttribute('role','status');
     steps.append(programRow);
     if(cli){
