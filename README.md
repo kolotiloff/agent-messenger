@@ -1,21 +1,23 @@
-<p align="center"><img src="scripts/gen-icon/kotel.png" alt="Kotel" width="128" height="128"></p>
-
-<h1 align="center">Kotel</h1>
-
-One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor Agent CLI) on your own computers: Mac, Windows and Linux, joined into one network. You watch every task in one window, answer the workers' questions and step in when needed.
-
-**Technical preview.** Kotel runs on Apple Silicon Macs with macOS 15 or later, and on x64 and ARM64 Windows and Linux computers. Kotel verifies signed in-app updates. The Mac app is ad-hoc signed and the Windows executables are unsigned, so a first download can trigger an operating system prompt. See the [installation guide](docs/DOWNLOAD.md) for each platform.
-
-<h3 align="center">Download</h3>
-
 <p align="center">
-  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Mac.zip"><img src="docs/assets/download-mac.svg" alt="macOS (Apple Silicon)" height="56"></a>&nbsp;
-  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Windows-x64.exe"><img src="docs/assets/download-windows.svg" alt="Windows 10/11 x64" height="56"></a>&nbsp;
-  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Linux-x64"><img src="docs/assets/download-linux.svg" alt="Linux x64" height="56"></a>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kotel-heading-dark.png">
+    <img src="docs/assets/kotel-heading-light.png" width="256" alt="Kotel">
+  </picture>
 </p>
 
 <p align="center">
-  <sub>ARM: <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Windows-ARM64.exe">Windows</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Linux-ARM64">Linux</a> · <a href="docs/DOWNLOAD.md">Installation and first steps</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest">Latest release</a></sub>
+  <strong>Your coding agents, working together.</strong><br>
+  One agent coordinates the work. Each worker handles its own task.
+</p>
+
+<p align="center">
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Mac.zip"><img src="docs/assets/download-mac.svg" alt="macOS (Apple Silicon)" height="46"></a>
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Windows-x64.exe"><img src="docs/assets/download-windows.svg" alt="Windows 10/11 x64" height="46"></a>
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Linux-x64"><img src="docs/assets/download-linux.svg" alt="Linux x64" height="46"></a>
+</p>
+
+<p align="center">
+  <sub>Technical preview · ARM64: <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Windows-ARM64.exe">Windows</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Linux-ARM64">Linux</a> · <a href="docs/DOWNLOAD.md">Installation and first steps</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest">Latest release</a></sub>
 </p>
 
 <picture>
@@ -45,6 +47,8 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 </details>
 
 ## Getting started
+
+**Technical preview.** Kotel runs on Apple Silicon Macs with macOS 15 or later, and on x64 and ARM64 Windows and Linux computers. Kotel verifies signed in-app updates. The Mac app is ad-hoc signed and the Windows executables are unsigned, so a first download can trigger an operating system prompt. See the [installation guide](docs/DOWNLOAD.md) for each platform.
 
 1. [Download and start](docs/DOWNLOAD.md) the app on each computer.
 2. Create a project from the welcome screen. On each worker computer, use the same project name and choose its local folder.
