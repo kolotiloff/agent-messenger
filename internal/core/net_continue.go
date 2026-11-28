@@ -17,6 +17,11 @@ const netContinueSince = 60
 // interrupted task on request from another computer (T-159).
 const netContinueInterruptedSince = 75
 
+const (
+	netContinueSettingsSince = 150
+	continueWithSettingsKind = "continue_with_settings"
+)
+
 var previewBuild = regexp.MustCompile(`^(?:0\.0\.0|[1-9][0-9]*\.[0-9]+\.[0-9]+)-preview\.(\d+)$`)
 
 // peerReadsContinue says whether a computer's reported version reads
@@ -49,7 +54,7 @@ func remoteCloseUnconfirmed(t Task) bool {
 
 // continueRemoteTask sends the coordinator's follow-up to the computer that
 // ran the task. opID makes it idempotent.
-func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, text string, sender MessageSender) error {
+func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, text string, sender MessageSender, options TaskContinuation) error {
 	key := "net_continue:" + opID
 	old, err := metaValue(tx, key)
 	if err != nil {
@@ -57,7 +62,7 @@ func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, 
 	}
 	if old != "" {
 		if old == task+"\n"+text {
-			return nil
+			return checkContinuationOptions(tx, task, opID, options)
 		}
 		return fmt.Errorf("%w: this operation id was used for another follow-up", ErrRejected)
 	}
@@ -97,6 +102,16 @@ func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, 
 	if t.State == "interrupted" && !peerBuildAtLeast(peer.Version, netContinueInterruptedSince) {
 		return fmt.Errorf("%w: %s runs an older Messenger that cannot continue an interrupted task; update it, cancel the task, or start a new task that names what is already done", ErrRejected, peer.Name)
 	}
+	kind := "continue"
+	if options != (TaskContinuation{}) {
+		kind = continueWithSettingsKind
+		if !peerBuildAtLeast(peer.Version, netContinueSettingsSince) {
+			return fmt.Errorf("%w: update the executor's Kotel to change the model or access of a saved conversation", ErrRejected)
+		}
+		if err := recordContinuationOptions(tx, task, opID, options); err != nil {
+			return err
+		}
+	}
 	if err := setMeta(tx, key, task+"\n"+text); err != nil {
 		return err
 	}
@@ -112,7 +127,7 @@ func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, 
 	if err := insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "", sender); err != nil {
 		return err
 	}
-	return enqueueTaskMessage(machine, tx, remote, "continue."+opID, task, opID, netBody{Kind: "continue", Task: task, OpID: opID, Text: text, SenderAgent: sender.Agent, SenderModel: sender.Model})
+	return enqueueTaskMessage(machine, tx, remote, "continue."+opID, task, opID, netBody{Kind: kind, Task: task, OpID: opID, Text: text, SenderAgent: sender.Agent, SenderModel: sender.Model, Model: options.Model, Access: options.Access})
 }
 
 // applyContinue resumes the mirror of another computer's task.
@@ -125,8 +140,12 @@ func applyContinue(machine, tx *sql.Tx, from netLink, b netBody, gone WorkerGone
 	}
 	err = savepoint(tx, func() error {
 		op := "net:" + from.broker + ":" + from.peer + ":" + b.OpID
-		return withMessageAttachments(tx, t.ID, op, "continue", b.Text, b.Attachments, func() error {
-			return continueTaskTx(machine, tx, t.ID, op, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		options := TaskContinuation{Model: b.Model, Access: b.Access}
+		if !options.Valid() || (b.Kind == continueWithSettingsKind) != (options != (TaskContinuation{})) {
+			return fmt.Errorf("%w: invalid follow-up settings", ErrRejected)
+		}
+		return withMessageAttachments(tx, t.ID, op, "continue"+continuationOptionsValue(options), b.Text, b.Attachments, func() error {
+			return continueTaskTx(machine, tx, t.ID, op, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel}, options)
 		})
 	})
 	if errors.Is(err, ErrRejected) {

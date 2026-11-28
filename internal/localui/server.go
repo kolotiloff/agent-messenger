@@ -832,6 +832,8 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		return control.Request{Cmd: cmd, Access: in.Access, Project: in.Project, Computer: in.Computer, Provider: in.Agent, Model: in.Model, Confirmation: in.OpID, Text: in.Text, Attachments: in.Attachments}, true
 	case "/api/task-answer", "/api/task-note":
 		var in struct {
+			Model       string                `json:"model,omitempty"`
+			Access      string                `json:"access,omitempty"`
 			Task        string                `json:"task"`
 			Question    string                `json:"question,omitempty"`
 			OpID        string                `json:"op_id"`
@@ -844,6 +846,10 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
 			return control.Request{}, false
 		}
+		options := core.TaskContinuation{Model: in.Model, Access: in.Access}
+		if !options.Valid() || (answer && options != (core.TaskContinuation{})) {
+			return control.Request{}, false
+		}
 		cmd := "task-owner-note"
 		if answer {
 			cmd = "task-owner-answer"
@@ -851,7 +857,10 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		if len(in.Attachments) != 0 {
 			cmd = "task-owner-message-with-attachments"
 		}
-		return control.Request{Cmd: cmd, MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text, Attachments: in.Attachments}, true
+		if options != (core.TaskContinuation{}) {
+			cmd = "task-owner-continue-with-settings"
+		}
+		return control.Request{Cmd: cmd, Model: in.Model, Access: in.Access, MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text, Attachments: in.Attachments}, true
 	case "/api/server-action":
 		var in struct {
 			Action    string `json:"action,omitempty"`

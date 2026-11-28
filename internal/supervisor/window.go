@@ -219,6 +219,14 @@ func (s *Supervisor) OwnerNote(task, op, text string) error {
 	return s.store.AddOwnerNote(task, op, text)
 }
 
+func (s *Supervisor) OwnerContinueWithSettings(task, op, text string, options core.TaskContinuation, files []core.TaskAttachment) error {
+	if err := s.store.ContinueFromWindow(task, op, text, options, files); err != nil {
+		return err
+	}
+	s.wakeTaskDispatch()
+	return nil
+}
+
 func (s *Supervisor) OwnerMessageWithAttachments(task, question, op, text string, files []core.TaskAttachment) error {
 	if err := s.store.AddOwnerMessageWithAttachments(task, question, op, text, files); err != nil {
 		return err

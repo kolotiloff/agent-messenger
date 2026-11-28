@@ -22,7 +22,7 @@ func isProjectResponse(kind string) bool {
 
 func isProjectRequest(kind string) bool {
 	switch kind {
-	case "answer", "continue", "note", "cancel", "rename_task", "archive_task":
+	case "answer", "continue", continueWithSettingsKind, "note", "cancel", "rename_task", "archive_task":
 		return true
 	default:
 		return false
@@ -46,7 +46,7 @@ func applyProjectRequestTx(machine, tx *sql.Tx, from netLink, m NetIncoming, bod
 	switch body.Kind {
 	case "answer":
 		return applyAnswer(machine, tx, from, m.OpID, body)
-	case "continue":
+	case "continue", continueWithSettingsKind:
 		return applyContinue(machine, tx, from, body, gone)
 	case "note":
 		return applyNote(machine, tx, from, body)

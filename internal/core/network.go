@@ -1197,7 +1197,7 @@ func (s *Store) netUndeliverable(seq int64, opID, broker, recipient string) erro
 				return err
 			}
 			return insertTaskEvent(tx, project, task, AudienceCoordinator, "failed", why, "")
-		case "continue":
+		case "continue", continueWithSettingsKind:
 			t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
 			if err != nil {
 				return err
@@ -1369,7 +1369,7 @@ func decodeNetIncoming(m NetIncoming) (netBody, bool) {
 	if b.Kind == "start_with_attachments" {
 		valid = valid && len(b.Attachments) > 0 && ValidTaskAccess(b.Access)
 		b.Kind = "start"
-	} else if len(b.Attachments) > 0 && b.Kind != "note" && b.Kind != "answer" && b.Kind != "continue" {
+	} else if len(b.Attachments) > 0 && b.Kind != "note" && b.Kind != "answer" && b.Kind != "continue" && b.Kind != continueWithSettingsKind {
 		valid = false
 	}
 	if b.Kind == "start_with_access" {

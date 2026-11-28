@@ -175,7 +175,7 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
  INSERT INTO snapshot.meta SELECT key,value FROM main.meta
  WHERE key='computer_id'
  OR (key GLOB 'net_continue_prev:*' AND substr(key,length('net_continue_prev:')+1) IN (SELECT id FROM snapshot.tasks))
- OR (key GLOB 'net_continue:*' AND substr(value,1,instr(value,char(10))-1) IN (SELECT id FROM snapshot.tasks));`); err != nil {
+ OR ((key GLOB 'net_continue:*' OR key GLOB 'continue_settings:*') AND substr(value,1,instr(value,char(10))-1) IN (SELECT id FROM snapshot.tasks));`); err != nil {
 			return fmt.Errorf("copy project delivery metadata: %w", err)
 		}
 		// New project messages start beyond all already allocated legacy

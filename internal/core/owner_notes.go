@@ -96,7 +96,7 @@ func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, vi
 					return err
 				}
 				if old != "" || canResumeTask(t.State) {
-					return continueRemoteTask(machine, tx, task, *link.remote, opID, text, MessageSender{Agent: AudienceOwner})
+					return continueRemoteTask(machine, tx, task, *link.remote, opID, text, MessageSender{Agent: AudienceOwner}, TaskContinuation{})
 				}
 			}
 			return noteRemoteTask(machine, tx, t, *link.remote, opID, text, author, sender)
@@ -109,7 +109,7 @@ func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, vi
 			err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldText)
 			if err == nil {
 				if oldTask == task && oldText == text {
-					return nil
+					return checkContinuationOptions(tx, task, opID, TaskContinuation{})
 				}
 				return fmt.Errorf("%w: this operation id was used for another follow-up", ErrRejected)
 			}
@@ -117,7 +117,7 @@ func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, vi
 				return err
 			}
 			if canResumeTask(t.State) {
-				return continueTaskTx(machine, tx, task, opID, text, gone, viaNet, MessageSender{Agent: AudienceOwner})
+				return continueTaskTx(machine, tx, task, opID, text, gone, viaNet, MessageSender{Agent: AudienceOwner}, TaskContinuation{})
 			}
 		}
 		if t.State == "waiting_owner" {

@@ -3,6 +3,16 @@
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
 
+## 2026-11-28 — T-393 — Chat continuation settings
+
+- Added model and access menus to the chat composer and routed their selections through the same-session continuation after the current run ends.
+- The remote continuation uses a versioned delivery so older executors cannot silently launch the turn with the previous settings. The worker's current launch policy still bounds access.
+- Added local and network continuation fixtures and a split-window composer scenario. Live provider acceptance remains pending.
+
+## 2026-11-28 — T-380 Match dictation Stop and Send styling
+
+Codex removed the separate circular background from the dictation Stop button. It now uses the existing quiet icon-button style. The pane fixture compares the dictation Stop and Send treatments at rest and on hover.
+
 ## 2026-11-28 — T-380 Keep the existing send button treatment
 
 The owner confirmed the requested change was to Stop and Send behavior. Codex restored the existing arrow, transparent background, and hover treatment in both composers.

@@ -1065,3 +1065,8 @@ The microphone check records up to ten seconds, allows an early stop, and offers
 Use standard card headings in Voice. Show the selected model as in use while dictation is enabled. Offer the existing trash icon for downloaded models and clear the selection when its file is removed. Keep weights open by an active recording or transcription until that operation finishes.
 
 Show the recording and recognition states inside the composer without resizing it. Draw the recording history from microphone levels. Keep cancellation separate from stopping so the user can discard a recording or insert its transcript.
+
+
+## D-281 — Model and access for a saved conversation
+
+The chat composer can select the model and access for the next launch of an existing session. The provider, project and executor stay attached to the session. The owner can make selections during a working run and use Stop before sending the next turn. Selected settings are committed together with the continuation. The executor still applies its access policy at launch, including the separate network-access limit.

@@ -7,6 +7,11 @@
   let lang='ru';
   try{if(localStorage.getItem('messenger-lang')==='en')lang='en';}catch(_){}
   const EN={
+  'Модель следующего запуска':'Model for the next run',
+  'Уровень защиты следующего запуска':'Access level for the next run',
+  'Оставить текущую настройку':'Keep the current setting',
+  'Остановите текущий запуск, чтобы продолжить с новыми настройками.':'Stop the current run to continue with the new settings.',
+
   'Открытые файлы':'Open files',
   'Открыть файл':'Open file',
   'Открыть в отдельном окне':'Open in a separate window',

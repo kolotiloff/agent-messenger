@@ -3071,6 +3071,10 @@
     const button=event.currentTarget,rect=button.getBoundingClientRect();
     const provider=$('task-draft-model').value.split(':')[0];
     const remote=!!$('task-draft-computer').value;
+    const choices=composerAccessChoices(provider,remote);
+    popMenu(rect.left,rect.bottom,choices.map(([value,text,detail])=>({text,detail,selected:value===button.value,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})),null,'',button);
+  });
+  function composerAccessChoices(provider,remote){
     const choices=[
       ['',tr('Как на компьютере исполнителя'),tr('Использовать доступ, заданный для этого агента.')],
       ['standard',tr('С ограничениями'),restrictedAccessDetail(provider)]
@@ -3080,8 +3084,8 @@
         tr('Доступ к сети и файлам за пределами проекта без подтверждения.');
       choices.push(['full',tr('Полный доступ'),detail]);
     }
-    popMenu(rect.left,rect.bottom,choices.map(([value,text,detail])=>({text,detail,selected:value===button.value,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})),null,'',button);
-  });
+    return choices;
+  }
   function closeTaskDraft(){
     draftAttachmentContext++;
     composerDictation?.cancel();
@@ -4433,14 +4437,10 @@
       const contextOnly=compose.hidden&&!!(t.context_window||t.usage);
       compose.toggleAttribute('data-context-only',contextOnly);
       if(contextOnly)compose.hidden=false;
-      const model=$('answer-model');
-      model.textContent=displayModel;
-      model.title=displayModel?taskModelDetail(t):'';
       const name=t.project||project;
       const computer=taskComputer(t);
       showComposerRoute($('answer-project'),folderIconPaths,projectTitle(name),t.folder||projectTitle(name));
       showComposerRoute($('answer-computer'),serverIconPaths,computerName(computer)||t.remote?.name||computer);
-      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'',true,t.agent);
       renderComposerTokens(t,displayModel,!compose.hidden);
       $('answer-context').hidden=false;
     }
@@ -4519,11 +4519,58 @@
     if(t?.remote?.from)return tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»';
     return tr('Написать исполнителю…');
   }
-  function canSendTaskMessage(t){return !!t&&!t.archived&&!t.remote?.from&&!stopProgress(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
+  const continuationSettings=new Map();
+  function continuationModels(t){
+    const agents=t.remote?(server?.peers||[]).find(p=>p.id===t.remote.id)?.agents:view?.agents;
+    return orderedModels(new Set(agents?.find(a=>a.agent===t.agent)?.models||[]));
+  }
+  function canSelectContinuationSettings(t){
+    return canDraftTaskMessage(t)&&!t.owner_question&&(t.can_continue||t.state==='running')&&!t.remote?.unaccepted;
+  }
+  function renderContinuationSettings(t){
+    const pending=continuationSettings.get(t.id)||{};
+    const model=$('answer-model'),access=$('answer-access');
+    const editable=canSelectContinuationSettings(t)&&!answering&&!stopProgress(t);
+    model.disabled=!editable||!continuationModels(t).length;
+    model.textContent=pending.model?modelName(pending.model):taskModelLabel(t);
+    model.title=model.disabled?taskModelDetail(t):tr('Модель следующего запуска');
+    access.disabled=!editable;
+    const remote=t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'';
+    const inherits=!pending.access||pending.access==='default';
+    showComposerAccess(access,inherits?!!t.full_access:pending.access==='full',inherits?remote:'',true,t.agent,pending.access==='full'&&!!remote);
+    if(!access.disabled)access.title=tr('Уровень защиты следующего запуска')+' · '+access.getAttribute('aria-label');
+  }
+  function selectContinuationSetting(event,key){
+    const task=selectedTaskRow(),button=event.currentTarget,rect=button.getBoundingClientRect();
+    if(!canSelectContinuationSettings(task))return;
+    const pending=continuationSettings.get(task.id)||{};
+    const choices=key==='model'
+      ?continuationModels(task).map(model=>[model,modelName(model),''])
+      :composerAccessChoices(task.agent,!!task.remote).map(([value,...labels])=>[value||'default',...labels]);
+    const entries=[['',tr('Оставить текущую настройку'),''],...choices].map(([value,text,detail])=>({
+      text,detail,selected:(pending[key]||'')===value,pick:()=>{
+        const next={...pending};
+        if(value)next[key]=value;
+        else delete next[key];
+        if(Object.keys(next).length)continuationSettings.set(task.id,next);
+        else continuationSettings.delete(task.id);
+        answerControls();
+        button.focus();
+      }
+    }));
+    popMenu(rect.left,rect.bottom,entries,null,'',button);
+  }
+  $('answer-model').addEventListener('click',event=>selectContinuationSetting(event,'model'));
+  $('answer-access').addEventListener('click',event=>selectContinuationSetting(event,'access'));
+  function settingsNeedStop(t){
+    return !!t&&!t.owner_question&&continuationSettings.has(t.id)&&!t.can_continue;
+  }
+  function canSendTaskMessage(t){return !!t&&!t.archived&&!t.remote?.from&&!stopProgress(t)&&!settingsNeedStop(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
   function answerControls(){
     const task=selectedTaskRow(),box=$('answer-text');
     const available=canSendTaskMessage(task);
-    box.title=canDraftTaskMessage(task)&&!available?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
+    if(task&&taskSidebarPreview)renderContinuationSettings(task);
+    box.title=settingsNeedStop(task)?tr('Остановите текущий запуск, чтобы продолжить с новыми настройками.'):canDraftTaskMessage(task)&&!available?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
     const problem=composerAttachmentProblem(box);
     renderAnswerAction();
     if(problem)$('answer-status').textContent=problem;
@@ -4535,7 +4582,7 @@
     const dictation=composerDictation?.submissionState(box);
     const hasText=!!replyContent(box).text;
     const showStop=!!task&&canStopTask(task)&&!stopProgress(task)&&
-      (!taskSidebarPreview||!hasText&&!dictation&&!answering);
+      (!taskSidebarPreview||settingsNeedStop(task)||!hasText&&!dictation&&!answering);
     stop.hidden=!showStop;
     send.hidden=!canDraftTaskMessage(task)||(taskSidebarPreview&&!hasText&&!dictation&&!answering);
     send.title=box.title||tr('Отправить сообщение');
@@ -4557,9 +4604,10 @@
     if(composerDictation?.finishFor(box,sendAnswer))return;
     const {text,attachments}=replyContent(box);
     if(!text)return;
-    const payload={task:task.id,text};
+    const settings=question?null:continuationSettings.get(task.id);
+    const payload={task:task.id,text,...settings};
     if(question)payload.question=question;
-    const storageKey=question?'messenger-answer-op:'+question:'messenger-note-op:'+task.id+':'+text;
+    const storageKey=settings?'messenger-continue-op:'+JSON.stringify(payload):question?'messenger-answer-op:'+question:'messenger-note-op:'+task.id+':'+text;
     if(attachments.length){
       payload.attachments=attachments;
       const identity=JSON.stringify(payload);
@@ -4573,6 +4621,7 @@
     $('answer-status').textContent=question?tr('Отправляем ответ…'):tr('Отправляем сообщение…');
     try{
       await postAPI(question?'/api/task-answer':'/api/task-note',payload);
+      if(settings)continuationSettings.delete(task.id);
       if(attachments.length)attachedReplyAttempt=null;
       else if(!question){try{localStorage.removeItem(storageKey);}catch(_){}}
       if(selectedTask===task.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}
