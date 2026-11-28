@@ -70,7 +70,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-392 | Add sleep modes and audit the window's shared styles. | window / platform | PR #257. Browser checks, a macOS sleep assertion, and platform compile checks. |
 | T-371 | Manage task names and archive entries. | window / network | Origin-owned edits, replicated metadata and explicit manual close upon interruption. Remote observer editing remains open. |
 | T-370 | Refine Statistics, Settings navigation, context details and offline presence. | window | [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
-| T-369 | Adjust the dark palette and compare sidebar task highlights. | window | Dark appearance uses a slightly darker sidebar and brighter text. The preview compares the current highlight with stronger row fills. |
+| T-369 | Adjust the dark palette and compare sidebar task highlights. | window | The owner approved regular-weight typography in local build 120. The next review slightly brightens the dark palette's main and secondary text. |
 | T-366 | Improve interface text readability at the current base size. | window | General offers the system font, system high contrast, Inter and Source Sans 3. The selection applies throughout the interface. |
 | T-365 | Move update actions to context menu footers, remove the duplicate roster, and pin update notices above the conversation. | window | Merged for build 119 in [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
 | T-363 | Show chronological work progress and summarize verified file changes after completion. | window | Integrated for build 119. Shows up to three confirmed paths initially. Line counts appear when supplied by the provider. |

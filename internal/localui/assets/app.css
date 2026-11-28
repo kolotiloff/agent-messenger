@@ -29,8 +29,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-bg:light-dark(#fff,#191919);
   --am-panel:light-dark(#fff,#202020);
   --am-side:light-dark(#fafafa,#1e1e1e);
-  --am-text:light-dark(#303030,#dededc);
-  --am-muted:light-dark(#6b6b6b,#a5a5a3);
+  --am-text:light-dark(#303030,#e5e5e3);
+  --am-muted:light-dark(#6b6b6b,#acacaa);
   --am-line:light-dark(#e5e5e5,#333);
   --am-button:light-dark(#efefef,#404040);
   --am-button-hover:light-dark(#e3e3e3,#4b4b4b);

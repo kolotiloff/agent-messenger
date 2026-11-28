@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-369 Dark theme text refinement
+
+The owner approved the regular window typography in local build 120. Codex slightly brightened the main and secondary text in the standard dark palette for the next owner-requested bundle.
+
 ## 2026-11-28 — T-384 and T-390 Mac review follow-up
 
 Codex added the shared computer filter to agent limits and moved scrolling into the list beneath the header. The context-window popover uses the same insets. The local Mac preview uses the installed appearance and font as defaults. The dark palette remains the T-369 version already published in build 119. Codex paused the first-run wizard after the native review and retained the saved default model and direct chat. The computer menu now shows one contextual update action and stays open while the pointer moves. Gear menu hover highlights only the hovered row. Both composers now use the same 8 px inner spacing and 12 px button corners. Agent settings show only the local roster in the new window. Installed provider rows omit task counts. The agent dialog uses the standard divider below Models and status marks for CLI installation and sign-in. The sidebar limits filter still covers all computers. Update notices use a fixed window inset even above Settings, and short update titles omit final periods. The network review opens during the check and supports updates per computer or for the remaining eligible computers together. Window headings, labels and author names use regular weight, with grayscale font smoothing where supported. Statistics reserves chart space on first open and keeps results for the displayed period until their replacement arrives. Downloadable voice models are open work. The owner will request the next local build when ready.
