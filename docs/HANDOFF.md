@@ -44,6 +44,8 @@ T-377 aligns the reply footer, clips model-list scrolling to the options below s
 
 T-378 limits the version footer and update actions to computer context menus. Project folders show their own actions in every grouping.
 
+T-379 aligns the painted reply labels to the shield and context ring for the selected font. The active model uses the main text color, and the ring shows an accent segment when a measurement exists. Chromium and WebKit exercised the reply footer.
+
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.

@@ -216,6 +216,8 @@ if (require.main === module) (async()=>{
     assert((await tokenCount.boundingBox()).y>(await answerField.boundingBox()).y);
     const contextProgress=tokenCount.locator('#answer-context-progress');
     await contextProgress.waitFor();
+    assert.notEqual(await contextProgress.evaluate(ring=>getComputedStyle(ring).stroke),
+      await tokenCount.locator('.am-context-track').evaluate(ring=>getComputedStyle(ring).stroke));
     const [drawn,track]=(await contextProgress.getAttribute('stroke-dasharray')).split(' ').map(Number);
     assert.equal(track,100);
     assert(Math.abs(drawn-212/238*100)<0.01);
@@ -1037,11 +1039,25 @@ if (require.main === module) (async()=>{
       assert.equal(await replyAccess.textContent(),'Доступ на ПК-1');
       assert.equal(await replyAccess.getAttribute('title'),'Доступ задаётся на ПК-1');
       assert.equal(await accessBelow(replyAccess),true);
-      const footerCenters=await draftPage.locator('#answer-context').evaluate(footer=>
-        [...footer.querySelectorAll('#answer-model,#answer-access > span,#answer-access > svg,#answer-tokens > svg')].map(node=>{
+      const footerCenters=await draftPage.locator('#answer-context').evaluate(async footer=>{
+        await document.fonts.ready;
+        const canvas=document.createElement('canvas').getContext('2d');
+        return [...footer.querySelectorAll('#answer-model,#answer-access > span,#answer-access > svg,#answer-tokens > svg')].map(node=>{
           const bounds=node.getBoundingClientRect();
-          return bounds.top+bounds.height/2;
-        }));
+          if(node instanceof SVGElement){
+            const graphic=node.getBBox();
+            return new DOMPoint(0,graphic.y+graphic.height/2).matrixTransform(node.getScreenCTM()).y;
+          }
+          const font=getComputedStyle(node);
+          canvas.font=font.fontWeight+' '+font.fontSize+' '+font.fontFamily;
+          const baseline=document.createElement('span');
+          baseline.style.cssText='display:inline-block;width:0;height:0';
+          node.prepend(baseline);
+          const center=baseline.getBoundingClientRect().top-canvas.measureText('Н').actualBoundingBoxAscent/2;
+          baseline.remove();
+          return center;
+        });
+      });
       assert.equal(footerCenters.length,4);
       assert(Math.max(...footerCenters)-Math.min(...footerCenters)<=0.5,JSON.stringify(footerCenters));
       const viewportEnd=await draftPage.locator('#thread').evaluate(thread=>{

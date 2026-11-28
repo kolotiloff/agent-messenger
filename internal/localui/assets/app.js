@@ -169,22 +169,33 @@
   // Fonts place their capitals differently inside the line box, so a fixed
   // top padding centres control text in one font and not in another. Measure
   // the font in use and set the padding that puts the capitals in the middle.
-  function centreControlText(){
+  function controlTextOffset(style,lineHeight){
     try{
-      const host=root,style=getComputedStyle(host),size=parseFloat(style.fontSize);
+      const size=parseFloat(style.fontSize);
       const probe=document.createElement('div');
-      probe.style.cssText='position:absolute;visibility:hidden;line-height:1.35;white-space:nowrap';
+      probe.style.cssText='position:absolute;visibility:hidden;white-space:nowrap';
+      probe.style.font=style.fontWeight+' '+style.fontSize+'/'+lineHeight+' '+style.fontFamily;
       probe.append('Н',Object.assign(document.createElement('span'),{style:'display:inline-block;width:0;height:0'}));
-      host.append(probe);
-      const baseline=probe.lastChild.getBoundingClientRect().top-probe.getBoundingClientRect().top;
+      root.append(probe);
+      const bounds=probe.getBoundingClientRect();
+      const baseline=probe.lastChild.getBoundingClientRect().top-bounds.top;
       probe.remove();
       const ctx=document.createElement('canvas').getContext('2d');
       ctx.font=style.fontWeight+' '+style.fontSize+' '+style.fontFamily;
       const cap=ctx.measureText('Н').actualBoundingBoxAscent;
       if(!(cap>0&&baseline>0&&size>0))return;
-      const nudge=2*(size*1.35/2-(baseline-cap/2));
-      host.style.setProperty('--am-text-nudge',Math.round(Math.min(6,Math.max(0,nudge))*2)/2+'px');
+      return bounds.height/2-(baseline-cap/2);
     }catch{}
+  }
+  function centreControlText(){
+    const offset=controlTextOffset(getComputedStyle(root),1.35);
+    if(offset!=null)root.style.setProperty('--am-text-nudge',Math.round(Math.min(6,Math.max(0,2*offset))*2)/2+'px');
+  }
+  function centreReplyLabels(){
+    const footer=$('answer-context');
+    const style=getComputedStyle(footer);
+    const offset=controlTextOffset(style,style.lineHeight);
+    if(offset!=null)footer.style.setProperty('--am-reply-label-offset',offset+'px');
   }
   function applyTheme(theme, persist=false) {
     if(!['system','light','dark'].includes(theme))theme='system';
@@ -200,6 +211,8 @@
     const select=$('chat-font-select');
     if(!select.value)select.value='inter';
     root.dataset.chatFont=select.value;
+    centreReplyLabels();
+    document.fonts?.ready.then(centreReplyLabels);
     if(persist){
       if(window.webkit?.messageHandlers?.chatFont)window.webkit.messageHandlers.chatFont.postMessage(select.value);
       else remember('messenger-chat-font',select.value);

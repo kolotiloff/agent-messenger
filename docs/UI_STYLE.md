@@ -27,6 +27,8 @@ Expanded efficiency details start 16 px inside the parent row and share its trai
 
 The sidebar action and project filter, statistics periods and filter controls use the same 8 px control gap. Compact list rows keep their 4 px gap. The first computer begins 8 px below the Mac project filter. Settings section headings sit above the first card with the section gap. Computer, Archive and Statistics task rows share the list hover fill. Statistics tasks have the same 4 px gap as archived tasks. Dropdown options have 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window). The Projects divider aligns with the full-width task toolbar. The Archive header starts below the toolbar. The quiet Clear Archive icon sits beside the count and opens a confirmation dialog. The footer aligns the visible icon and version text edges by applying the icon's internal inset to the version text.
 
+The reply footer aligns the cap-height center of its selected-font labels with the shield and context meter. The model uses the primary text color. The 16 px meter glyph sits in the standard 28 px compact button with the 8 px radius. Its measured portion uses the accent color.
+
 Buttons that belong together go in one container: `.am-actions` (a row) or `.am-actions-stack` (a column). Do not space them with margins.
 
 ## Radii
