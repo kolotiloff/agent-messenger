@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-375 Conversation footer and shared controls
+
+Codex moved the access detail below the reply input, aligned message times to the corresponding text edge, and displayed Stop as a system event. Task tabs and drop targets follow the toolbar spacing. Archive and main window icon buttons share the same compact style. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-27 — T-374 Project reference tabs and compact controls
 
 Codex added document tabs, a separate preview action, provider sections in model search, and text actions in update menus. Inter is the initial font, Settings navigation is wider, and message actions appear on hover and keyboard focus. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).

@@ -449,7 +449,13 @@ if (require.main === module) (async()=>{
         const field=node.nextElementSibling.getBoundingClientRect();
         return rect.height>0&&rect.bottom<field.top&&rect.left===field.left&&rect.width<field.width;
       });
-      assert.equal(await accessAbove(replyAccess),true);
+      const accessBelow=access=>access.evaluate(node=>{
+        const field=node.closest('.am-compose').querySelector('.am-compose-field').getBoundingClientRect();
+        const mode=node.getBoundingClientRect();
+        const model=node.previousElementSibling.getBoundingClientRect();
+        return mode.height>0&&mode.top>=field.bottom&&mode.left>=model.right&&mode.right<=field.right;
+      });
+      assert.equal(await accessBelow(replyAccess),true);
       assert.deepEqual(await draftPage.locator('#compose .am-compose-field').evaluate(field=>{
         const stop=field.querySelector('#task-stop').getBoundingClientRect();
         const send=field.querySelector('#answer-send').getBoundingClientRect();
@@ -585,20 +591,25 @@ if (require.main === module) (async()=>{
       assert.equal(await workerActions.evaluate(node=>getComputedStyle(node).opacity),'0');
       for(const [time,outgoing] of [[timestamp,true],[workerTimestamp,false]]){
         await time.locator('xpath=../..').hover();
-        const layout=await time.evaluate(node=>{
+        const sample=await draftPage.waitForFunction(outgoing=>{
+          const messages=document.querySelectorAll('#thread .am-message-group');
+          const messageGroup=messages[outgoing?0:messages.length-1];
+          const node=messageGroup?.querySelector('.am-message-actions time');
+          if(!node)return false;
           const actions=node.parentElement, body=actions.previousElementSibling;
+          if(getComputedStyle(actions).opacity!=='1')return false;
           const footer=actions.getBoundingClientRect(), message=body.getBoundingClientRect();
           return {
-            opacity:getComputedStyle(actions).opacity,fontSize:getComputedStyle(node).fontSize,
+            fontSize:getComputedStyle(node).fontSize,
             gap:footer.top-message.bottom,left:footer.left===message.left,right:footer.right===message.right,
             first:actions.firstElementChild===node,
           };
-        });
-        assert.equal(layout.opacity,'1');
+        },outgoing);
+        const layout=await sample.jsonValue();
         assert.equal(layout.fontSize,'12px');
         assert.equal(layout.gap,8);
         assert.equal(outgoing?layout.right:layout.left,true);
-        assert.equal(layout.first,outgoing);
+        assert.equal(layout.first,true);
         assert.match(await time.getAttribute('title'),/\d{2}:\d{2}$/);
       }
       if(process.env.SCREENSHOT_DIR)await workerMessage.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'message-hover.png')});
@@ -868,7 +879,7 @@ if (require.main === module) (async()=>{
       assert.equal(await plus.getAttribute('aria-expanded'),'false');
       assert(await draftPage.locator('#conversation-date').isVisible());
       assert.equal(await draftPage.locator('#task-head time').count(),0);
-      await select(draftPage,'project-select','Все');
+      await select(draftPage,'project-select','Все проекты');
       await plus.click();
       assert.equal(await draftPage.locator('#conversation-date').isVisible(),false);
       const modelTrigger=form.getByRole('button',{name:'Модель',exact:true});
@@ -990,8 +1001,22 @@ if (require.main === module) (async()=>{
       await ownerMessage.getByRole('status').getByText('Скопировано',{exact:true}).waitFor();
       assert.equal(await draftPage.evaluate(()=>window.testCopiedMessage),directTask.title);
       await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
-      assert.equal(await draftPage.locator('#answer-access').textContent(),'Доступ задаётся на ПК-1');
-      assert.equal(await accessAbove(replyAccess),true);
+      assert.equal(await replyAccess.textContent(),'Доступ на ПК-1');
+      assert.equal(await replyAccess.getAttribute('title'),'Доступ задаётся на ПК-1');
+      assert.equal(await accessBelow(replyAccess),true);
+      const viewportEnd=await draftPage.locator('#thread').evaluate(thread=>{
+        const field=document.querySelector('#compose .am-compose-field').getBoundingClientRect();
+        const footer=thread.parentElement.querySelector('.am-chat-footer').getBoundingClientRect();
+        return [thread.getBoundingClientRect().bottom,field.top,footer.top,getComputedStyle(thread).bottom];
+      });
+      assert(Math.abs(viewportEnd[0]-viewportEnd[1])<1,JSON.stringify(viewportEnd));
+      if(process.env.SCREENSHOT_DIR){
+        const field=await draftPage.locator('#compose .am-compose-field').boundingBox();
+        const foot=await draftPage.locator('#answer-context').boundingBox();
+        await draftPage.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'composer-access.png'),clip:{
+          x:field.x-12,y:field.y-220,width:field.width+24,height:foot.y+foot.height-field.y+232,
+        }});
+      }
       await draftPage.locator('#answer-add').click();
       assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
       await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
@@ -1072,6 +1097,20 @@ if (require.main === module) (async()=>{
       }),['0px','rgba(0, 0, 0, 0)','8px','4px','16px','16px']);
       const hides=()=>seen.filter(req=>['/api/task-hide','/api/task-hide-history'].includes(req.path)).length;
       const initialHides=hides();
+      let chromeStyle;
+      for(const [index,selector] of ['#archive-clear','#agent-filter + button','#project-select + button','#sidebar-group + button','#settings-open','#fb-open','#stats-open','#list-toggle'].entries()){
+        const control=draftPage.locator(selector);
+        await control.hover();
+        const style=await control.evaluate(async button=>{
+          await Promise.all(button.getAnimations().map(anim=>anim.finished));
+          const css=getComputedStyle(button),icon=button.querySelector('svg').getBoundingClientRect();
+          return [button.offsetWidth,button.offsetHeight,icon.width,icon.height,css.borderRadius,css.backgroundColor];
+        });
+        assert.deepEqual(style.slice(0,5),[28,28,18,18,'8px']);
+        if(index===0)chromeStyle=style;
+        else assert.deepEqual(style,chromeStyle);
+        if(process.env.SCREENSHOT_DIR&&index<2)await archive.locator('.am-queue-header').screenshot({path:path.join(process.env.SCREENSHOT_DIR,index?'filter-hover.png':'clear-hover.png')});
+      }
       await clearArchive.click();
       await draftPage.getByText('Очистить архив?',{exact:true}).waitFor();
       assert.deepEqual(await draftPage.locator('#confirm-dialog').evaluate(dialog=>{
@@ -1225,7 +1264,7 @@ if (require.main === module) (async()=>{
       await row.getByText('Звуки меню',{exact:true}).waitFor();
       assert.equal(await draftPage.locator('#project-count').textContent(),String(projects.length));
       assert.equal(await shared.count(),0);
-      await select(draftPage,'project-select','Все');
+      await select(draftPage,'project-select','Все проекты');
       await shared.click();
       await draftPage.locator('#thread').getByText('Общий результат',{exact:true}).waitFor();
     }finally{await draftPage.close();}

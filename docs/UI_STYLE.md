@@ -42,9 +42,9 @@ In the wide task window, Projects and Archive use the section inset (`--am-gap-s
 
 The composer keeps its surface radius (16 px) at every height. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
 
-The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane.
+The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane and ends at the footer. In an existing conversation the access detail and model sit below the reply field.
 
-Message actions and the timestamp share a visible row one control gap (8 px) below the message. The executor's row starts at the text edge, with the timestamp after the actions. An outgoing row ends at the bubble edge, with the timestamp before the actions. The next message group starts one region gap (24 px) below the row.
+Message actions and the timestamp share a visible row one control gap (8 px) below the message. The executor's timestamp starts at the text edge, followed by the actions. An outgoing row ends at the bubble edge, with the timestamp before the actions. The next message group starts one region gap (24 px) below the row.
 
 ## Sizes
 
@@ -58,6 +58,7 @@ Message actions and the timestamp share a visible row one control gap (8 px) bel
 - `.am-card` is the one card look (agent cards, server sections); `.am-card-head` holds a title and a `.am-badge`.
 - `.am-field` is a label with a field under it.
 - Notes about a screen (what works, what does not yet) go in a side column, not between the cards: `.am-server-layout` with `.am-server-aside`. In a window narrower than 1000 px the column moves above the cards.
+- `.am-chrome-icon` shares the compact square, 18 px glyph box and hover fill for standalone main window controls. Inline tool and provider icons retain their own sizes.
 - `.am-icon-btn` is a square compact button; `.am-primary` the main action; `.am-danger` a destructive action.
 - Status texts: `.am-status-good/-bad/-run/-wait`; dots: `.am-dot-run/-idle/-offline`.
 

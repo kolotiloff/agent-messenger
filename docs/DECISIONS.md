@@ -994,3 +994,7 @@ The owner or coordinator can send another message in the same saved worker conve
 ## D-267 — Project reference tabs
 
 A project file link opens a tab in the existing task toolbar and a reader alongside the conversation. Explicit separate windows display a read-only text preview. File resolution continues to use the executor task and its registered local workspace. Relative references inside a document use that document's folder. A remote reference shows which computer holds the file.
+
+## D-268 — Keep permission details beside the model in an existing conversation
+
+The new task composer keeps its access choice. An existing conversation shows its access mode or executor computer beside the model below the reply field. Its scrolling viewport ends at the footer. Stop ends a turn and adds an unboxed system event. The original conversation can accept a follow-up when its recorded continuation capability allows it. See T-375.

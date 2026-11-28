@@ -30,7 +30,7 @@
     const value=document.createElement('span');value.className='am-select-value';
     const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
     if(iconPaths){
-      trigger.classList.add('am-sidebar-picker','am-card-icon');
+      trigger.classList.add('am-sidebar-picker','am-icon-btn','am-chrome-icon');
       trigger.replaceChildren(svgIcon(iconPaths));
     }
     const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role',searchable?'dialog':'listbox');menu.setAttribute('aria-label',label);menu.tabIndex=-1;
@@ -523,8 +523,9 @@
   function renderPaneControls(pane){
     const task=pane.task;
     const canSend=canSendTaskMessage(task);
-    pane.input.placeholder=task?.can_continue?tr('Продолжить в этой сессии…'):tr('Написать исполнителю…');
-    pane.compose.hidden=!canSend&&!pane.input.value.trim();
+    pane.input.placeholder=taskMessagePlaceholder(task);
+    pane.compose.hidden=!canDraftTaskMessage(task)&&!pane.input.value.trim();
+    pane.input.disabled=!canDraftTaskMessage(task);
     pane.input.readOnly=pane.busy;
     pane.send.disabled=!canSend||pane.busy||!pane.input.value.trim();
   }
@@ -550,8 +551,11 @@
     for(const it of snapshot.items||[]){
       if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||(!it.text&&it.kind!=='outcome'))continue;
       const message=el('div',undefined,'am-pane-message');
-      const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
-      message.append(el('span',role,'am-small am-muted'),richText(it.kind==='outcome'&&it.text===restartOutcome?restartLabel():it.kind==='outcome'&&it.state==='cancelled'?tr('Работа остановлена'):it.text,undefined,fileSource));
+      if(it.kind==='outcome'&&it.state==='cancelled')message.append(stoppedNote(it,snapshot.task));
+      else{
+        const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
+        message.append(el('span',role,'am-small am-muted'),richText(it.kind==='outcome'&&it.text===restartOutcome?restartLabel():it.text,undefined,fileSource));
+      }
       pane.body.append(message);
     }
     pane.count=offset+(snapshot.items?.length||0);
@@ -694,7 +698,7 @@
     tabNode.setAttribute('role','presentation');tabNode.draggable=true;
     close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+task.title);
     close.append(svgIcon(['M6 6l12 12M18 6L6 18']));
-    input.rows=2;input.maxLength=20000;input.setAttribute('aria-label',tr('Ответ исполнителю'));
+    input.rows=1;input.maxLength=20000;input.setAttribute('aria-label',tr('Ответ исполнителю'));
     input.placeholder=tr('Написать исполнителю…');send.type='submit';
     compose.hidden=true;compose.append(input,send);
     status.setAttribute('role','status');
@@ -961,7 +965,7 @@
       $('project-count').hidden=!view||!!sidebarProject;
       $('project-count').textContent=view?String(view.projects.length):'';
       $('split-projects').hidden=true;
-      projectOptions($('project-select'),view?[['__all',tr('Все')],...options,['__new',tr('Новый проект')]]:options,view?sidebarProject||'__all':'',!view);
+      projectOptions($('project-select'),view?[['__all',tr('Все проекты')],...options,['__new',tr('Новый проект')]]:options,view?sidebarProject||'__all':'',!view);
       $('task-new').disabled=!view?.projects.length;
       syncSelects();
       return;
@@ -2650,10 +2654,11 @@
     box.append(intro,steps);
     return box;
   }
-  function showComposerAccess(node,enabled,remote=''){
+  function showComposerAccess(node,enabled,remote='',compact=false){
     node.hidden=enabled==null&&!remote;
-    const label=remote?tr('Доступ задаётся на {computer}').replace('{computer}',()=>remote):enabled?tr('Любые команды'):tr('Обычный доступ');
-    const detail=remote?tr('Разрешения задаются на компьютере исполнителя.'):enabled?label:tr('Используются обычные разрешения агента.');
+    const remoteDetail=tr('Доступ задаётся на {computer}').replace('{computer}',()=>remote);
+    const label=remote?(compact?tr('Доступ на {computer}').replace('{computer}',()=>remote):remoteDetail):enabled?tr('Любые команды'):tr('Обычный доступ');
+    const detail=remote?(compact?remoteDetail:tr('Разрешения задаются на компьютере исполнителя.')):enabled?label:tr('Используются обычные разрешения агента.');
     node.classList.toggle('am-full-access',!remote&&enabled===true);
     node.title=node.hidden?'':detail;
     node.replaceChildren();
@@ -3608,9 +3613,7 @@
           copy.title=status.textContent;
           reset=setTimeout(()=>{delete copy.dataset.copied;copy.title=label;copy.replaceChildren(svgIcon(copyPaths));status.textContent='';},1500);
         });
-        if(group.firstElementChild.classList.contains('am-outgoing'))actions.append(time,copy);
-        else actions.append(copy,time);
-        actions.append(status);group.append(actions);
+        actions.append(time,copy,status);group.append(actions);
       }else{
         meta.append(time);
       }
@@ -3718,7 +3721,7 @@
         let note;
         if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
         else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
-        else if(it.kind==='report')note=delivery(direct?tr('Задача завершена'):tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
+        else if(it.kind==='report')note=delivery(direct?tr('Задача завершена'):tr('Отчёт отправлен координатору'),'am-delivery-close');
         else if(it.audience==='owner')note=delivery(direct?tr('Вопрос вам'):tr('Вопрос вам, координатор его не видит'),'am-status-wait');
         else note=delivery(tr('Вопрос координатору'),'am-status-wait');
         if(it.verified){
@@ -3732,12 +3735,12 @@
         group=null;
         const overloaded=it.state==='failed'&&capacityFailure(it.text);
         const failedTitle=overloaded?tr('Завершение запуска не подтверждено'):t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой');
-        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:restartLabel(),cancelled:tr('Работа остановлена'),continue_refused:tr('Не удалось продолжить сессию')}[it.state]||it.state;
-        const stopped=it.state==='cancelled';
-        const note=el('div',undefined,stopped?'am-outcome-stop am-muted':'am-outcome am-status-bad'),line=el('p',text);
+        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:restartLabel(),continue_refused:tr('Не удалось продолжить сессию')}[it.state]||it.state;
+        if(it.state==='cancelled'){out.push(stoppedNote(it,t));continue;}
+        const note=el('div',undefined,'am-outcome am-status-bad'),line=el('p',text);
         appendEventTime(line,it.at,t.remote&&!t.remote.from);note.append(line);
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
-        if(it.text&&it.text!==restartOutcome&&(!stopped||!t.can_continue))note.append(el('p',it.text,'am-small am-muted'));
+        if(it.text&&it.text!==restartOutcome)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
     }
@@ -3771,7 +3774,7 @@
     if(t.can_continue&&(unreachable||stuckHere))$('lost-text').textContent+=' '+tr('Новое сообщение продолжит сессию после проверки процесса.');
     const active=activeStates.includes(t.state),box=$('answer-text'),compose=$('compose');
     if(compose.dataset.task!==t.id&&$('answer-add').getAttribute('aria-expanded')==='true')$('task-draft-add-menu').hidePopover();
-    const note=canNote(t),canDraft=!t.remote?.from&&(!!q||active||note);
+    const note=canNote(t),canDraft=canDraftTaskMessage(t);
     const liveTokens=$('answer-live-tokens'),reportedTokens=t.quiet?.live_tokens;
     liveTokens.hidden=taskSidebarPreview||reportedTokens==null||t.state!=='running';
     liveTokens.textContent=liveTokens.hidden?'':tokensText(reportedTokens)+tr(' т.');
@@ -3783,12 +3786,12 @@
       const model=$('answer-model');
       model.textContent=displayModel;
       model.title=displayModel?taskModelDetail(t):'';
-      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'');
+      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'',true);
       renderComposerTokens(t,displayModel,!compose.hidden);
-      $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden;
+      $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden&&$('answer-access').hidden;
     }
     box.disabled=!canDraft;
-    box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):t.can_continue?tr('Продолжить в этой сессии…'):t.remote?.from?tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»':tr('Написать исполнителю…');
+    box.placeholder=taskMessagePlaceholder(t);
     $('answer-send').hidden=!canDraft;
     $('answer-add').hidden=!taskSidebarPreview||!canDraft;
     if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';$('answer-status').textContent='';}
@@ -3849,7 +3852,24 @@
     if(!t.remote)return t.state==='running'||t.state==='waiting_coordinator';
     return t.state==='running'&&!t.remote.from&&!t.remote.lost&&!t.remote.silent;
   }
-  function canSendTaskMessage(t){return !!t&&!t.remote?.from&&!stopProgress(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
+  function stoppedNote(item,task){
+    const note=el('p',tr('Работа остановлена'),'am-delivery am-delivery-close am-system-event');
+    if(taskSidebarPreview)note.title=connectionTimestamp(item.at);
+    else appendEventTime(note,item.at,task.remote&&!task.remote.from);
+    return note;
+  }
+  function canDraftTaskMessage(t){
+    return !!t&&!t.archived&&!t.remote?.from&&!!(t.owner_question||activeStates.includes(t.state)||canNote(t)||
+      (t.remote&&(t.remote.lost||t.remote.silent)));
+  }
+  function taskMessagePlaceholder(t){
+    if(t?.owner_question)return tr('Ответить исполнителю…');
+    if(t?.can_continue)return tr('Продолжить в этой сессии…');
+    if(t?.state==='waiting_coordinator'&&canNote(t))return tr('Ответить вместо координатора…');
+    if(t?.remote?.from)return tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»';
+    return tr('Написать исполнителю…');
+  }
+  function canSendTaskMessage(t){return !!t&&!t.archived&&!t.remote?.from&&!stopProgress(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
   function answerControls(){$('answer-send').disabled=answering||!canSendTaskMessage(selectedTaskRow())||!$('answer-text').value.trim();composerDictation?.sync();}
   async function sendNote(){
     const t=selectedTaskRow();if(!canNote(t)||answering)return;

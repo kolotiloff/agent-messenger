@@ -36,6 +36,8 @@ T-373 adds a follow-up composer to stopped and recoverable conversations. The or
 
 T-374 places project references in document tabs beside the chat. A separate, resizable text preview is an explicit action. The coordinator setup status and the executor's injected tool connection are independent. General defaults to Inter and retains saved choices. The model search groups available options by agent. Computer and project context menus show update and cancel as text actions above the installed version. The message footer appears on hover or focus and remains visible on touch screens.
 
+T-375 lets the history scroll down to the composer and shows access beside the model below the field. Stopped turns use a short system event in the saved conversation. Task tabs use compact menu spacing, and drop targets start below the toolbar. Main-window icon buttons share size and hover styling. The project filter now says All projects.
+
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.

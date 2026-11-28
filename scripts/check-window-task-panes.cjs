@@ -15,6 +15,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const output=process.env.SCREENSHOT_DIR;
     if(output)await fs.mkdir(output,{recursive:true});
     const reads = [], writes = [];
+    let stoppedPrimary=false;
     await page.addInitScript(() => {
       const every = window.setInterval;
       window.setInterval = (callback, delay, ...args) => every(callback, delay===5000 ? 100 : delay, ...args);
@@ -29,6 +30,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           return route.fulfill({json:{ok:true}});
         }
         const json=reply(url,url.searchParams.get('project') || 'game',projects);
+        if(url.pathname==='/api/window'&&stoppedPrimary)json.tasks=json.tasks.map(task=>task.id==='game-4'?{...task,state:'cancelled',can_continue:true}:task);
         if(url.pathname==='/api/task'){
           json.task={...json.task};
           delete json.task.project;
@@ -37,6 +39,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             json.task.state='interrupted';
             json.task.can_continue=true;
             json.task.remote={name:'Проверочный компьютер'};
+          }
+          if(json.task.id==='game-4'&&stoppedPrimary){
+            json.task.state='cancelled';
+            json.task.can_continue=true;
+            json.items.push({kind:'outcome',state:'cancelled',at:new Date().toISOString(),text:'the task was cancelled; its report, if any, was not published'});
           }
           if(json.task.id==='game-2')json.task.owner_question={id:'fixture-question',text:'Подтвердите проверку'};
         }
@@ -135,6 +142,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.mouse.move(start.x+start.width/2+16,start.y+start.height/2,{steps:5});
     const drop=page.locator('[data-drop-layout=stack]');
     await drop.waitFor();
+    const toolbarBounds=await page.locator('.am-task-toolbar').boundingBox();
+    assert.equal(Math.round((await drop.boundingBox()).y-toolbarBounds.y-toolbarBounds.height),12);
     if(output)await page.screenshot({path:path.join(output,'task-drop-layouts.png')});
     const end=await drop.boundingBox();
     await page.mouse.move(end.x+end.width/2,end.y+end.height/2,{steps:8});
@@ -185,6 +194,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await board.count(),0);
     assert.equal(await mainTitle.textContent(),initialTitle);
     assert.equal(await primary.evaluate(input=>input===document.activeElement),true);
+    stoppedPrimary=true;
+    const stopped=page.locator('#thread .am-system-event');
+    await stopped.getByText('Работа остановлена',{exact:true}).waitFor();
+    assert(!await page.getByText(/its report, if any/).count());
+    assert.equal(await primary.getAttribute('placeholder'),'Продолжить в этой сессии…');
+    assert(await primary.isEnabled());
+    if(output)await page.locator('.am-chat-body').screenshot({path:path.join(output,'stopped-conversation.png')});
+    await primary.fill('Продолжи проверку');
+    const followup=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/task-note');
+    await page.locator('#answer-send').click();
+    const continuation=(await followup).postDataJSON();
+    assert.equal(continuation.task,'game-4');
+    assert.equal(continuation.text,'Продолжи проверку');
     console.log(JSON.stringify({engine,result:'passed'}));
   } finally {
     await browser.close();
