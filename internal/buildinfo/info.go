@@ -9,6 +9,9 @@ var Revision = "unknown"
 // Public update verification key; the signing key never enters a build.
 var UpdatePublicKey = ""
 
+// Set only for a local desktop preview that attaches to an existing client.
+var LocalDesktopPreview = ""
+
 type Info struct {
 	Version  string `json:"version"`
 	Revision string `json:"revision"`

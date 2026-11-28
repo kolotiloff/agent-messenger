@@ -7000,7 +7000,9 @@
     button.addEventListener('click',action);return button;
   }
   const setupSetting=el('div',undefined,'am-theme-setting');
-  setupSetting.append(el('span',tr('Первоначальная настройка')),setupButton(tr('Открыть'),()=>showWindowSetup(setupPage)));
+  const openSetup=setupButton(tr('Открыть'),()=>showWindowSetup(setupPage));
+  openSetup.classList.add('am-settings-action');
+  setupSetting.append(el('span',tr('Первоначальная настройка')),openSetup);
   preferencesPanel.append(setupSetting);
   let setupPage=0,setupBusy=false,setupChoice='',defaultTaskModel='';
   function setupSelect(label,values,selected,pick){
