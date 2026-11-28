@@ -1324,6 +1324,8 @@
   }
   function renderNotices(){
     const box=$('notices');if(!box)return;
+    // Keep notice controls interactive above the modal backdrop. CSS anchors
+    // them to the application viewport in either layer.
     const layer=$('window-setup-dialog')?.open?$('window-setup-dialog'):$('settings-dialog').open?$('settings-dialog'):noticeHome;
     if(box.parentNode!==layer)layer.prepend(box);
     const visible=notices.filter(n=>noticeMode!=='off'||n.key==='manual-update-check'||n.key.startsWith('window-setup-test-'));
@@ -6103,7 +6105,7 @@
         renderManualUpdateControls(result.installed_version);
         checkedLocalUpdate=versionOlder(result.installed_version,published)?published:'';
         if(checkedLocalUpdate)updateNotice('info',tr('Доступна версия ')+versionName(published),'',startCheckedLocalUpdate);
-        else updateNotice('info',tr('Установлена последняя версия.'));
+        else updateNotice('info',tr('Установлена последняя версия'));
       }else{
         await loadServer();
         if(!network||updateNetwork()!==network)throw Error(tr('Сеть недоступна.'));
@@ -6125,7 +6127,7 @@
       if(!knownUpdate||versionOlder(knownUpdate,published))knownUpdate=published;
       renderMachines();
     }catch(error){
-      updateNotice('bad',tr('Не удалось проверить обновления.'),error.message===tr('Не удалось проверить обновления.')?'':tr(error.message));
+      updateNotice('bad',tr('Не удалось проверить обновления'),error.message===tr('Не удалось проверить обновления.')?'':tr(error.message));
     }finally{
       updateCheckScope='';
       renderManualUpdateControls();

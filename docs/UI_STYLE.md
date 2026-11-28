@@ -16,7 +16,7 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 
 | Surface | Vertical inset | Horizontal inset |
 |---|---:|---:|
-| Composer shell | 4 px | 4 px |
+| Composer shell | 8 px | 8 px |
 | Computer headings, active task rows, statistics task links and efficiency model rows | 4 px | 12 px, with a 36 px leading inset on active tasks to align the titles |
 | Compact notices | 8 px | 12 px |
 | Report cards, expanded efficiency details and outgoing message bubbles | 12 px | 12 px |
@@ -24,6 +24,8 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 | Settings cards | 16 px | 16 px |
 
 Expanded efficiency details start 16 px inside the parent row and share its trailing edge. The 12 px inner inset aligns the first metric label with the model name. The detail table adds no extra padding at its outer edges.
+
+Window notices stay in the same upper corner when Settings opens. Leave the final period off short notice titles. Keep punctuation in explanatory text and keep the ellipsis on actions in progress.
 
 The sidebar action and project filter, statistics periods and filter controls use the same 8 px control gap. Compact list rows keep their 4 px gap. The first computer begins 8 px below the Mac project filter. Settings section headings sit above the first card with the section gap. Computer, Archive and Statistics task rows share the list hover fill. Statistics tasks have the same 4 px gap as archived tasks. Dropdown options have 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window). The Projects divider aligns with the full-width task toolbar. The Archive header starts below the toolbar. The quiet Clear Archive icon sits beside the count and opens a confirmation dialog. The footer aligns the visible icon and version text edges by applying the icon's internal inset to the version text.
 

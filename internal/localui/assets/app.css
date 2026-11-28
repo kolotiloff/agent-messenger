@@ -750,8 +750,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 
 /* Composer and the error chips above it */
 #am-concept .am-chat-footer { position:absolute; bottom:0; left:var(--am-pane-inset); right:var(--am-pane-inset); background:var(--am-bg); }
-#am-concept .am-notices { position:absolute; z-index:30; inset-block-start:calc(var(--am-control) + var(--am-gap-content)); inset-inline-end:var(--am-pane-inset); display:flex; flex-direction:column; align-items:flex-end; gap:var(--am-gap-control); max-inline-size:min(25em,calc(100% - 2 * var(--am-pane-inset))); pointer-events:none; }
-#am-concept dialog > .am-notices { inset-block-start:calc(var(--am-caption-height) + var(--am-gap-content)); }
+#am-concept .am-notices { position:fixed; z-index:30; inset-block-start:calc(var(--am-control) + var(--am-gap-content)); inset-inline-end:var(--am-pane-inset); display:flex; flex-direction:column; align-items:flex-end; gap:var(--am-gap-control); max-inline-size:min(25em,calc(100% - 2 * var(--am-pane-inset))); pointer-events:none; }
 #am-concept .am-notice { position:relative; display:flex; align-items:center; flex-shrink:0; gap:var(--am-gap-control); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-composer); color:var(--am-text); line-height:1.35; box-shadow:var(--am-shadow-s); overflow:hidden; overflow-wrap:anywhere; }
 #am-concept #notice { width:min(420px,100%); max-height:60px; margin-inline:var(--am-pane-inset); padding:var(--am-space-2) var(--am-space-1) var(--am-space-2) var(--am-space-3); }
 #am-concept .am-notices .am-notice { width:fit-content; max-inline-size:100%; padding:var(--am-space-1) var(--am-space-3); pointer-events:auto; }
