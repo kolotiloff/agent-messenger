@@ -49,6 +49,8 @@
   'По компьютеру':'By computer',
   'По проекту':'By project',
   'По компьютеру и проекту':'By computer and project',
+  'По проекту и компьютеру':'By project and computer',
+  'Открыть папку…':'Open folder…',
   'Нет текущих задач':'No current tasks',
   'Новая задача':'New task',
   'Описание новой задачи':'New task description',

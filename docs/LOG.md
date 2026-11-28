@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-377 Task grouping and draft workspace controls
+
+Codex added project-first computer grouping, routed Open folder through the existing project setup, and confined model scrolling to the options. The reply footer aligns its labels and icons. The update action uses the standard highlighted menu row. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-28 — T-376 Coordinator link detection and menu polish
 
 Codex fixed recognition of existing MCP connections through the app's compatibility link, clarified the folder-scoped connection status, and adjusted the update labels, task status separators, grouping menu and model list. The packaged macOS icon fills more of the tile. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).

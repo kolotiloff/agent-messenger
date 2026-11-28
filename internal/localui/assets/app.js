@@ -35,7 +35,7 @@
     }
     const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role',searchable?'dialog':'listbox');menu.setAttribute('aria-label',label);menu.tabIndex=-1;
     let search,empty;
-    const list=searchable?el('div'):menu;
+    const list=searchable?el('div',undefined,'am-draft-model-options'):menu;
     const grouped=select.id==='task-draft-model';
     const groups=new Map();
     if(searchable){
@@ -52,7 +52,7 @@
         for(const row of options)row.hidden=!row.dataset.searchLabel.includes(query);
         for(const group of groups.values())group.hidden=!group.querySelector('[role=option]:not([hidden])');
         empty.hidden=options.some(row=>!row.hidden);
-        menu.scrollTop=0;
+        list.scrollTop=0;
       });
     }
     // A modal dialog makes outside nodes inert, even top-layer popovers.
@@ -130,7 +130,7 @@
         minWidth=Math.max(minWidth,Math.ceil(menu.getBoundingClientRect().width));
       }
       positionPopover(menu,trigger,minWidth,searchable||!!iconPaths);
-      if(search){menu.scrollTop=0;search.focus({preventScroll:true});}
+      if(search){list.scrollTop=0;search.focus({preventScroll:true});}
       else{
         const row=options[select.selectedIndex]||options[0];row?.scrollIntoView({block:'nearest'});
         if(keyboard)row?.focus({preventScroll:true});else menu.focus({preventScroll:true});
@@ -1694,17 +1694,18 @@
     count.setAttribute('aria-hidden','true');
     return count;
   }
-  function sidebarTaskRows(body,head,card,computer,items=[]){
+  function sidebarTaskRows(body,head,card,computer,items=[],projectGroup=''){
+    const key=projectGroup?JSON.stringify([projectGroup,computer]):computer;
     if(!items.length)return;
     const rows=el('div',undefined,'am-sidebar-task-rows');
     body.append(rows);
     const disclosure=el('button',undefined,'am-sidebar-disclosure');disclosure.type='button';
-    disclosure.dataset.sidebarFocus=JSON.stringify([computer]);
+    disclosure.dataset.sidebarFocus=JSON.stringify([key]);
     if(head.title)disclosure.title=head.title;
     const label=head.querySelector('.am-machine-label'),count=tasksWord(items.length);
     const countLabel=sidebarTaskCount(items.length);
     function update(){
-      const collapsed=collapsedComputers.has(computer);
+      const collapsed=collapsedComputers.has(key);
       body.inert=collapsed;
       if(collapsed)label.after(countLabel);
       else countLabel.remove();
@@ -1713,8 +1714,8 @@
       disclosure.setAttribute('aria-label',computerName(computer)+(collapsed?', '+count:'')+' — '+action);
     }
     disclosure.addEventListener('click',()=>{
-      if(collapsedComputers.has(computer))collapsedComputers.delete(computer);
-      else collapsedComputers.add(computer);
+      if(collapsedComputers.has(key))collapsedComputers.delete(key);
+      else collapsedComputers.add(key);
       update();
     });
     head.append(disclosure);card.classList.add('am-sidebar-has-tasks');update();
@@ -1724,7 +1725,7 @@
       appendSidebarRows(rows,items);
     }
   }
-  function appendProjectFolders(container,items,computer){
+  function appendProjectFolders(container,items,computer,appendRows=appendSidebarRows){
     const folders=new Map();
     for(const item of items){
       if(!folders.has(item.name))folders.set(item.name,[]);
@@ -1776,7 +1777,7 @@
           openProjectMenu(bounds.left,bounds.bottom);
         }
       });
-      appendSidebarRows(rows,tasks);
+      appendRows(rows,tasks,name);
       folder.append(button,rows);container.append(folder);
     }
   }
@@ -1866,6 +1867,7 @@
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer(view?.project===project?view:null);
     const sidebarTasks=taskSidebarPreview?currentTasksByComputer():null;
+    const projectFirst=['project','project-computer'].includes(groupSelect.value);
     const projectActivity=splitProjects.map(name=>{
       const snapshot=view?.project===name?view:auxActivity?.project===name?auxActivity:null;
       return {name,snapshot,tasks:busyTasksByComputer(snapshot)};
@@ -1912,7 +1914,7 @@
     if(sidebarTasks){
       const body=el('div',undefined,'am-sidebar-tasks');
       head.append(localMeta);machine.append(head,body);
-      if(groupSelect.value!=='project')sidebarTaskRows(body,head,machine,'local',sidebarTasks.get('local'));
+      if(!projectFirst)sidebarTaskRows(body,head,machine,'local',sidebarTasks.get('local'));
     }else if(projectActivity.length)appendProjectCells(machine,head,localMeta,'local',projectActivity);
     else{
       const body=el('div',undefined,'am-machine-body');
@@ -1975,7 +1977,7 @@
       }
       if(sidebarTasks){
         peerBody.className='am-sidebar-tasks';
-        if(groupSelect.value!=='project')sidebarTaskRows(peerBody,name,card,peer.id,sidebarTasks.get(peer.id));
+        if(!projectFirst)sidebarTaskRows(peerBody,name,card,peer.id,sidebarTasks.get(peer.id));
       }else if(projectActivity.length){
         appendProjectCells(card,name,meta,peer.id,projectActivity,peer);
       }else if(fresh){
@@ -2001,9 +2003,54 @@
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
     const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
     box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
-    if(taskSidebarPreview&&groupSelect.value==='project'){
+    if(taskSidebarPreview&&projectFirst){
+      const cards=[...box.children];
       box.replaceChildren();
-      appendProjectFolders(box,Array.from(sidebarTasks.values()).flat(),'');
+      const appendRows=groupSelect.value==='project-computer'?(rows,tasks,name)=>{
+        const groups=new Map();
+        for(const item of tasks){
+          const computer=item.peer?sharedRunsOn(item.t,item.peer):taskComputer(item.t);
+          if(!groups.has(computer))groups.set(computer,[]);
+          groups.get(computer).push(item);
+        }
+        const roster=new Map(cards.map(card=>[card.dataset.peer||'local',card]));
+        const order=new Set([...roster.keys(),...groups.keys()]);
+        for(const computer of order){
+          const items=groups.get(computer);
+          if(!items)continue;
+          const card=el('div',undefined,'am-machine-card am-sidebar-project-computer');
+          card.dataset.computer=computer;
+          const original=roster.get(computer);
+          const heading=original?.querySelector('.am-machine-name').cloneNode(true)||el('div',undefined,'am-machine-name');
+          heading.querySelector('.am-machine-meta')?.remove();
+          heading.removeAttribute('tabindex');
+          if(!original){
+            const {t,peer}=items[0];
+            const label=(peer?sharedComputer(t,peer):computerName(computer)||t.remote?.name)||computer;
+            heading.append(machinePresence(false,false,t.remote?.last_seen),el('span',label,'am-machine-label'));
+          }
+          const body=el('div',undefined,'am-sidebar-tasks');
+          sidebarTaskRows(body,heading,card,computer,items,name);
+          function openMenu(x,y){
+            const peer=server?.peers?.find(item=>item.id===computer);
+            if(peer)deviceMenu(peer,x,y,{revoke:false});
+            else if(computer==='local')popMenu(x,y,[],null,'local');
+          }
+          heading.addEventListener('contextmenu',event=>{
+            event.preventDefault();
+            openMenu(event.clientX,event.clientY);
+          });
+          heading.addEventListener('keydown',event=>{
+            if(event.key!=='ContextMenu'&&!(event.shiftKey&&event.key==='F10'))return;
+            event.preventDefault();
+            const bounds=heading.getBoundingClientRect();
+            openMenu(bounds.left,bounds.bottom);
+          });
+          card.append(heading,body);
+          rows.append(card);
+        }
+      }:appendSidebarRows;
+      appendProjectFolders(box,Array.from(sidebarTasks.values()).flat(),'',appendRows);
       if(!box.childElementCount)box.append(el('p',tr('Нет текущих задач'),'am-small am-muted'));
     }else if(taskSidebarPreview){
       for(const card of box.children){
@@ -2702,11 +2749,13 @@
   function canDraftTask(name){
     return online&&taskDraftComputers(name).some(computer=>taskDraftModels(computer).length);
   }
-  function renderTaskDraft(){
+  function renderTaskDraft(preferredProject){
     const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
     const projects=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
-    const name=projects.some(([key])=>key===projectSelect.value)?projectSelect.value:sidebarProject||project;
-    projectOptions(projectSelect,projects,name,draftSending);
+    const requested=typeof preferredProject==='string'?preferredProject:projectSelect.value;
+    const name=projects.some(([key])=>key===requested)?requested:sidebarProject||project;
+    projectSelect.dataset.selectedProject=name;
+    projectOptions(projectSelect,[...projects,['__new',tr('Открыть папку…')]],name,draftSending||!online);
     const computers=taskDraftComputers(name);
     const current=computerSelect.selectedIndex<0?null:computers.find(p=>p.id===computerSelect.value);
     const computer=current||computers.find(p=>taskDraftModels(p).length)||computers[0];
@@ -5035,7 +5084,8 @@
     }catch(e){$('fb-status').textContent=e.message;}
     finally{fbExportLabel();}
   }
-  function openProjectDialog(){
+  function openProjectDialog(fromDraft=false){
+    $('project-dialog').toggleAttribute('data-from-draft',fromDraft===true);
     $('project-name').value='';$('project-folder').value='';$('project-rules').value='';$('project-status').textContent='';
     $('project-dialog').showModal();
   }
@@ -5048,7 +5098,9 @@
       const rules=$('project-rules').value.trim();
       if(rules)await postAPI('/api/project-rules',{name,rules});
       setProject(name);remember('messenger-project',name);
+      const fromDraft=$('project-dialog').hasAttribute('data-from-draft');
       $('project-dialog').close();viewSignature='';await refresh();
+      if(fromDraft&&draftOpen){renderTaskDraft(name);$('task-draft-text').focus();}
       // Connect the coordinator right away; the result is shown, not retried.
       if(view?.project===name)await connectReadyCoordinators();
     }catch(error){$('project-status').textContent=error.message;}
@@ -5966,7 +6018,13 @@
       const select=$(id),paths=draftContextIcons[id];
       const trigger=enhanceSelect(select,id==='task-draft-model');
       if(paths)trigger.prepend(svgIcon(paths));
-      select.addEventListener('change',renderTaskDraft);
+      select.addEventListener('change',()=>{
+        if(id==='task-draft-project'&&select.value==='__new'){
+          renderTaskDraft(select.dataset.selectedProject);
+          openProjectDialog(true);
+          $('project-pick').click();
+        }else renderTaskDraft();
+      });
     }
     setupComposerPaths();
     setupComposerTokens();

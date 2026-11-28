@@ -387,6 +387,12 @@ if (require.main === module) (async()=>{
       }
       if(p==='game'&&url.pathname==='/api/task-history')return {json:{tasks:[]}};
       if(p==='tools'&&url.pathname==='/api/task-history')return {json:{tasks:[toolOlder]}};
+      if(url.pathname==='/api/server'){
+        const result=reply(url,p,projects);
+        const cursor=result.peers.find(peer=>peer.id==='pc1').agents.find(agent=>agent.agent==='cursor');
+        cursor.models.push(...Array.from({length:12},(_,index)=>'test-model-'+index));
+        return {json:result};
+      }
       if(url.pathname==='/api/self-update')return {json:{installed_version:'1.0.9',version:'1.0.10',state:'available'}};
       if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
       if(url.pathname==='/api/task-note')return {json:{ok:true}};
@@ -896,6 +902,14 @@ if (require.main === module) (async()=>{
       assert.equal(draftLabels.length,3);
       for(const label of draftLabels)assert.deepEqual(await labelStyle(label),replyModelStyle);
       await select(draftPage,'task-draft-project','Инструменты');
+      const folderPick=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
+      await select(draftPage,'task-draft-project','Открыть папку…');
+      assert.deepEqual((await folderPick).postDataJSON(),{kind:'folder',current:''});
+      const folderDialog=draftPage.locator('#project-dialog');
+      await folderDialog.waitFor();
+      await draftPage.waitForFunction(()=>document.getElementById('project-folder').value==='/fictional/project/notes.txt');
+      await folderDialog.press('Escape');
+      assert.equal(await form.locator('#task-draft-project').inputValue(),'tools');
       const pathMenu=draftPage.getByRole('dialog',{name:'Добавить путь',exact:true});
       const addPath=form.getByRole('button',{name:'Добавить путь',exact:true});
       await addPath.hover();
@@ -931,6 +945,17 @@ if (require.main === module) (async()=>{
       const draftSearch=modelMenu.getByRole('searchbox',{name:'Поиск моделей'});
       assert.equal(await draftSearch.evaluate(node=>node===document.activeElement),true);
       assert.deepEqual(await form.locator('#task-draft-model option').evaluateAll(nodes=>nodes.map(n=>n.value).filter(key=>key.startsWith('codex:'))),orderedCodex.map(id=>'codex:'+id));
+      const scrollBounds=await modelMenu.evaluate(menu=>{
+        const field=menu.querySelector('.am-model-search'),list=menu.querySelector('[role=listbox]');
+        const from=list.scrollTop;
+        list.scrollTop=list.scrollHeight;
+        const result=[getComputedStyle(menu).overflowY,list.scrollTop>from,
+          list.getBoundingClientRect().top>=field.getBoundingClientRect().bottom,
+          list.getBoundingClientRect().bottom<menu.getBoundingClientRect().bottom,menu.scrollTop];
+        list.scrollTop=from;
+        return result;
+      });
+      assert.deepEqual(scrollBounds,['hidden',true,true,true,0]);
       const checkedModel=modelMenu.locator('[aria-selected=true]');
       assert.equal(await checkedModel.textContent(),'Sol 6.2 Medium');
       assert.deepEqual(await modelMenu.locator('.am-model-group-title').allTextContents(),['Claude Code','Codex','Cursor']);
@@ -946,7 +971,9 @@ if (require.main === module) (async()=>{
       assert.equal(await checkedModel.locator('.am-select-check svg').count(),1);
       assert.equal(await checkedModel.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
       const [searchBox,optionBox]=await Promise.all([draftSearch.boundingBox(),checkedModel.boundingBox()]);
-      assert.deepEqual([searchBox.x,searchBox.width],[optionBox.x,optionBox.width]);
+      const gutter=await modelMenu.getByRole('listbox').evaluate(list=>list.offsetWidth-list.clientWidth);
+      assert.equal(searchBox.x,optionBox.x);
+      assert(Math.abs(searchBox.width-optionBox.width-gutter)<1);
       await draftSearch.fill('cursor composer');
       assert.equal(await modelMenu.getByRole('group',{name:'Cursor'}).count(),1);
       assert.equal(await modelMenu.getByRole('group',{name:'Claude Code'}).count(),0);
@@ -1010,6 +1037,13 @@ if (require.main === module) (async()=>{
       assert.equal(await replyAccess.textContent(),'Доступ на ПК-1');
       assert.equal(await replyAccess.getAttribute('title'),'Доступ задаётся на ПК-1');
       assert.equal(await accessBelow(replyAccess),true);
+      const footerCenters=await draftPage.locator('#answer-context').evaluate(footer=>
+        [...footer.querySelectorAll('#answer-model,#answer-access > span,#answer-access > svg,#answer-tokens > svg')].map(node=>{
+          const bounds=node.getBoundingClientRect();
+          return bounds.top+bounds.height/2;
+        }));
+      assert.equal(footerCenters.length,4);
+      assert(Math.max(...footerCenters)-Math.min(...footerCenters)<=0.5,JSON.stringify(footerCenters));
       const viewportEnd=await draftPage.locator('#thread').evaluate(thread=>{
         const field=document.querySelector('#compose .am-compose-field').getBoundingClientRect();
         const footer=thread.parentElement.querySelector('.am-chat-footer').getBoundingClientRect();
@@ -1500,12 +1534,39 @@ if (require.main === module) (async()=>{
       assert(treeGaps.every(gap=>Math.abs(gap-4)<0.1),JSON.stringify(treeGaps));
       await localGame.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await browserPreview.locator('#task-head').getByText('Экран настроек',{exact:true}).waitFor();
+      await group('По проекту и компьютеру');
+      const reverseGame=machines.locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
+      const reverseLocal=reverseGame.locator('[data-computer=local]');
+      const reversePC=reverseGame.locator('[data-computer=pc1]');
+      await reverseLocal.getByText('Экран настроек',{exact:true}).waitFor();
+      await reversePC.getByText('Проверка навигации',{exact:true}).waitFor();
+      await reverseLocal.locator('.am-sidebar-disclosure').click();
+      assert.equal(await reverseLocal.locator('.am-sidebar-tasks').getAttribute('inert'),'');
+      assert.equal(await reversePC.locator('.am-sidebar-tasks').getAttribute('inert'),null);
+      await reverseLocal.locator('.am-sidebar-disclosure').click();
+      if(process.env.SCREENSHOT_DIR)await machines.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'project-computer.png')});
       await group('По компьютеру');
       await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');
       const computerMenu=browserPreview.locator('#device-menu');
       await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
       const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить версию'});
-      if(process.env.SCREENSHOT_DIR)await computerMenu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'update-menu.png')});
+      await peerUpdate.hover();
+      const spacing=await peerUpdate.evaluate(async row=>{
+        await Promise.all(row.getAnimations().map(animation=>animation.finished));
+        const style=getComputedStyle(row),bounds=row.getBoundingClientRect();
+        const menu=row.closest('.am-context-menu');
+        const footer=menu.querySelector('.am-context-device').getBoundingClientRect();
+        return {rowPadding:[style.paddingBlockStart,style.paddingBlockEnd],highlight:style.backgroundColor,
+          beforeDivider:footer.top-bounds.bottom,menuPadding:getComputedStyle(menu).paddingBlockStart};
+      });
+      assert.deepEqual(spacing.rowPadding,['4px','4px']);
+      assert.notEqual(spacing.highlight,'rgba(0, 0, 0, 0)');
+      assert.equal(spacing.beforeDivider,4);
+      assert.equal(spacing.menuPadding,'8px');
+      if(process.env.SCREENSHOT_DIR){
+        await computerMenu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'update-menu.png')});
+        console.log('Update menu:',spacing);
+      }
       await peerUpdate.click();
       await browserPreview.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
       await browserPreview.locator('#confirm-cancel').click();
@@ -1543,8 +1604,14 @@ if (require.main === module) (async()=>{
       assert.equal((await narrowArchive.boundingBox()).y,toolbar.y+toolbar.height);
     }finally{await browserPreview.close();}
 
+    let addedProject=null;
     const compactPreview=await open(projects,{width:450,height:720},'light',(url,p)=>{
-      if(url.pathname==='/api/window')return {json:{...reply(url,p,projects),coordinator_link:{
+      if(url.pathname==='/api/pick')return {json:{ok:true,path:'/Проекты/Черновики'}};
+      if(url.pathname==='/api/project-create'){
+        addedProject=JSON.parse(seen.at(-1).body);
+        return {json:{ok:true}};
+      }
+      if(url.pathname==='/api/window')return {json:{...reply(url,p,addedProject?[...projects,addedProject]:projects),coordinator_link:{
         state:'unknown',detail:'Файл настроек проекта недоступен. Проверьте разрешения на папку проекта и попробуйте подключиться ещё раз.',
       }}};
     },true);
@@ -1593,6 +1660,15 @@ if (require.main === module) (async()=>{
       await total(compactPreview,'103578');
       await statisticsDialog.locator('#stats-close').click();
       assert.equal(await compactPreview.locator('#task-draft-text').inputValue(),'Черновик');
+      await select(compactPreview,'task-draft-project','Открыть папку…');
+      await compactPreview.waitForFunction(()=>document.getElementById('project-folder').value==='/Проекты/Черновики');
+      await compactPreview.locator('#project-name').fill('Черновики');
+      await compactPreview.locator('#project-save').click();
+      await compactPreview.locator('#project-dialog').waitFor({state:'hidden'});
+      await compactPreview.waitForFunction(()=>document.getElementById('task-draft-project').value==='Черновики');
+      assert.deepEqual(addedProject,{name:'Черновики',folder:'/Проекты/Черновики'});
+      assert.equal(await compactPreview.locator('#task-draft-text').inputValue(),'Черновик');
+      assert.equal(await compactPreview.locator('#task-draft-send').isEnabled(),true);
     }finally{await compactPreview.close();}
 
     const single=await open(projects.slice(0,1),{width:1100,height:706},'light');

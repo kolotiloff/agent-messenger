@@ -40,6 +40,8 @@ T-375 lets the history scroll down to the composer and shows access beside the m
 
 T-376 recognizes the installed macOS bundle's compatibility link in existing coordinator registrations. The project settings identify the folder-scoped MCP connection, the update menu uses a short action label, and model sections have equal insets around dividers. The grouping menu fits its choices within the viewport. The macOS icon uses more of the tile, and the running app reads it directly from the installed bundle.
 
+T-377 aligns the reply footer, clips model-list scrolling to the options below search, and adds project-first grouping with computer subgroups. A new task draft can open the local folder picker and register the folder through the project dialog. The default data path and the active update channel still use compatibility names. See D-248 for the cutover criteria.
+
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.

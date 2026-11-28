@@ -1002,3 +1002,8 @@ The new task composer keeps its access choice. An existing conversation shows it
 ## D-269 — Recognize a coordinator registration through the installed bundle link
 
 A registration pointing to the migrated macOS bundle remains connected when the installer’s relative link leads to the current executable and the coordinator arguments match. This preserves the server name and configuration. A different target remains a conflict. See T-376.
+
+
+## D-270 — Group tasks in either order and choose a folder from a draft
+
+Offer project-then-computer alongside the previous grouping modes. Remember a computer's disclosure state separately inside each project. A task draft can open a folder through the system picker and create its project using the existing form. The task remains scoped to a registered project and a computer that can execute it.
