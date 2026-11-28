@@ -6092,10 +6092,14 @@
   async function manualUpdateCheck(scope){
     if(updateCheckScope||localUpdateRunning()||(scope==='network'&&networkUpdatesSending))return;
     const network=updateNetwork();
-    const target=scope==='local'||scope==='network'?null:server?.peers?.find(peer=>peer.id===scope);
+    const review=scope==='network'?$('network-update-dialog'):null;
+    const target=scope==='local'||review?null:server?.peers?.find(peer=>peer.id===scope);
     updateCheckScope=scope;
     renderManualUpdateControls();
-    updateNotice('updating',tr('Проверка обновлений…'),target?.name||'');
+    if(review){
+      renderNetworkUpdateReview('',network);
+      review.showModal();
+    }else updateNotice('updating',tr('Проверка обновлений…'),target?.name||'');
     try{
       const result=await postAPI('/api/update-check',{},24500);
       const published=result.version;
@@ -6109,9 +6113,8 @@
       }else{
         await loadServer();
         if(!network||updateNetwork()!==network)throw Error(tr('Сеть недоступна.'));
-        if(scope==='network'){
-          updateNotice('info','','');
-          showNetworkUpdateReview(published,network);
+        if(review){
+          if(review.open)renderNetworkUpdateReview(published,network);
         }else{
           const peer=server?.peers?.find(item=>item.id===scope);
           if(!peer||!peerFresh(peer))throw Error(tr('Компьютер не в сети.'));
@@ -6127,7 +6130,10 @@
       if(!knownUpdate||versionOlder(knownUpdate,published))knownUpdate=published;
       renderMachines();
     }catch(error){
-      updateNotice('bad',tr('Не удалось проверить обновления'),error.message===tr('Не удалось проверить обновления.')?'':tr(error.message));
+      const title=tr('Не удалось проверить обновления');
+      const detail=error.message===tr('Не удалось проверить обновления.')?'':tr(error.message);
+      if(review)$('network-update-note').textContent=[title,detail].filter(Boolean).join('. ');
+      else updateNotice('bad',title,detail);
     }finally{
       updateCheckScope='';
       renderManualUpdateControls();
@@ -6143,11 +6149,12 @@
     if(!peerFresh(peer)||peer.reconnecting)return {installed,status:tr('Не в сети')};
     if(updateInProgress(updateMark(peer)))return {installed,status:tr('Обновление уже идёт')};
     if(!installed||installed==='dev')return {installed,status:tr('Версия неизвестна')};
+    if(!published)return {installed,status:'—'};
     if(versionOlder(installed,published))return {installed,status:tr('Опубликована ')+versionName(published),available:true};
     return {installed,status:tr('Установлена последняя версия')};
   }
-  function showNetworkUpdateReview(published,network){
-    const dialog=$('network-update-dialog'),rows=$('network-update-rows'),submit=$('network-update-send');
+  function renderNetworkUpdateReview(published,network){
+    const rows=$('network-update-rows'),submit=$('network-update-send');
     const peers=[...(server?.peers||[])].sort((a,b)=>Number(!!a.host)-Number(!!b.host));
     const targets=[];
     rows.replaceChildren();
@@ -6155,21 +6162,32 @@
       const {installed,status,available}=networkUpdateStatus(peer,published);
       const feedback=el('span',status,'am-muted');
       const row=el('li',undefined,'am-network-update-row');
-      row.append(el('span',peer.name||tr('Компьютер')),el('span',versionName(installed)||'—','am-muted'),feedback);
+      const outcome=el('div',undefined,'am-network-update-outcome');
+      outcome.append(feedback);
+      if(available){
+        const button=el('button',tr('Обновить'));button.type='button';
+        const target={peer,feedback,button};
+        button.onclick=()=>void send([target]);
+        outcome.append(button);
+        targets.push(target);
+      }
+      row.append(el('span',peer.name||tr('Компьютер')),el('span',versionName(installed)||'—','am-muted'),outcome);
       rows.append(row);
-      if(available)targets.push({peer,feedback});
     }
-    $('network-update-note').textContent=!rows.children.length?tr('В сети нет других компьютеров.'):targets.length?
+    $('network-update-note').textContent=!published?tr('Проверка обновлений…'):!rows.children.length?tr('В сети нет других компьютеров.'):targets.length?
       tr('Компьютеры проверят обновление перед установкой. Если есть выполняющиеся задачи, установка подождёт.')+(targets.some(({peer})=>peer.host)?' '+tr('Запрос серверу уйдёт последним. При перезапуске сервера связь временно пропадёт.'):''):'';
     submit.hidden=!targets.length;
     submit.disabled=false;
-    submit.onclick=async()=>{
+    submit.onclick=()=>void send(targets.filter(target=>!target.button.hidden));
+    async function send(selected){
       if(networkUpdatesSending)return;
       networkUpdatesSending=true;
       submit.disabled=true;
+      for(const {button} of targets)button.disabled=true;
       renderManualUpdateControls();
       try{
-        for(const {peer,feedback} of targets){
+        for(const {peer,feedback,button} of selected){
+          button.hidden=true;
           const current=server?.peers?.find(item=>item.id===peer.id);
           if(!current||updateNetwork()!==network||!networkUpdateStatus(current,published).available){
             feedback.textContent=tr('Пропущено: состояние изменилось');
@@ -6181,12 +6199,12 @@
         }
       }finally{
         networkUpdatesSending=false;
-        submit.hidden=true;
+        for(const {button} of targets)button.disabled=false;
+        submit.hidden=targets.every(({button})=>button.hidden);
+        submit.disabled=false;
         renderManualUpdateControls();
       }
-    };
-    dialog.showModal();
-    renderNotices();
+    }
   }
   $('settings-update-check').onclick=()=>void manualUpdateCheck('local');
   $('settings-update-install').onclick=startCheckedLocalUpdate;

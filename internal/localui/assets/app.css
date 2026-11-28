@@ -507,10 +507,16 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-theme-setting.am-auto-update > :last-child { flex:0 0 auto; }
 #am-concept .am-program-version > p { min-inline-size:0; overflow-wrap:anywhere; }
 #am-concept .am-theme-setting.am-program-version > .am-program-update-actions { flex:0 0 auto; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--am-gap-control); max-inline-size:60%; }
-#am-concept .am-network-update-rows { list-style:none; margin:0; padding:0; }
-#am-concept .am-network-update-row { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1.5fr); align-items:center; gap:var(--am-gap-content); padding-block:var(--am-space-2); overflow-wrap:anywhere; border-block-end:1px solid var(--am-line); }
-#am-concept .am-network-update-row > :last-child { text-align:end; }
+#am-concept .am-alert.am-network-update-review { width:min(680px,calc(100vw - 2 * var(--am-gap-section))); max-height:calc(100dvh - 2 * var(--am-gap-section)); overflow:hidden; }
+#am-concept .am-network-update-rows { min-height:0; overflow-y:auto; overscroll-behavior:contain; list-style:none; margin:0; padding:0; }
+#am-concept .am-network-update-row { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1.75fr); align-items:center; gap:var(--am-gap-content); padding-block:var(--am-space-2); overflow-wrap:anywhere; border-block-end:1px solid var(--am-line); }
+#am-concept .am-network-update-outcome { display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:var(--am-gap-control); text-align:end; }
+#am-concept .am-network-update-outcome button { min-height:var(--am-control-compact); }
 #am-concept .am-network-update-review .am-alert-actions { flex-wrap:wrap; }
+@media (max-width:480px) {
+  #am-concept .am-network-update-row { grid-template-columns:minmax(0,1fr) auto; row-gap:var(--am-gap-control); }
+  #am-concept .am-network-update-outcome { grid-column:1 / -1; justify-content:space-between; text-align:start; }
+}
 #am-concept .am-auto-update .am-access-text { min-width:0; }
 #am-concept #auto-update-status:empty { display:none; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }

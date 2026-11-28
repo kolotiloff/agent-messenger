@@ -12,7 +12,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
   try {
     const page = await browser.newPage({viewport: {width: 1120, height: 720}, deviceScaleFactor: 2, colorScheme: 'dark'});
     page.setDefaultTimeout(5000);
-    let cursor = 1, mark, wake, releaseCancel, downloadProgress;
+    let cursor = 1, mark, wake, releaseCancel, downloadProgress, holdVersionCheck;
     const cancellations=[];
     const updateRequests=[];
     let cancelResponse='ok';
@@ -30,6 +30,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     }
     await page.route('**/*', async route => {
       const url = new URL(route.request().url());
+      if(url.pathname==='/api/update-check'&&holdVersionCheck)await holdVersionCheck;
       if (url.pathname === '/api/server-action') {
         const body = route.request().postDataJSON();
         if (body.action === 'update-watch') {
@@ -313,19 +314,35 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.locator('#notices').getByText('Опубликована v1.0.7',{exact:true}).waitFor();
     if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-peer-available.png')});
     assert.equal(updateRequests.length,priorRequests,'checking a release must not request an update');
-    server.peers.push({id:'offline',name:'ПК без связи',age:99,version:'1.0.0-preview.103'});
+    server.peers.push({id:'offline',name:'ПК без связи',age:99,version:'1.0.0-preview.103'},
+      {id:'current',name:'ПК с последней версией',age:0,version:published},
+      {id:'second',name:'ПК-2',age:0,version:'1.0.0-preview.103'});
     await page.locator('#settings-open').click();
     await page.locator('#settings-menu-open').click();
+    let finishVersionCheck;
+    holdVersionCheck=new Promise(resolve=>{finishVersionCheck=resolve;});
     await networkCheck.click();
     const review=page.locator('#network-update-dialog');
     await review.waitFor();
+    await review.getByText('Проверка обновлений…',{exact:true}).waitFor();
+    assert.equal(await review.getByRole('button',{name:'Обновить',exact:true}).count(),0);
+    finishVersionCheck();holdVersionCheck=null;
+    const currentStatus=review.getByText('Установлена последняя версия',{exact:true});
+    await currentStatus.waitFor();
+    assert.equal(await currentStatus.evaluate(node=>{
+      const text=document.createRange();text.selectNodeContents(node);return text.getClientRects().length;
+    }),1,'the current-version status fits on one line');
     if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-network-review.png')});
     assert.equal(await review.locator('li').filter({hasText:'ПК без связи'}).getByText('Не в сети',{exact:true}).count(),1);
     assert.equal(updateRequests.length,priorRequests,'review must precede any update requests');
-    await review.getByRole('button',{name:'Обновить компьютеры'}).click();
-    await review.getByText('Запрос отправлен',{exact:true}).waitFor();
-    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-network-requested.png')});
+    const firstPeer=review.locator('li').filter({hasText:'ПК-1'});
+    await firstPeer.getByRole('button',{name:'Обновить',exact:true}).click();
+    await firstPeer.getByText('Запрос отправлен',{exact:true}).waitFor();
     assert.deepEqual(updateRequests.slice(priorRequests),[peer.id]);
+    await review.getByRole('button',{name:'Обновить компьютеры'}).click();
+    await review.locator('li').filter({hasText:'ПК-2'}).getByText('Запрос отправлен',{exact:true}).waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-network-requested.png')});
+    assert.deepEqual(updateRequests.slice(priorRequests),[peer.id,'second']);
     await review.getByRole('button',{name:'Закрыть',exact:true}).click();
     await page.locator('#settings-close').click();
     // Use the actual window with simulated macOS updater callbacks.
