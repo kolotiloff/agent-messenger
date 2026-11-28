@@ -3077,7 +3077,7 @@
       const input=dropTarget();
       if(!input)return;
       const data=event.dataTransfer;
-      if(input.id==='task-draft-text'&&(data.files.length||data.items.length)){
+      if(input.id==='task-draft-text'&&(data.files.length||[...data.items].some(item=>item.kind==='file'))){
         const context=draftAttachmentContext;
         const current=()=>context===draftAttachmentContext&&input===dropTarget();
         try{
@@ -3111,8 +3111,12 @@
     });
   }
   async function readComposerDrop(data){
-    const entries=[...data.items].filter(item=>item.kind==='file').map(item=>item.webkitGetAsEntry?.()).filter(Boolean);
-    const files=[...data.files];
+    const sources=[...data.items].filter(item=>item.kind==='file').flatMap(item=>{
+      const entry=item.webkitGetAsEntry?.();
+      const file=entry?.isDirectory?null:item.getAsFile();
+      return file||entry?[{file,entry}]:[];
+    });
+    if(!sources.length)sources.push(...[...data.files].map(file=>({file})));
     let remaining=112*1024,count=0;
     const limit=()=>Error(tr('Вложения превышают лимит: 112 КБ или 64 файла и папки.'));
     const encode=async(file,path)=>{
@@ -3140,15 +3144,14 @@
       }
     };
     const items=[];
-    if(entries.length){
-      for(const entry of entries){
-        const records=[];
-        await readEntry(entry,entry.name,records);
-        if(records.length)items.push({name:entry.name,files:records});
-      }
-    }else{
-      if(files.length>64)throw limit();
-      for(const file of files)items.push({name:file.name,files:[await encode(file,file.name)]});
+    for(const {file,entry} of sources){
+      const name=file?.name||entry.name;
+      const records=[];
+      if(file){
+        if(++count>64)throw limit();
+        records.push(await encode(file,name));
+      }else await readEntry(entry,name,records);
+      if(records.length)items.push({name,files:records});
     }
     return items;
   }
