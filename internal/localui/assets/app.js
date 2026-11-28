@@ -5111,7 +5111,7 @@
       const s=await api('/api/usage-stats?'+statsQuery(filters),8000);
       if(gen!==statsGen)return;
       if(!matchesStatsProject(s,filters)){stats=null;statsPending=false;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
-      s.forComputer=filters.computer;stats=s;statsPending=false;renderStats();
+      s.forComputer=filters.computer;s.forPeriod=filters.period;stats=s;statsPending=false;renderStats();
     }
     catch(error){
       if(gen!==statsGen)return;
@@ -5123,7 +5123,11 @@
   // A new period, filter, computer or project keeps the shown numbers until
   // the new ones arrive, so the blocks do not collapse and grow again.
   let statsPending=false;
-  function reloadStats(){statsPending=!!stats;renderStats();loadStats();}
+  function reloadStats(){
+    const scope=statsProjectScope();
+    statsPending=!!(scope.project||scope.projects);
+    renderStats();loadStats();
+  }
   function setStatsBusy(){
     const screen=root.querySelector('[data-screen="stats"]');
     if(statsPending)screen.setAttribute('aria-busy','true');else screen.removeAttribute('aria-busy');
@@ -5201,11 +5205,18 @@
     select.value=statsModel;
     syncSelects();
     if(!stats){
-      $('stats-total-title').textContent=project?tr('Загрузка статистики…'):tr('Выберите проект, чтобы увидеть статистику.');
+      $('stats-total-title').textContent=statsPending?tr('Загрузка статистики…'):tr('Выберите проект, чтобы увидеть статистику.');
       $('stats-total-note').textContent='';
-      statsDays($('stats-days'),[]);
-      statsBars($('stats-agents'),[],0,true);
-      statsBars($('stats-computers'),[],0);
+      const days=$('stats-days');
+      days.replaceChildren();
+      days.hidden=!statsPending||statsPeriod==='day';
+      if(statsPending){
+        $('stats-agents').replaceChildren();
+        $('stats-computers').replaceChildren();
+      }else{
+        statsBars($('stats-agents'),[],0,true);
+        statsBars($('stats-computers'),[],0);
+      }
       $('stats-top').replaceChildren();
       return;
     }
@@ -5213,9 +5224,10 @@
     const unfiltered=!statsPending&&((stats.agent||'')!==statsAgent||(stats.model||'')!==statsModel);
     if(unfiltered)$('stats-foot').textContent=tr('Фильтр не применён: обновите фоновый клиент.');
     const t=stats.total;
-    $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:tr('Нет задач с расходом ')+periodWords[statsPeriod];
+    const shownPeriod=stats.forPeriod;
+    $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[shownPeriod]:tr('Нет задач с расходом ')+periodWords[shownPeriod];
     $('stats-total-note').textContent=t.tasks?tasksWord(t.tasks)+tr(', на входе ')+t.input_tokens.toLocaleString(amLocale)+(t.cached_tokens?tr(' (из кэша ')+t.cached_tokens.toLocaleString(amLocale)+')':'')+tr(', на выходе ')+t.output_tokens.toLocaleString(amLocale):tr('Агент сообщает расход, когда задача заканчивается.');
-    statsDays($('stats-days'),statsPeriod==='day'?[]:stats.days);
+    statsDays($('stats-days'),shownPeriod==='day'?[]:stats.days);
     statsBars($('stats-agents'),stats.agents,t.tokens,true);
     statsBars($('stats-computers'),stats.computers,t.tokens);
     const list=statsSort==='recent'?(stats.recent||[]):statsSort==='tokens'?(stats.top||[]):stats.ranked?.[statsSort];

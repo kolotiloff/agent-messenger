@@ -612,7 +612,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 
 ## D-187 — Keep shown data in place while new data loads (T-266)
 
-2026-11-23, after the window became faster the owner saw blocks jump: choosing a computer, a period or a project emptied the statistics and the task list for a moment, so the page shrank, its scroll bar vanished and both came back. The statistics now keep the shown numbers until the new ones arrive (the computers card follows the numbers on screen), and a project switch keeps the previous rows in the task list, inert and marked busy, until the new project's view arrives. Nothing new is shown as loaded before it is, and the old rows cannot be chosen.
+2026-11-23, after the window became faster the owner saw blocks jump: choosing a computer, a period or a project emptied the statistics and the task list for a moment, so the page shrank, its scroll bar vanished and both came back. The statistics now keep the shown numbers until the new ones arrive (the computers card and chart period follow the numbers on screen), and a project switch keeps the previous rows in the task list, inert and marked busy, until the new project's view arrives. Nothing new is shown as loaded before it is, and the old rows cannot be chosen.
 
 ## D-188 — Unroutable network messages are skipped; unpublished tasks are closed (T-267)
 

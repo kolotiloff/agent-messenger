@@ -611,7 +611,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             await holdFrameStats;
           }
           return route.fulfill({json:{
-            project,total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
+            project,total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],
+            days:[{day:'2026-11-18',tokens:21600000,tasks:2},{day:'2026-11-19',tokens:420000,tasks:1}],
             models:['gpt-6.2-sol[effort=high]','claude-opus-5-5[effort=medium]','opus','grok-4.7-high-fast','cursor-grok-4.6-medium'].map(key=>({key,name:key,tokens:1})),
             recent:[stat,olderStat,untimedStat],top:[olderStat,untimedStat,stat],
             ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
@@ -881,7 +882,22 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.locator('#member-panel').screenshot({path: path.join(process.env.SCREENSHOT_DIR,'server-connected.png')});
         await page.emulateMedia({colorScheme:'light'});
       }
+      const firstStatsRequested=new Promise(resolve=>{frameStatsRequested=resolve;});
+      let releaseFirstStats;
+      holdFrameStats=new Promise(resolve=>{releaseFirstStats=resolve;});
       await page.locator('[data-tab=stats]').click();
+      await firstStatsRequested;
+      const statsSummary=page.locator('[aria-labelledby=stats-total-title]');
+      const reportGroup=page.locator('.am-stats-pair');
+      assert.equal(await page.locator('#stats-total-title').innerText(),'Загрузка статистики…');
+      assert.equal(await page.locator('#stats-agents').textContent(),'');
+      const beforeLoad=await Promise.all([statsSummary.boundingBox(),reportGroup.boundingBox()]);
+      holdFrameStats=null;
+      releaseFirstStats();
+      await page.locator('#stats-days .am-stats-plot').waitFor();
+      const afterLoad=await Promise.all([statsSummary.boundingBox(),reportGroup.boundingBox()]);
+      assert(Math.abs(beforeLoad[0].height-afterLoad[0].height)<=1,'summary height changed during first load');
+      assert(Math.abs(beforeLoad[1].y-afterLoad[1].y)<=1,'breakdown cards moved during first load');
       const detail = page.locator('#stats-top .am-stats-task-text .am-muted').first();
       // T-274: the model filter uses the same names as tasks and messages.
       await page.locator('#stats-model option[value=opus]').waitFor({state:'attached'});
