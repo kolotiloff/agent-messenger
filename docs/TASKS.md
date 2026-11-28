@@ -59,6 +59,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-379 | Optically align the reply footer and audit icon sizes. | window | PR #257. Chromium and WebKit verified the visible label alignment and context ring. The proposed global icon consolidation is separate. |
 | T-380 | Stabilize dictation status, align action icons by control size and refresh the public screenshots. | window | PR #257. Keep 20 px provider marks in the archive. The on-device recognizer still needs a spoken Mac test. D-248 records the separate data migration acceptance. |
 | T-381 | Keep the owner’s composer editable during and after a stop, and clarify the Apple Speech status. | window | PR #257. Sending is gated by the stop state and saved continuation. |
+| T-382 | Reduce heading weights in the task window and produce a before-and-after review. | window | PR #257. Dark WebKit capture shows the typography and control geometry on the same fixture. |
 | T-371 | Manage task names and archive entries. | window / network | Origin-owned edits, replicated metadata and explicit manual close upon interruption. Remote observer editing remains open. |
 | T-370 | Refine Statistics, Settings navigation, context details and offline presence. | window | [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
 | T-369 | Adjust the dark palette and compare sidebar task highlights. | window | Dark appearance uses a slightly darker sidebar and brighter text. The preview compares the current highlight with stronger row fills. |

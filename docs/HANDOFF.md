@@ -50,6 +50,8 @@ T-380 keeps the compose field stationary during dictation and distinguishes the 
 
 T-381 keeps the owner’s composer visible and editable while stopping a turn and after it ends. Sending waits for the stop to resolve and the task’s continuation capability. The macOS recognition notice now points to Siri and Dictation settings, since the Apple Speech error does not identify which setting applies. Spoken recognition still needs a Mac acceptance test.
 
+T-382 uses regular weight for computer and task names in the task sidebar and medium weight for the project, conversation, and archive headings. The public screenshots reflect these weights.
+
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.

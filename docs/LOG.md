@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-382 Lighter task window headings
+
+Codex reduced the project, conversation, archive, and computer heading weights and compared both revisions in WebKit. The published README images were refreshed in the branch. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-28 — T-381 Keep the composer available while stopping
 
 Codex kept the owner’s composer editable through the stop transition and verified draft preservation. The Apple Speech notice reflects that error 201 can refer to Siri or Dictation. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
