@@ -1239,13 +1239,28 @@ if (require.main === module) (async()=>{
         return [thread.getBoundingClientRect().bottom,field.top,footer.top,getComputedStyle(thread).bottom];
       });
       assert(Math.abs(viewportEnd[0]-viewportEnd[1])<1,JSON.stringify(viewportEnd));
-      const lastMessageGap=await conversation.evaluate(thread=>{
+      await conversation.evaluate(thread=>{
         thread.scrollTop=thread.scrollHeight;
-        const actions=[...thread.querySelectorAll('.am-message-actions')].at(-1);
-        return document.querySelector('#compose .am-compose-field').getBoundingClientRect().top
-          -actions.getBoundingClientRect().bottom;
       });
-      assert(lastMessageGap>=15,lastMessageGap+'px between chat actions and composer');
+      const finalActions=conversation.locator('.am-message-actions').last();
+      const assertComposerClearance=async()=>{
+        const gap=await finalActions.evaluate(actions=>
+          document.querySelector('#compose .am-compose-field').getBoundingClientRect().top
+          -actions.getBoundingClientRect().bottom);
+        assert(gap>=31,gap+'px between chat actions and composer');
+      };
+      await finalActions.locator('time').hover();
+      await assertComposerClearance();
+      const answer=draftPage.locator('#answer-text');
+      const shortAnswerHeight=(await answer.boundingBox()).height;
+      await answer.fill('Уточнение исполнителю\nВторая строка\nТретья строка');
+      assert((await answer.boundingBox()).height>shortAnswerHeight);
+      const distance=await conversation.evaluate(thread=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        resolve(thread.scrollHeight-thread.clientHeight-thread.scrollTop);
+      }))));
+      assert(distance<=1,distance+'px from the end of the chat after the composer grew');
+      await assertComposerClearance();
+      await answer.fill('Уточнение исполнителю');
       if(process.env.SCREENSHOT_DIR){
         const field=await draftPage.locator('#compose .am-compose-field').boundingBox();
         const foot=await draftPage.locator('#answer-context').boundingBox();

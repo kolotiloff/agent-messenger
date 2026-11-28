@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-375 Reply composer clearance
+
+Codex increased the scrolling inset below the last message actions to 32 px in draft PR #261. The window fixture checks the gap while hovering the timestamp and after the reply field grows.
+
 ## 2026-11-28 — T-380 Voice typography
 
 Codex used standard setting rows inside the Voice cards, combined the microphone label with its test button, and gave the speech-language value enough room to fit. Preview 127 retains the Dock icon’s contour reflection.

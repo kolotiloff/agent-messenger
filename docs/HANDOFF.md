@@ -10,7 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 The dictation follow-up in draft PR #261 puts microphone levels, recording status, Cancel, and Stop inside both composers. Stop requests transcription and inserts the result in the draft. Cancel discards it. Chromium and WebKit verified both layouts and the simulated bridge, and the native Swift shell type-checked. Local review build 127 keeps the provider access descriptions and the Dock icon’s thin contour reflection. Voice uses regular setting labels inside its cards, with a single page heading. The owner wants a refreshed local build after each set of changes. Live microphone acceptance is pending.
 
-The agent settings dialog renders its CLI and account rows before opening and keeps the content width stable as it scrolls. The CLI path has a manual Choose action alongside Find. The last status row shares the dialog's bottom inset. The chat feed leaves a 16 px inset above its composer when scrolled to the end.
+The agent settings dialog renders its CLI and account rows before opening and keeps the content width stable as it scrolls. The CLI path has a manual Choose action alongside Find. The last status row shares the dialog's bottom inset. The reply thread leaves a 32 px scrolling inset below the last message actions, including when a multiline reply grows the composer.
 
 The owner approved the regular font weight in the local build 120. The source now slightly brightens the standard dark theme text tokens for the next Mac review bundle.
 

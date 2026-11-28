@@ -46,7 +46,7 @@ In the wide task window, Projects and Archive use the section inset (`--am-gap-s
 
 The composer keeps its surface radius (16 px) at every height. Use one control gap (8 px) for padding on all four sides and for spacing between controls. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
 
-The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane and ends at the footer. In an existing conversation the access shield and model sit below the reply field.
+The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane and ends at the footer. With the reply composer open, leave one region gap plus one control gap (32 px total) inside the scrolling history below the last message actions. In an existing conversation the access shield and model sit below the reply field.
 
 Message actions and the timestamp share a visible row one control gap (8 px) below the message. The executor's timestamp starts at the text edge, followed by the actions. An outgoing row ends at the bubble edge, with the timestamp before the actions. The next message group starts one region gap (24 px) below the row.
 
