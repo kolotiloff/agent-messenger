@@ -1764,7 +1764,7 @@
         popMenu(x,y,[
           {text:tr('Настройки проекта'),pick:()=>{if(project!==name)selectProject(name);show('project');}},
           {text:tr('Удалить локальный проект'),pick:()=>askRemoveProject(name)},
-        ],null,computer||'local');
+        ]);
       };
       button.addEventListener('contextmenu',event=>{
         event.preventDefault();

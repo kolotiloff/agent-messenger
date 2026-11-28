@@ -1487,7 +1487,8 @@ if (require.main === module) (async()=>{
       await gameButton.click({button:'right'});
       const projectMenu=browserPreview.locator('#device-menu');
       const projectSettings=projectMenu.getByRole('menuitem',{name:'Настройки проекта'});
-      assert.equal(await projectMenu.locator('.am-context-device').getAttribute('data-device'),'local');
+      assert.equal(await projectMenu.locator('.am-context-device').count(),0);
+      assert.equal(await projectMenu.getByRole('menuitem').count(),2);
       await projectSettings.click();
       await browserPreview.locator('#settings-dialog #project-page-title').waitFor();
       await browserPreview.locator('#settings-close').click();
@@ -1505,6 +1506,11 @@ if (require.main === module) (async()=>{
       const localGame=card(browserPreview,'local').locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       assert.equal(await localGame.getByText('Экран настроек',{exact:true}).count(),1);
       const localFolderButton=localGame.locator('.am-folder-heading');
+      await localFolderButton.press('Shift+F10');
+      await projectMenu.waitFor();
+      assert.equal(await projectMenu.locator('.am-context-device').count(),0);
+      assert.equal(await projectMenu.getByRole('menuitem').count(),2);
+      await projectMenu.getByRole('menuitem').first().press('Escape');
       const machineHeader=card(browserPreview,'local').locator('.am-machine-name');
       assert.equal((await localFolderButton.boundingBox()).height,(await machineHeader.boundingBox()).height);
       assert.equal((await localMark.locator('svg').boundingBox()).width,16);
@@ -1538,6 +1544,13 @@ if (require.main === module) (async()=>{
       const reverseGame=machines.locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       const reverseLocal=reverseGame.locator('[data-computer=local]');
       const reversePC=reverseGame.locator('[data-computer=pc1]');
+      await reverseGame.locator('.am-folder-heading').click({button:'right'});
+      assert.equal(await projectMenu.locator('.am-context-device').count(),0);
+      await projectMenu.getByRole('menuitem').first().press('Escape');
+      await reversePC.locator('.am-machine-name').click({button:'right'});
+      await projectMenu.getByText('v1.0.5',{exact:true}).waitFor();
+      await projectMenu.getByRole('menuitem',{name:'Обновить версию'}).waitFor();
+      await projectMenu.getByRole('menuitem').first().press('Escape');
       await reverseLocal.getByText('Экран настроек',{exact:true}).waitFor();
       await reversePC.getByText('Проверка навигации',{exact:true}).waitFor();
       await reverseLocal.locator('.am-sidebar-disclosure').click();

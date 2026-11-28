@@ -1007,3 +1007,7 @@ A registration pointing to the migrated macOS bundle remains connected when the 
 ## D-270 — Group tasks in either order and choose a folder from a draft
 
 Offer project-then-computer alongside the previous grouping modes. Remember a computer's disclosure state separately inside each project. A task draft can open a folder through the system picker and create its project using the existing form. The task remains scoped to a registered project and a computer that can execute it.
+
+## D-271 — Keep version and update actions in computer menus
+
+The version footer and update actions in context menus belong to the selected computer. Project folder menus contain only project actions in every sidebar grouping. This updates the project menu behavior in T-365 and T-374.

@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-378 Computer versions in context menus
+
+Codex removed the version footer and update actions from project folders and kept them on computer headings. Chromium and WebKit passed the grouped sidebar checks. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-28 — T-377 Task grouping and draft workspace controls
 
 Codex added project-first computer grouping, routed Open folder through the existing project setup, and confined model scrolling to the options. The reply footer aligns its labels and icons. The update action uses the standard highlighted menu row. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
