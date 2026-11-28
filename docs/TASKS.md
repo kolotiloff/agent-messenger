@@ -54,14 +54,14 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-370 | Refine Statistics, Settings navigation, context details and offline presence. | window | [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
 | T-369 | Adjust the dark palette and compare sidebar task highlights. | window | Dark appearance uses a slightly darker sidebar and brighter text. The preview compares the current highlight with stronger row fills. |
 | T-366 | Improve interface text readability at the current base size. | window | General offers the system font, system high contrast, Inter and Source Sans 3. The selection applies throughout the interface. |
-| T-365 | Move update actions to context menu footers, remove the duplicate roster, and pin update notices above the conversation. | window | Prepared for the next functional release. |
+| T-365 | Move update actions to context menu footers, remove the duplicate roster, and pin update notices above the conversation. | window | Merged for build 119 in [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
 | T-363 | Show chronological work progress and summarize verified file changes after completion. | window | Integrated for build 119. Shows up to three confirmed paths initially. Line counts appear when supplied by the provider. |
 | T-362 | Add file actions to links and previews. | window / desktop | Implemented for local project files. Remote paths show the source computer and can be copied. |
 | T-361 | Turn paths in reports and Markdown into file links and add an in-app reader. | window | Implemented for legacy report file lists and inline Markdown. |
 | T-360 | Review the visible tile size in the macOS Dock. | packaging | Keep the dimensions published in build 118. The larger candidate was reviewed during development. |
-| T-364 | Show Kotel in the macOS Dock and application search after the next update. | packaging | Required for the next desktop release. Verify the upgrade from a stock build 118 legacy-named app, the pinned Dock item and a second signed update. Preserve managed launch paths until their dependents have migrated. |
-| T-368 | Show relative message time alongside chat actions. | window | Integrated for the next release and verified in Chromium and WebKit. The timestamp shows the exact local date and time on hover. |
-| T-358 | Refresh the GitHub overview, screenshots and user documentation. | docs | Updated for 1.0.15 (build 118). |
+| T-364 | Show Kotel in the macOS Dock and application search after the next update. | packaging | Build 119 migrates the installed bundle name and preserves managed launch paths. The isolated build 118 upgrade passed. An existing Dock pin and the owner’s search results remain to be observed. |
+| T-368 | Show relative message time alongside chat actions. | window | Integrated for build 119 and verified in Chromium and WebKit. The timestamp shows the exact local date and time on hover. |
+| T-358 | Refresh the GitHub overview, screenshots and user documentation. | docs | Build 119 updates the public screenshots, file-reading and dictation documentation. |
 | T-359 | Match the My network card label and computer row spacing to the Network settings layout. | window | Published in 1.0.15 (build 118). Verified in Chromium and WebKit. |
 | T-357 | Package the approved monochrome Kotel icon at the standard Mac Dock size. | release | Published in 1.0.15 (build 118). |
 | T-356 | Confine statistics hover and keyboard focus to the active table row. | window | Combined post-117 branch. System WebKit reproduction and six-row pixel comparison on macOS. Statistics uses the Archive and sidebar computer row hover color in both themes and the Archive’s 4 px inter-row gap. |
