@@ -11,7 +11,7 @@ func applyEdgeSheen(to bitmap: NSBitmapImageRep) {
     guard let data = bitmap.bitmapData else { return }
     let width = bitmap.pixelsWide
     let height = bitmap.pixelsHigh
-    let band = max(1, Double(width) * 0.014)
+    let band = max(1, Double(width) * 0.022)
     for y in 0..<height {
         let position = (Double(y) + 0.5) / Double(height)
         let vertical = max(0, 1 - pow((position - 0.43) / 0.38, 2))
@@ -28,7 +28,7 @@ func applyEdgeSheen(to bitmap: NSBitmapImageRep) {
                 guard x >= 0, x < width else { break }
                 let pixel = row.advanced(by: x * 4)
                 let alpha = Double(pixel[3])
-                let amount = 0.12 * vertical * pow(1 - Double(offset) / band, 2)
+                let amount = 0.22 * vertical * pow(1 - Double(offset) / band, 2)
                 for channel in 0..<3 {
                     let value = Double(pixel[channel])
                     pixel[channel] = UInt8((value + (max(value, alpha * 0.70) - value) * amount).rounded())

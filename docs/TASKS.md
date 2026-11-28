@@ -84,7 +84,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-357 | Package the approved monochrome Kotel icon at the standard Mac Dock size. | release | Published in 1.0.15 (build 118). |
 | T-356 | Confine statistics hover and keyboard focus to the active table row. | window | Combined post-117 branch. System WebKit reproduction and six-row pixel comparison on macOS. Statistics uses the Archive and sidebar computer row hover color in both themes and the Archive’s 4 px inter-row gap. |
 | T-340 | Make direct answers conversational, stabilize the update hover target and match the default sidebar widths. | window | Published in 1.0.14 (build 117). |
-| T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Published in 1.0.14 (build 117). |
+| T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Published in 1.0.14 (build 117). Dock contour follow-up in local review build 129. |
 | T-352 | Share one archive pagination footer, clarify compact statuses and peer hover, align New Task with row padding and hover, scroll the date with messages, normalize count and role weights and the running Mac icon. | window | Post-117. |
 | T-355 | Group live tasks by computer or project, match the bounds of both folder states to the 16 px computer mark, align row spacing and simplify connection icons, filters, network settings tabs and archive selection. | window | Post-117. |
 | T-354 | Apply Graphite to the dark window theme. | window | Post-117. |

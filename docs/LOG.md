@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-341 Dock icon contour
+
+Codex made the existing edge sheen more visible in local build 129. Pixel comparisons at every shipped size confirmed the changes stay along the sides and preserve the artwork’s alpha.
+
 ## 2026-11-28 — T-375 Reply composer clearance
 
 Codex increased the scrolling inset below the last message actions to 32 px in draft PR #261. The window fixture checks the gap while hovering the timestamp and after the reply field grows.
