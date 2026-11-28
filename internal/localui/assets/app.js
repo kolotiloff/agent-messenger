@@ -6959,6 +6959,7 @@
       if(id)send('cancel',id);
       if(!testAudio.hidden){
         testAudio.pause();
+        testAudio.controls=false;
         URL.revokeObjectURL(testAudio.src);
         testAudio.removeAttribute('src');
         testAudio.load();
@@ -7042,6 +7043,7 @@
         }else if(event==='microphone-audio'){
           const samples=Uint8Array.from(atob(text),character=>character.charCodeAt(0));
           testAudio.src=URL.createObjectURL(new Blob([samples],{type:'audio/wav'}));
+          testAudio.controls=true;
           testAudio.hidden=false;
         }else{
           finishMicrophoneTest(event);
