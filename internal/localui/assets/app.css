@@ -29,8 +29,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-bg:light-dark(#fff,#191919);
   --am-panel:light-dark(#fff,#202020);
   --am-side:light-dark(#fafafa,#1e1e1e);
-  --am-text:light-dark(#303030,#dededc);
-  --am-muted:light-dark(#6b6b6b,#a5a5a3);
+  --am-text:light-dark(#303030,#e5e5e3);
+  --am-muted:light-dark(#6b6b6b,#acacaa);
   --am-line:light-dark(#e5e5e5,#333);
   --am-button:light-dark(#efefef,#404040);
   --am-button-hover:light-dark(#e3e3e3,#4b4b4b);
@@ -645,7 +645,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-head h3 { overflow-wrap:anywhere; }
 /* The scrolling viewport ends where the measured composer footer starts. */
 #am-concept .am-chat-body { position:relative; flex:1; min-height:0; --am-footer-height:120px; }
-#am-concept .am-thread { position:absolute; inset:0; inset-block-end:var(--am-footer-height); display:flex; flex-direction:column; gap:var(--am-gap-region); padding:var(--am-space-3) calc(var(--am-pane-inset) - var(--am-gutter, 0px)) var(--am-space-1) var(--am-pane-inset); scroll-padding-bottom:var(--am-space-1); scrollbar-gutter:stable; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
+#am-concept .am-thread { position:absolute; inset:0; inset-block-end:var(--am-footer-height); display:flex; flex-direction:column; gap:var(--am-gap-region); padding:var(--am-space-3) calc(var(--am-pane-inset) - var(--am-gutter, 0px)) var(--am-gap-section) var(--am-pane-inset); scroll-padding-block-end:var(--am-gap-section); scrollbar-gutter:stable; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
 #am-concept .am-thread:focus { outline:none; }
 /* T-133: the feed keeps its place while the owner reads higher up; this
    button brings them back down and says when something new came. */
@@ -1079,7 +1079,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   #am-concept .am-settings-nav { flex-direction:row; flex-wrap:wrap; border-inline-end:0; border-block-end:1px solid var(--am-line); }
 }
 #am-concept .am-setup-body { display:flex; flex-direction:column; gap:var(--am-gap-section); padding-top:var(--am-space-4); }
-#am-concept #agent-setup .am-setup-body { gap:var(--am-gap-content); }
+#am-concept #agent-setup .am-setup-body { gap:var(--am-gap-content); padding-inline:var(--am-space-4); scrollbar-gutter:stable both-edges; }
 #am-concept .am-agent-settings-rows > .am-setting-row { padding-block:var(--am-gap-content); }
 #am-concept .am-agent-settings-rows .am-folder-pick { flex:0 1 75%; min-width:0; }
 @media (max-width:620px) {
@@ -1201,6 +1201,7 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-agent-roster .am-agent-head { margin:0; }
 #am-concept .am-agent-roster .am-provider-heading { font-size:var(--am-text-m); font-weight:400; }
 #am-concept .am-agent-setup-actions { border-block-start:1px solid var(--am-line); }
+#am-concept .am-agent-setup-actions .am-step:last-child { padding-block-end:0; }
 #am-concept .am-agent-setup-actions .am-step > button { min-height:var(--am-control-compact); height:var(--am-control-compact); }
 #am-concept .am-agent-setup-actions .am-step-sub { white-space:normal; overflow-wrap:anywhere; }
 #am-concept .am-sleep-menu .am-select-option { inline-size:100%; justify-content:space-between; gap:var(--am-gap-control); border:0; background:transparent; color:var(--am-text); text-align:start; }
@@ -1429,6 +1430,16 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-card > .am-setting-row:first-child { padding-top:0; border-top:0; }
 #am-concept #voice-models-title { margin:0; }
 #am-concept .am-voice-model-details { overflow-wrap:anywhere; }
+#am-concept .am-voice-model-list > .am-setting-row { display:grid; grid-template-columns:minmax(0,1fr) max-content minmax(max-content,var(--am-settings-control-width)); }
+#am-concept .am-voice-model-list > .am-setting-row:first-child { padding-block-start:0; border-block-start:0; }
+#am-concept .am-voice-model-list > .am-setting-row > button { justify-self:end; }
+#am-concept #voice-shortcut-row kbd { background:var(--am-soft); border-radius:var(--am-radius-s); padding:var(--am-space-1) var(--am-space-2); white-space:nowrap; }
+#am-concept #voice-mic-status:empty { display:none; }
+@media (max-width:620px) {
+  #am-concept .am-voice-model-list > .am-setting-row { grid-template-columns:minmax(0,1fr) max-content auto; }
+  #am-concept #voice-page .am-inline-setting { flex-wrap:wrap; gap:var(--am-gap-control); }
+  #am-concept #voice-page .am-inline-setting > :last-child { width:100%; }
+}
 #am-concept .am-voice-model-details .am-status-bad { color:var(--am-bad); }
 #am-concept .am-voice-model-details > .am-update-bar { margin-block-start:var(--am-space-1); }
 #am-concept .am-coord-head { display:flex; flex-direction:column; gap:var(--am-gap-line); margin-bottom:var(--am-space-1); }

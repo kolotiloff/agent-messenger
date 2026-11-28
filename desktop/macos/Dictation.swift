@@ -21,6 +21,7 @@ private final class DictationAudio {
     private let maxFrames: Int
     private var samples: [Float] = []
     private var hasVoiceLevel = false
+    private var lastAudibleFrame = 0
     private var sealed = false
 
     init(sampleRate: Double) {
@@ -42,7 +43,16 @@ private final class DictationAudio {
             samples.append(value)
             power += value * value
         }
-        if count > 0, power / Float(count) > 0.0000001 { hasVoiceLevel = true }
+        if count > 0, power / Float(count) > 0.0000063 {
+            hasVoiceLevel = true
+            lastAudibleFrame = samples.count
+        }
+    }
+
+    func silenceDuration() -> Double {
+        lock.lock()
+        defer { lock.unlock() }
+        return Double(samples.count - lastAudibleFrame) / sampleRate
     }
 
     func finish() -> [Float] {
@@ -85,6 +95,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
     private var engine: AVAudioEngine?
     private var audio: DictationAudio?
     private var modelForRecording: URL?
+    private var language = "auto"
     private var process: Process?
     private var processDirectory: URL?
 
@@ -257,7 +268,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
         }
     }
 
-    func start(_ id: String) {
+    func start(_ id: String, language: String, silence: Int) {
         cancel()
         self.id = id
         guard enabled, executable != nil, let model = selectedURL else {
@@ -265,16 +276,26 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
             return
         }
         modelForRecording = model
+        requestRecording(id, language: language, silence: silence, microphoneTest: false)
+    }
+
+    func testMicrophone(_ id: String) {
+        cancel()
+        self.id = id
+        requestRecording(id, language: "auto", silence: 0, microphoneTest: true)
+    }
+
+    private func requestRecording(_ id: String, language: String, silence: Int, microphoneTest: Bool) {
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
                 guard let self, self.id == id else { return }
                 guard granted else { self.complete(id, event: "microphone-denied"); return }
-                self.record(id)
+                self.record(id, language: language, silence: silence, microphoneTest: microphoneTest)
             }
         }
     }
 
-    private func record(_ id: String) {
+    private func record(_ id: String, language: String, silence: Int, microphoneTest: Bool) {
         let engine = AVAudioEngine()
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
@@ -291,7 +312,24 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
         do { try engine.start() }
         catch { complete(id, event: "microphone-unavailable"); return }
         onEvent?(id, "recording", nil)
+        if microphoneTest {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard let self, self.id == id else { return }
+                self.complete(id, event: audio.finish().isEmpty ? "empty" : "microphone-ready")
+            }
+            return
+        }
+        self.language = language
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in self?.stop(id) }
+        if silence > 0 { watchSilence(id, seconds: Double(silence)) }
+    }
+
+    private func watchSilence(_ id: String, seconds: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            guard let self, self.id == id, let audio = self.audio else { return }
+            if audio.silenceDuration() >= seconds { self.stop(id) }
+            else { self.watchSilence(id, seconds: seconds) }
+        }
     }
 
     func stop(_ id: String) {
@@ -304,6 +342,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
         releaseMicrophone()
         self.audio = nil
         let samples = audio.finish()
+        let language = self.language
         guard !samples.isEmpty else { complete(id, event: "empty"); return }
         onEvent?(id, "processing", nil)
         worker.async {
@@ -315,7 +354,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
                 try Self.writeAudio(samples, sampleRate: audio.sampleRate, to: wave)
                 DispatchQueue.main.async {
                     guard self.id == id else { try? self.files.removeItem(at: directory); return }
-                    self.transcribe(id, executable: executable, model: model, directory: directory, wave: wave)
+                    self.transcribe(id, executable: executable, model: model, language: language, directory: directory, wave: wave)
                 }
             } catch {
                 try? FileManager.default.removeItem(at: directory)
@@ -365,12 +404,12 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
         try file.write(from: output)
     }
 
-    private func transcribe(_ id: String, executable: URL, model: URL, directory: URL, wave: URL) {
+    private func transcribe(_ id: String, executable: URL, model: URL, language: String, directory: URL, wave: URL) {
         let process = Process()
         let output = directory.appendingPathComponent("transcript")
         process.executableURL = executable
         process.arguments = [
-            "-m", model.path, "-f", wave.path, "-l", "auto", "-ng", "-np", "-nt", "-sns",
+            "-m", model.path, "-f", wave.path, "-l", language, "-ng", "-np", "-nt", "-sns",
             "-otxt", "-of", output.path,
         ]
         process.standardInput = FileHandle.nullDevice

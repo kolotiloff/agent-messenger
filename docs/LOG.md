@@ -2,6 +2,18 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-380 Voice preferences
+
+Codex added a focused-composer keyboard shortcut with hold and toggle modes, spoken language, a system microphone test and optional stop after silence. Both browser fixtures exercise the bridge. Native Swift type-checking passed. Live input and the next native bundle remain pending.
+
+## 2026-11-28 — T-368 and T-387 Chat and agent settings
+
+Codex clarified the manual CLI picker label, rendered the status rows before showing the dialog, stabilized its scroll gutter, and removed the extra padding below the last status row. The chat now leaves a 16 px inset between its bottom content and composer.
+
+## 2026-11-28 — T-369 Dark theme text refinement
+
+The owner approved the regular window typography in local build 120. Codex slightly brightened the main and secondary text in the standard dark palette for the next owner-requested bundle.
+
 ## 2026-11-28 — T-380 Local dictation work in progress
 
 Codex built the requested Mac typography preview from the tree in PR #260. In parallel, Codex added downloadable model controls, local recording and offline transcription code, and packaging for a pinned standalone recognizer. The browser bridge fixture passed in Chromium and WebKit. The pending native bundle and microphone acceptance are separate from today's typography preview.

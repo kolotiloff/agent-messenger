@@ -4516,7 +4516,7 @@
     });
   }
   function renderAgents(){
-    renderAgentSetupActions();
+    if($('agent-setup').open)renderAgentSetupActions(setupProvider);
     const live=$('agents'),cards=live.cloneNode(false);
     const computer=taskSidebarPreview?'':computerFilter;
     if(computer&&computer!=='local'){delete live.dataset.localGroups;renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
@@ -4892,7 +4892,7 @@
     }catch(_){}finally{discovering=false;}
   }
   function show(next){
-    if(next!=='tasks')composerDictation?.cancel();
+    if(next!=='tasks'||tab==='voice')composerDictation?.cancel();
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab&&!(taskSidebarPreview&&n.dataset.screen==='tasks'));renderToasts();
     syncTaskPanes();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
@@ -5739,10 +5739,8 @@
     const agent=(view?.agents||[]).find(a=>a.agent===provider);
     return view?.coordinator_models?.[provider]??(agent?agent.models||[]:defaultModels[provider]||[]);
   }
-  function renderAgentSetupActions(){
-    const dialog=$('agent-setup');
-    if(!dialog.open||!setupProvider)return;
-    const provider=setupProvider,{cli,environment}=agentPaths(provider);
+  function renderAgentSetupActions(provider){
+    const {cli,environment}=agentPaths(provider);
     const agent=view?.agents?.find(a=>a.agent===provider);
     const check=agentChecks.get(provider),auth=check?.authentication?.state;
     const steps=el('div',undefined,'am-steps am-agent-setup-actions');
@@ -5785,8 +5783,9 @@
     $('agent-models-open').disabled=!view;
     setStatus('agent-save-status','');
     $('agent-setup-actions')?.remove();
+    renderAgentSetupActions(provider);
     if(!$('agent-setup').open)$('agent-setup').showModal();
-    renderAgentSetupActions();renderToasts();
+    renderToasts();
   }
   // One check at a time: the client refuses a second one while one runs.
   let checkQueue=Promise.resolve();
@@ -6564,6 +6563,7 @@
     else{$('settings-dialog').showModal();renderNotices();loadServer();}
   }));
   $('settings-dialog').addEventListener('close',renderNotices);
+  $('settings-dialog').addEventListener('close',()=>{if(tab==='voice')composerDictation?.cancel();});
   const microphonePaths=['M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z','M5 10v1a7 7 0 0 0 14 0v-1M12 18v3M9 21h6'];
   if(taskSidebarPreview){
     const dialog=$('settings-dialog');
@@ -6794,15 +6794,16 @@
       progress.setAttribute('role','progressbar');
       progress.append(el('span'));
       details.append(title,subtitle,progress);
+      const size=el('span',undefined,'am-small am-muted');
       const button=el('button');
       button.type='button';
-      const item={row,title,subtitle,progress,button,action:''};
+      const item={row,title,subtitle,progress,size,button,action:''};
       button.addEventListener('click',()=>{
         if(button.getAttribute('aria-disabled')==='true')return;
         button.setAttribute('aria-disabled','true');
         send(item.action,{model:model.id});
       });
-      row.append(details,button);
+      row.append(details,size,button);
       modelList.append(row);
       rows.set(model.id,item);
       return item;
@@ -6816,17 +6817,19 @@
         state.enabled&&!state.ready?tr('Чтобы начать диктовать, загрузите и выберите модель'):
         tr('Речь распознаётся на этом компьютере');
       $('voice-models-section').hidden=!state.supported||!state.models.length;
+      for(const id of ['voice-shortcut-row','voice-mode-row','voice-microphone'])$(id).hidden=!state.supported;
       for(const model of state.models){
         const item=rows.get(model.id)||createRow(model);
         const selected=model.state==='installed'&&state.selected===model.id;
         const downloading=model.state==='downloading';
         const fraction=Number.isFinite(model.progress)?Math.min(1,Math.max(0,model.progress)):null;
         const percent=fraction?.toLocaleString(amLocale,{style:'percent'});
-        const size=sizes.format(model.size/1e6);
+        item.size.textContent=sizes.format(model.size/1e6);
         item.title.textContent=model.name;
         item.subtitle.textContent=downloading?(percent?`${tr('Загрузка…')} ${percent}`:tr('Загрузка…')):
           selected?tr('Выбрана'):model.state==='installed'?tr('Установлена'):
-          model.state==='error'?tr('Не удалось загрузить модель'):size;
+          model.state==='error'?tr('Не удалось загрузить модель'):'';
+        item.subtitle.hidden=!item.subtitle.textContent;
         item.subtitle.classList.toggle('am-status-bad',model.state==='error');
         item.progress.hidden=!downloading;
         item.progress.setAttribute('aria-label',`${tr('Загрузка модели')} ${model.name}`);
@@ -6859,6 +6862,15 @@
     const targets=[];
     let ready=false;
     let active=null;
+    let microphoneTest=null;
+    let heldShortcut=null;
+    const mode=$('voice-mode'),language=$('voice-language'),silence=$('voice-silence');
+    for(const control of [mode,language,silence]){
+      const saved=recall(control.id);
+      if([...control.options].some(option=>option.value===saved))control.value=saved;
+      enhanceSelect(control);
+      control.addEventListener('change',()=>remember(control.id,control.value));
+    }
     function sendModelAction(action,params){bridge.postMessage({action,...params});}
     function refreshModels(){sendModelAction('models');}
     const showVoiceSettings=setupVoiceSettings(sendModelAction);
@@ -6885,9 +6897,11 @@
       target.status.classList.toggle('am-status-bad',!!event&&event!=='recording'&&event!=='processing');
     }
     function send(action,id){
-      bridge.postMessage({action,id,language:document.documentElement.lang});
+      bridge.postMessage({action,id,language:language.value,silence:Number(silence.value)});
     }
     function cancel(){
+      if(microphoneTest)finishMicrophoneTest('');
+      heldShortcut=null;
       if(!active)return;
       const {id,target}=active;
       active=null;
@@ -6912,6 +6926,31 @@
       }
       return true;
     }
+    function start(target){
+      const key=context(target);
+      if(!ready||!key||active)return false;
+      if(microphoneTest)finishMicrophoneTest('');
+      const {input}=target;
+      active={id:crypto.randomUUID(),target,key,event:'',value:input.value,start:input.selectionStart,end:input.selectionEnd};
+      paint(target);
+      send('start',active.id);
+      return true;
+    }
+    const testButton=$('voice-mic-test'),testStatus=$('voice-mic-status');
+    function finishMicrophoneTest(event){
+      const id=microphoneTest;
+      microphoneTest=null;
+      testButton.disabled=false;
+      testStatus.textContent=event==='microphone-ready'?tr('Микрофон работает'):messages[event]||'';
+      if(!event)send('cancel',id);
+    }
+    testButton.addEventListener('click',()=>{
+      cancel();
+      microphoneTest=crypto.randomUUID();
+      testButton.disabled=true;
+      testStatus.textContent=tr('Скажите несколько слов');
+      send('test-microphone',microphoneTest);
+    });
     for(const input of [$('task-draft-text'),$('answer-text')]){
       const button=el('button',undefined,'am-send-icon am-quiet-button am-dictation-button');
       const status=el('p',undefined,'am-small am-muted am-dictation-status');
@@ -6933,9 +6972,7 @@
         const key=context(target);
         if(!key)return;
         cancel();
-        active={id:crypto.randomUUID(),target,key,event:'',value:input.value,start:input.selectionStart,end:input.selectionEnd};
-        paint(target);
-        send('start',active.id);
+        start(target);
       });
     }
     window.messengerDictationModels=state=>{
@@ -6946,12 +6983,17 @@
       for(const target of targets)paint(target);
     };
     window.messengerDictationEvent=({id,event,text})=>{
+      if(microphoneTest===id){
+        if(event!=='recording')finishMicrophoneTest(event);
+        return;
+      }
       if(active?.id!==id)return;
       const {target,key,value,start,end}=active;
       if(context(target)!==key){cancel();return;}
       if(event==='recording'||event==='processing'){
         active.event=event;
         paint(target,event);
+        if(event==='recording'&&active.stopOnStart)finishFor(target.input);
         return;
       }
       active=null;
@@ -6971,10 +7013,32 @@
     };
     window.messengerCancelDictation=cancel;
     document.addEventListener('keydown',event=>{
-      if(event.key!=='Escape'||!active||event.isComposing)return;
+      if(event.isComposing)return;
+      const shortcut=event.code==='KeyD'&&event.metaKey&&event.shiftKey&&!event.ctrlKey&&!event.altKey;
+      const target=targets.find(item=>item.input===document.activeElement);
+      if(shortcut&&target&&ready&&context(target)){
+        event.preventDefault();
+        if(event.repeat)return;
+        if(active?.target===target){
+          if(mode.value==='toggle'){
+            if(!active.event)active.stopOnStart=true;
+            else finishFor(target.input);
+          }
+        }else if(start(target)&&mode.value==='hold')heldShortcut=active.id;
+        return;
+      }
+      if(event.key!=='Escape'||(!active&&!microphoneTest))return;
       event.preventDefault();
       event.stopImmediatePropagation();
       cancel();
+    },true);
+    document.addEventListener('keyup',event=>{
+      if(!['KeyD','MetaLeft','MetaRight','ShiftLeft','ShiftRight'].includes(event.code)||!heldShortcut)return;
+      const id=heldShortcut;
+      heldShortcut=null;
+      if(active?.id!==id)return;
+      if(!active.event)active.stopOnStart=true;
+      else finishFor(active.target.input);
     },true);
     window.addEventListener('pagehide',cancel);
     refreshModels();
@@ -7009,7 +7073,7 @@
       if(target.style.getPropertyValue('--am-gutter')!==value)target.style.setProperty('--am-gutter',value);
     }
   });});
-  root.querySelectorAll('.am-screen:not(.am-settings-views > .am-screen),.am-thread,.am-queue-list,.am-dialog-body,.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
+  root.querySelectorAll('.am-screen:not(.am-settings-views > .am-screen),.am-thread,.am-queue-list,.am-dialog-body:not(#agent-setup > .am-dialog-body),.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
   const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
   $('thread').addEventListener('scroll',toBottomState,{passive:true});
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});

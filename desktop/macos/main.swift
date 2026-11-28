@@ -539,12 +539,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             } else if let enabled = body["enabled"] as? String, ["true", "false"].contains(enabled) {
                 dictation.setEnabled(enabled == "true")
             }
-        case "start", "stop", "cancel":
+        case "start", "test-microphone", "stop", "cancel":
             guard let id = body["id"] as? String, UUID(uuidString: id) != nil else { return }
             switch body["action"] as? String {
-            case "start":
+            case "start", "test-microphone":
                 guard window.isKeyWindow else { dictation.onEvent?(id, "failed", nil); return }
-                dictation.start(id)
+                if body["action"] as? String == "test-microphone" {
+                    dictation.testMicrophone(id)
+                } else {
+                    let language = body["language"] as? String ?? "auto"
+                    let silence = body["silence"] as? Int ?? 0
+                    dictation.start(id, language: ["ru", "en"].contains(language) ? language : "auto",
+                                    silence: [5, 15, 30].contains(silence) ? silence : 0)
+                }
             case "stop": dictation.stop(id)
             default: dictation.cancel(id)
             }

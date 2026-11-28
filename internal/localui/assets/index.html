@@ -37,10 +37,28 @@
         </div>
         <button id="voice-enabled" class="am-switch" type="button" role="switch" aria-checked="false" aria-labelledby="voice-enabled-label" disabled></button>
       </div>
+      <div id="voice-shortcut-row" class="am-setting-row" hidden>
+        <div class="am-access-text"><p class="am-access-title">Сочетание клавиш</p><p class="am-access-note">Работает, когда курсор в поле сообщения</p></div>
+        <kbd>⌘ ⇧ D</kbd>
+      </div>
+      <div id="voice-mode-row" class="am-setting-row am-field am-inline-setting" hidden><label for="voice-mode">Режим сочетания</label><select id="voice-mode"><option value="toggle">Нажать для начала и остановки</option><option value="hold">Удерживать во время речи</option></select></div>
     </div>
     <section id="voice-models-section" class="am-settings-group" aria-labelledby="voice-models-title" hidden>
       <h3 id="voice-models-title">Модели распознавания</h3>
-      <div id="voice-models" class="am-card"></div>
+      <div class="am-card">
+        <div id="voice-models" class="am-voice-model-list"></div>
+        <div class="am-setting-row am-field am-inline-setting"><label for="voice-language">Язык речи</label><select id="voice-language"><option value="auto">Автоопределение</option><option value="ru">Русский</option><option value="en">Английский</option></select></div>
+      </div>
+    </section>
+    <section id="voice-microphone" class="am-settings-group" aria-labelledby="voice-microphone-title" hidden>
+      <h3 id="voice-microphone-title">Микрофон</h3>
+      <div class="am-card">
+        <div class="am-setting-row">
+          <div class="am-access-text"><p class="am-access-title">Системный микрофон</p><p id="voice-mic-status" class="am-access-note" role="status"></p></div>
+          <button id="voice-mic-test" type="button">Проверить микрофон</button>
+        </div>
+        <div class="am-setting-row am-field am-inline-setting"><label for="voice-silence">Остановка после тишины</label><select id="voice-silence"><option value="0">Выключена</option><option value="5">5 секунд</option><option value="15">15 секунд</option><option value="30">30 секунд</option></select></div>
+      </div>
     </section>
   </div>
 </section>
@@ -94,7 +112,7 @@
 <dialog id="agent-setup" class="am-session-dialog" aria-labelledby="agent-setup-title"><div class="am-dialog-header"><h3 id="agent-setup-title" tabindex="-1" autofocus>Настройки агента</h3><button id="agent-setup-close" class="am-icon-btn am-close-x" type="button" aria-label="Закрыть" title="Закрыть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><div class="am-dialog-body am-setup-body"><p id="agent-setup-note" class="am-small am-muted" hidden>Cursor берёт инструменты только из своего файла ~/.cursor/mcp.json. Перед первой задачей Kotel добавит туда одну запись messenger_task; ваши записи не меняются. В обычных сессиях Cursor у неё нет инструментов.</p>
 <p class="am-small am-muted">Изменения сохраняются сами.</p>
 <div class="am-agent-settings-rows">
-<div class="am-setting-row"><label class="am-access-text" for="agent-cli">Программа CLI</label><div class="am-folder-pick"><input id="agent-cli" type="text" autocomplete="off" spellcheck="false" placeholder="Полный путь к программе"><button id="agent-cli-find" type="button">Найти</button><button id="agent-cli-pick" type="button">Добавить файл…</button></div></div>
+<div class="am-setting-row"><label class="am-access-text" for="agent-cli">Программа CLI</label><div class="am-folder-pick"><input id="agent-cli" type="text" autocomplete="off" spellcheck="false" placeholder="Полный путь к программе"><button id="agent-cli-find" type="button">Найти</button><button id="agent-cli-pick" type="button" aria-label="Выбрать программу CLI" title="Выбрать программу CLI">Выбрать</button></div></div>
 <div class="am-setting-row"><label class="am-access-text" for="agent-profile">Каталог профиля</label><div class="am-folder-pick"><input id="agent-profile" type="text" autocomplete="off" spellcheck="false" placeholder="Стандартный профиль агента"><button id="agent-profile-pick" type="button">Выбрать</button></div></div>
 <div class="am-setting-row"><span class="am-access-text">Модели</span><div class="am-actions"><button id="agent-models-open" type="button" aria-haspopup="dialog" aria-label="Изменить модели">Изменить</button></div></div>
 </div>
