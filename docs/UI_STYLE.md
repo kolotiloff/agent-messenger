@@ -50,7 +50,7 @@ The conversation and composer share a centered column up to `--am-chat-max` (760
 
 Tab close and sidebar group add buttons use a transparent background. On hover, keyboard focus or press, highlight the icon using the primary text color.
 
-Pane tabs in the top row align with the window controls and the archive toggle. Lower panes keep a tab at the top of their own content. The primary labels in the left sidebar use `--am-sidebar-text`, with a modest increase in dark-mode brightness.
+Pane tabs in the top row align with the window controls. Lower panes keep a tab at the top of their own content. A tab spans its header height and has a trailing divider. Use the sidebar task fills for selection and hover. Keep the archive toggle at the same trailing inset when the workspace splits. The primary labels in the left sidebar use `--am-sidebar-text`, with a modest increase in dark-mode brightness.
 
 Message actions and the timestamp share a visible row one control gap (8 px) below the message. The executor's timestamp starts at the text edge, followed by the actions. An outgoing row ends at the bubble edge, with the timestamp before the actions. The next message group starts one region gap (24 px) below the row.
 

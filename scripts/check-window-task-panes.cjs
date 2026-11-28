@@ -108,14 +108,27 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await mainTitle.isVisible(),false);
     assert.equal(await strip.evaluate(node=>!!node.closest('.am-task-toolbar')),true);
     const singleInset=(await tabChip(third).boundingBox()).x-(await page.locator('#task-layout').boundingBox()).x;
+    const archive=page.locator('#list-toggle');
+    const singleArchiveBox=await archive.boundingBox();
     await page.mouse.move(0,0);
     const background=title=>tabChip(title).evaluate(node=>getComputedStyle(node).backgroundColor);
-    assert.equal(await background(first),'rgba(0, 0, 0, 0)','the active tab rests without a fill');
-    await tab(first).hover();
-    assert.notEqual(await background(first),'rgba(0, 0, 0, 0)');
-    await tab(first).click();
+    const selectedRow=page.locator('#machines .am-sidebar-task[aria-pressed=true]');
+    const selectedFill=await selectedRow.evaluate(node=>getComputedStyle(node).backgroundColor);
+    assert.equal(await background(first),selectedFill);
+    assert.equal(await background(third),'rgba(0, 0, 0, 0)');
+    const inactiveRow=page.locator('#machines .am-sidebar-task').filter({hasText:third});
+    await inactiveRow.hover();
+    const hoverFill=await inactiveRow.evaluate(node=>getComputedStyle(node).backgroundColor);
+    await tab(third).hover();
+    assert.equal(await background(third),hoverFill);
+    assert.notEqual(hoverFill,selectedFill);
     await page.mouse.move(0,0);
-    assert.equal(await background(first),'rgba(0, 0, 0, 0)','a pointer click does not leave a fill');
+    const tabStyle=await tabChip(first).evaluate(node=>{
+      const style=getComputedStyle(node);
+      return {radius:style.borderRadius,edge:style.borderInlineEndWidth};
+    });
+    assert.deepEqual(tabStyle,{radius:'0px',edge:'1px'});
+    assert.equal((await tabChip(first).boundingBox()).height,(await strip.boundingBox()).height);
     assert.equal(await primary.inputValue(),'Основной черновик');
     const draft=replyBox(first);
     assert.equal(await draft.getAttribute('placeholder'),'Продолжить в этой сессии…');
@@ -197,8 +210,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const header=tab(title).locator('xpath=ancestor::*[@role="tablist"]');
         assert.equal(await panel(title).getAttribute('id'),await tab(title).getAttribute('aria-controls'));
         const head=await header.boundingBox(),body=await panel(title).boundingBox();
+        const chip=await tabChip(title).boundingBox();
         assert(Math.abs(head.x-body.x)<1&&Math.abs(head.width-body.width)<1);
         assert(Math.abs(head.y+head.height-body.y)<1);
+        assert(Math.abs(chip.y-head.y)<1&&Math.abs(chip.height-(head.height-1))<1);
         positions.push(head);
       }
       const [left,right,below]=positions;
@@ -216,15 +231,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await verifySplit();
     assert.equal((await tabChip(third).boundingBox()).x-(await cell(third).boundingBox()).x,singleInset,
       'the first tab uses the same inset in both layouts');
-    assert.equal(await page.locator('.am-task-toolbar').isVisible(),false);
+    assert.equal(await page.locator('.am-pane-toolbar').isVisible(),false);
     const captionTop=await page.locator('#task-layout').evaluate(node=>node.getBoundingClientRect().top);
-    const archive=page.locator('#list-toggle');
     const archiveBox=await archive.boundingBox();
+    assert.deepEqual(archiveBox,singleArchiveBox,'splitting keeps the archive toggle in the same place');
     for(const title of [third,second]){
       const header=await tab(title).locator('xpath=ancestor::*[@role="tablist"]').boundingBox();
       assert(Math.abs(header.y-captionTop)<1&&archiveBox.y>=header.y&&archiveBox.y+archiveBox.height<=header.y+header.height);
     }
-    assert.equal(await archive.evaluate(node=>node.closest('.am-pane-header')?.hasAttribute('data-caption-end')),true);
+    await archive.click();
+    await page.locator('#task-panel').waitFor();
+    assert.deepEqual(await archive.boundingBox(),archiveBox,'opening the archive keeps its toggle in place');
+    await archive.click();
+    await page.locator('#task-panel').waitFor({state:'hidden'});
     await page.locator('#limits-open').click();
     await page.locator('#agent-limits').waitFor();
     const otherThread=await content(second).locator('#thread').boundingBox();
@@ -232,7 +251,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.locator('#agent-limits').waitFor({state:'hidden'});
     if(macTitlebar){
       assert.equal(await page.locator('body').evaluate(node=>node.classList.contains('am-mac-titlebar')),true);
-      await page.waitForFunction(()=>[...document.querySelectorAll('[data-caption] .am-close-x')].every(button=>{
+      await page.waitForFunction(()=>[...document.querySelectorAll('[data-caption] .am-close-x,#list-toggle')].every(button=>{
         const box=button.getBoundingClientRect();
         return window.titlebarAreas?.holes.some(([x,y,w,h])=>Math.abs(x-box.x)<1&&Math.abs(y-box.y)<1&&Math.abs(w-box.width)<1&&Math.abs(h-box.height)<1);
       }));
@@ -276,7 +295,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.setViewportSize({width:760,height:850});
     assert.equal(await page.locator('.am-pane-grid').evaluate(grid=>getComputedStyle(grid).gridTemplateColumns.split(' ').length),1);
     await page.waitForFunction(()=>document.querySelectorAll('.am-pane-header[data-caption]').length===1);
-    assert.equal(await archive.evaluate(node=>node.closest('.am-pane-header')?.hasAttribute('data-caption-start')),true);
+    assert.equal(await archive.evaluate(node=>node.parentElement.classList.contains('am-task-toolbar')),true);
     await page.setViewportSize({width:1450,height:900});
     await page.evaluate(()=>{
       Object.defineProperty(document,'hidden',{configurable:true,value:true});

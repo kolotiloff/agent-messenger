@@ -8,7 +8,7 @@ Codex extended the scrollable viewport to the pane edge in draft PR #261. The fo
 
 The upper pane tabs now occupy the shared caption row with the archive toggle. Dark mode uses a slightly lighter text color for the primary sidebar labels.
 
-T-372 preserves the previous active pane when focus moves between visible tabs, including a regular tab displayed alongside a split. Statistics opens the chosen conversation through the same pane routing when tabs are open. Single and split headers use the same leading tab inset, and the tab fill follows hover and keyboard focus.
+T-372 preserves the previous active pane when focus moves between visible tabs, including a regular tab displayed alongside a split. Statistics opens the chosen conversation through the same pane routing when tabs are open. Full-height tabs share the sidebar task fills for selection and hover. The archive toggle keeps the same position in single and split layouts.
 
 T-390 reduces the limits header to the title and computer filter, increases the bottom inset, and dismisses the popover when the user clicks an embedded conversation.
 

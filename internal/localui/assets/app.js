@@ -606,15 +606,13 @@
     return positions;
   }
   function placePaneCaption(positions){
-    const toolbar=paneToolbar.parentElement;
-    const layout=toolbar.parentElement;
+    const layout=$('task-layout');
     const top=positions.length<=1?[]:narrowPaneLayout.matches?positions.slice(0,1):positions.filter(position=>position.top===0);
     const first=taskPanes.get(top[0]?.node)?.header;
     const last=taskPanes.get(top.at(-1)?.node)?.header;
     const destination=last||paneToolbar;
-    const toggle=$('list-toggle');
     layout.toggleAttribute('data-split-caption',!!last);
-    toolbar.hidden=!!last;
+    paneToolbar.hidden=!!last||draftOpen;
     for(const {header} of taskPanes.values()){
       header.toggleAttribute('data-caption',top.some(position=>taskPanes.get(position.node).header===header));
       header.toggleAttribute('data-caption-start',header===first);
@@ -622,7 +620,6 @@
     }
     if(paneStrip.parentElement!==destination)destination.append(paneStrip);
     paneStrip.setAttribute('role',last?'presentation':'tablist');
-    if(!toggle.closest('.am-window-controls')&&toggle.parentElement!==(last||toolbar))(last||toolbar).append(toggle);
   }
   narrowPaneLayout.addEventListener('change',syncTaskPanes);
   if(!paneHost)window.messengerPaneTitle=(frame,title)=>{
@@ -650,7 +647,6 @@
     }
     if(!showPrimary){primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');}
     $('task-head').hidden=!draftOpen;
-    paneToolbar.hidden=draftOpen;
     const shown=pane=>!draftOpen&&!!paneActive&&(pane===paneActive||pane.placement==='alongside');
     const ordered=[...taskPanes.values()];
     const visibleIDs=ordered.filter(shown).map(pane=>pane.id),visible=visibleIDs.length;
@@ -6097,8 +6093,7 @@
           const main=root.querySelector('.am-main'),r=main.getBoundingClientRect();
           const height=parseFloat(getComputedStyle(main).paddingBlockStart);
           const bar=toolbar?.getBoundingClientRect();
-          if(paneHeaders.length&&matchMedia('(min-width:621px)').matches)zones.push(...paneHeaders.map(node=>node.getBoundingClientRect()));
-          else zones.push(bar?.width&&matchMedia('(min-width:621px)').matches?bar:new DOMRect(r.left,0,r.width,height));
+          zones.push(bar?.width&&matchMedia('(min-width:621px)').matches?bar:new DOMRect(r.left,0,r.width,height));
         }else if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
         if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
         if(navToggle?.offsetWidth)holes.push(navToggle.getBoundingClientRect());
