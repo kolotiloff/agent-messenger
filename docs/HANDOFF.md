@@ -8,7 +8,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-Draft PR #261 now splits the conversation under the pointer when a tab or sidebar task is dropped near one of its edges. Every visible pane has its own tab and uses the regular thread and composer. The layout keeps existing open tabs and restores nested splits. This Mac preview reduces the Dock icon footprint and softens the side lighting. Publication remains on hold for the owner's review.
+Draft PR #261 now splits the conversation under the pointer when a tab or sidebar task is dropped near one of its edges. Every visible pane has its own tab and uses the regular thread and composer. The layout keeps existing open tabs and restores nested splits. Closing the last tab opens the new-task screen and clears the previous task selection. This Mac preview reduces the Dock icon footprint and softens the side lighting. Publication remains on hold for the owner's review.
 
 The dictation follow-up in draft PR #261 puts microphone levels, recording status, Cancel, and Stop inside both composers. Stop requests transcription and inserts the result in the draft. Cancel discards it. Chromium and WebKit verified both layouts and the simulated bridge, and the native Swift shell type-checked. Local review build 129 keeps the provider access descriptions and strengthens the Dock icon’s contour reflection. Voice uses regular setting labels inside its cards, with a single page heading. The owner wants a refreshed local build after each set of changes. Live microphone acceptance is pending.
 

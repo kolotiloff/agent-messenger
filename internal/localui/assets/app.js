@@ -504,6 +504,7 @@
   const restartOutcome='the client restarted during this run; the outcome is unknown and nothing is retried';
   const restartLabel=()=>tr('Клиент перезапустился во время работы; результат неизвестен');
   let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneActive=null,paneDragging=null;
+  let taskWorkspaceCleared=false;
   const narrowPaneLayout=matchMedia('(max-width:780px)');
   let paneTree=null,paneLegacy='',paneDropPreview=null;
   const openPanes=()=>[...taskPanes.values()].filter(pane=>pane.placement!=='parked');
@@ -533,16 +534,20 @@
     pane.tab.remove();pane.cell.remove();
     if(paneActive===pane)paneActive=before[index+1]||before[index-1]||null;
     if(before.length===1&&paneBoard){
+      taskWorkspaceCleared=true;
+      selectedTask='';selectedShared=null;feed=null;topTaskScope='';
       primary.hidden=false;
       primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
       $('task-head').hidden=false;paneToolbar.remove();
       preservePaneFocus(()=>paneBoard.replaceWith(primary));
       taskPanes.clear();
       paneBoard=paneStrip=paneToolbar=paneGrid=null;
+      renderThread();renderTaskList();startWindowWatch();
     }
     syncTaskPanes();renderMachines();
     if(hadFocus){
       if(paneActive)paneActive.label.focus({preventScroll:true});
+      else if(draftOpen)$('task-draft-text').focus({preventScroll:true});
       else if(!$('compose').hidden&&!$('answer-text').disabled)$('answer-text').focus({preventScroll:true});
       else $('thread').focus({preventScroll:true});
     }
@@ -690,6 +695,7 @@
     // in that split when focus moves to another visible tab.
     if(paneActive&&paneActive!==pane&&!paneActive.cell.hidden&&!pane.cell.hidden)paneActive.placement='alongside';
     paneActive=pane;
+    taskWorkspaceCleared=false;
     if(draftOpen){closeTaskDraft();renderThread();}
     syncTaskPanes();renderMachines();
     if(!$('task-panel').hidden)renderTaskList();
@@ -2369,6 +2375,7 @@
   // a filtered remainder and an empty pane.
   let topTaskScope='';
   function computerChanged(before=statsProjectScope()){
+    taskWorkspaceCleared=false;
     renderMachines();
     if(tab==='stats'&&!updateStatsProjectScope(before))reloadStats();
     if(tab==='agents')renderAgents();
@@ -2530,6 +2537,7 @@
   // On refresh (quiet) the caller loads the conversation itself, and an
   // empty list changes nothing.
   function openTopTask(quiet){
+    if(taskWorkspaceCleared)return;
     const g=taskGroups(view,!taskSidebarPreview),it=g.active[0]||g.planned[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
     if(!it){if(quiet)return;selectedTask='';selectedShared=null;feed=null;feedSignature='';renderTaskList();renderThread();return;}
     if(it.peer){selectedShared={peer:it.peer.peer,id:it.t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();return;}
@@ -2653,6 +2661,7 @@
         if(paneBoard){switchActivePane(t,name);return;}
         if(name!==project){selectProject(name,t.id,'');return;}
         if(draftOpen)closeTaskDraft();
+        taskWorkspaceCleared=false;
         selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,null,name,taskSidebarPreview));
@@ -2666,6 +2675,7 @@
         const selection={peer:p.peer,id:t.id};
         if(name!==project){selectProject(name,'','',selection);return;}
         if(draftOpen)closeTaskDraft();
+        taskWorkspaceCleared=false;
         selectedShared=selection;selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,p,name));
@@ -5405,6 +5415,7 @@
           show('tasks');selectProject(task.project,task.id);return;
         }
         if(draftOpen)closeTaskDraft();
+        taskWorkspaceCleared=false;
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');renderThread();refresh();
       });
       top.append(row);
@@ -6578,6 +6589,7 @@
     });
   }
   function selectProject(name,task='',computer,shared=null){
+    taskWorkspaceCleared=false;
     if(draftOpen)closeTaskDraft();
     if(!taskSidebarPreview&&(!combinedTasks()||computer!==''))taskHistories.clear();
     setProject(name,computer);remember('messenger-project',name);

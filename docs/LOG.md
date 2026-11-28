@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-28 — T-372 Sidebar switching and split drops
 
-Codex made task clicks in the sidebar, Statistics, and Archive reuse the active pane and separated task drag sources from computer reordering in draft PR #261. The conversation body and caption accept split drops. The pane fixture covers selection, preserved layout and drafts, and previews near the middle and on the heading.
+Codex made task clicks in the sidebar, Statistics, and Archive reuse the active pane and separated task drag sources from computer reordering in draft PR #261. The conversation body and caption accept split drops. The pane fixture covers selection, preserved layout and drafts, and previews near the middle and on the heading. Closing the last tab by mouse or keyboard returns to the new-task screen, which stays open on refresh.
 
 ## 2026-11-28 — T-375 Full-height chat scrollbar
 
