@@ -1447,8 +1447,8 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 /* T-270: the project page is a column of cards, like the server page. */
 #am-concept .am-settings-group { display:flex; flex-direction:column; gap:var(--am-gap-section); }
 #am-concept .am-card > .am-setting-row:first-child { padding-top:0; border-top:0; }
-#am-concept #voice-page .am-card-head h3 { margin:0; }
 #am-concept #voice-mode-row { --am-settings-control-width:18em; }
+#am-concept #voice-language-row > :last-child { min-inline-size:min(calc(var(--am-settings-control-width) + var(--am-gap-section)),50%); }
 #am-concept .am-voice-model-details { overflow-wrap:anywhere; }
 #am-concept .am-voice-model-list > .am-setting-row { display:grid; grid-template-columns:minmax(0,1fr) max-content minmax(max-content,var(--am-settings-control-width)); }
 #am-concept .am-voice-model-list > .am-setting-row + .am-setting-row { margin-block-start:var(--am-gap-content); }

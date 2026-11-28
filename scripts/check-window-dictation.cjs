@@ -55,8 +55,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.getByText('Диктовка недоступна в этой версии Kotel').waitFor();
     assert.equal(await voiceSwitch.isDisabled(),true);
     await models(state);
+    assert.deepEqual(await page.locator('#voice-page :is(h2,h3)').allTextContents(),['Голос']);
+    const settingType = selector => page.locator(selector).evaluate(node => {
+      const style=getComputedStyle(node);
+      return [style.fontSize,style.fontWeight];
+    });
+    const voiceRowType=await settingType('#voice-enabled-label');
     for (const id of ['voice-models-title','voice-microphone-title']) {
-      assert(await page.locator('#'+id).evaluate(heading=>heading.closest('.am-card')!==null));
+      assert(await page.locator('#'+id).evaluate(label=>label.parentElement.matches('.am-card > .am-setting-row:first-child')));
+      assert.deepEqual(await settingType('#'+id),voiceRowType);
     }
     for (const width of [1200, 800, 600]) {
       await page.setViewportSize({width,height:800});
@@ -73,6 +80,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       for (const row of rows) {
         assert.deepEqual(row, {contained:true,endsAtRight:true,stacked:width===600}, `Voice selector at ${width}px`);
       }
+      const languageText=page.locator('#voice-language-row .am-select-value');
+      assert.equal(await languageText.evaluate(text=>text.scrollWidth<=text.clientWidth+1),true);
     }
     await page.setViewportSize({width:1200,height:800});
     await page.getByRole('button',{name:'Проверить микрофон'}).click();

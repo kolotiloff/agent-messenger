@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-380 Voice typography
+
+Codex used standard setting rows inside the Voice cards, combined the microphone label with its test button, and gave the speech-language value enough room to fit. Preview 127 retains the Dock icon’s contour reflection.
+
 ## 2026-11-28 — T-056 Task access menu
 
 Codex added provider-specific access descriptions to the task menu and simplified the wording of both access switches. The remote menu describes full access as a request. Preview 126 uses a thin reflection along the existing macOS Dock icon contour after the side-lighting review.

@@ -139,7 +139,6 @@
   'Автоопределение':'Detect automatically',
   'Английский':'English',
   'Микрофон':'Microphone',
-  'Системный микрофон':'System microphone',
   'Проверить микрофон':'Test microphone',
   'Остановка после тишины':'Stop after silence',
   'Выключена':'Off',

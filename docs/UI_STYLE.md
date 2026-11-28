@@ -60,6 +60,7 @@ Message actions and the timestamp share a visible row one control gap (8 px) bel
 ## Components
 
 - `.am-card` is the one card look (agent cards, server sections); `.am-card-head` holds a title and a `.am-badge`.
+- In Voice, use the page title for the section name and standard setting-label typography inside each card.
 - `.am-field` is a label with a field under it.
 - Notes about a screen (what works, what does not yet) go in a side column, not between the cards: `.am-server-layout` with `.am-server-aside`. In a window narrower than 1000 px the column moves above the cards.
 - `.am-chrome-icon` shares the 28 px square, 16 px glyph box, 8 px corner radius and hover fill for standalone main-window controls.

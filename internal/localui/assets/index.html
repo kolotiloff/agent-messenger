@@ -45,16 +45,15 @@
     </div>
     <section id="voice-models-section" class="am-settings-group" aria-labelledby="voice-models-title" hidden>
       <div class="am-card">
-        <div class="am-card-head"><h3 id="voice-models-title">Модели распознавания</h3></div>
+        <div class="am-setting-row"><span id="voice-models-title">Модели распознавания</span></div>
         <div id="voice-models" class="am-voice-model-list"></div>
-        <div class="am-setting-row am-field am-inline-setting"><label for="voice-language">Язык речи</label><select id="voice-language"><option value="auto">Автоопределение</option><option value="ru">Русский</option><option value="en">Английский</option></select></div>
+        <div id="voice-language-row" class="am-setting-row am-field am-inline-setting"><label for="voice-language">Язык речи</label><select id="voice-language"><option value="auto">Автоопределение</option><option value="ru">Русский</option><option value="en">Английский</option></select></div>
       </div>
     </section>
     <section id="voice-microphone" class="am-settings-group" aria-labelledby="voice-microphone-title" hidden>
       <div class="am-card">
-        <div class="am-card-head"><h3 id="voice-microphone-title">Микрофон</h3></div>
         <div class="am-setting-row">
-          <div class="am-access-text"><p class="am-access-title">Системный микрофон</p></div>
+          <span id="voice-microphone-title" class="am-access-text">Микрофон</span>
           <button id="voice-mic-test" type="button">Проверить микрофон</button>
         </div>
         <div id="voice-mic-result" class="am-voice-mic-result" hidden>
