@@ -78,7 +78,7 @@
     function sync(){
       renderLabel(value,select.selectedOptions[0]);
       if(iconPaths){
-        trigger.title=label+' · '+value.textContent;
+        trigger.title=label+', '+value.textContent;
         trigger.setAttribute('aria-label',trigger.title);
         trigger.classList.toggle('am-filter-active',select.id!=='sidebar-group'&&select.selectedIndex>0);
         if(select.id==='agent-filter'){
@@ -125,7 +125,7 @@
       if(search){search.value='';empty.hidden=options.length>0;}
       menu.showPopover();trigger.setAttribute('aria-expanded','true');
       let minWidth=searchable?276:220;
-      if(select.id==='chat-font-select'){
+      if(select.id==='chat-font-select'||select.id==='sidebar-group'){
         menu.style.width='max-content';
         minWidth=Math.max(minWidth,Math.ceil(menu.getBoundingClientRect().width));
       }
@@ -443,7 +443,7 @@
       case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-wait'];
       case 'done':return [tr('Работал ')+minutes(from,end),'am-muted'];
       case 'failed':return failureStatus(t)||[tr('Ошибка через ')+minutes(from,end),'am-status-bad'];
-      case 'interrupted':return [tr('Прервана через ')+minutes(from,end),'am-status-bad'];
+      case 'interrupted':return [tr('Прервана через ')+minutes(from,end),'am-status-bad',connectionTimestamp(end)];
       case 'blocked':return [tr('Заблокирована через ')+minutes(from,end),'am-status-bad'];
       case 'cancelled':return [tr('Отменена'),'am-muted'];
     }
@@ -1066,7 +1066,7 @@
     }else if(peer){
       const newest=peerUpdateOffer(peer,peerInstalledVersion(peer),mark);
       if(newest){
-        caption=tr('Обновить до ')+newest;
+        caption=tr('Обновить версию');
         pick=()=>confirmPeerUpdate(peer,newest);
       }
     }
@@ -1807,7 +1807,7 @@
       }else{
         const detail=el('span',status,color);
         if(tip)detail.title=tip;
-        details.append(identity+' · ',detail);
+        details.append(identity+', ',detail);
       }
       meta.append(providerIcon(t.agent),details);
       title.title=title.textContent;
@@ -1844,7 +1844,7 @@
     if(updateInProgress(mark))return updateControl(peer,mark);
     const newest=peerUpdateOffer(peer,installed,mark);
     if(!newest)return null;
-    const label=tr('Обновить до ')+newest;
+    const label=tr('Обновить версию');
     const b=el('button',undefined,'am-update-icon am-peer-update');
     b.type='button';b.title=label;b.setAttribute('aria-label',label);
     appendUpdateGlyphs(b);
@@ -2561,7 +2561,7 @@
     const box=$('coord-box');if(!box||!view?.project)return;
     const heading=el('div',undefined,'am-coord-head');
     heading.append(el('h3',tr('MCP-плагин')));
-    heading.append(el('p',tr('Подключение к графическому редактору'),'am-small am-muted'));
+    heading.append(el('p',tr('Подключение координатора к Kotel'),'am-small am-muted'));
     const steps=el('div',undefined,'am-steps');
     steps.append(coordinatorAgentRow('claude',view.coordinator_link||{state:'unknown'}));
     steps.append(coordinatorAgentRow('codex',view.codex_link||{state:'unknown'}));
@@ -2601,17 +2601,18 @@
     if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
     if(link.state==='connected'){
       let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Kotel'):tr('Подключён. Откройте папку проекта в новом чате');
+      if(agent==='claude')sub=tr('Откройте эту папку в локальном сеансе Claude Code. Проверьте Kotel в списке MCP.');
       if(link.server_name==='messenger')sub=tr('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.');
-      if(agent==='claude'&&link.server_name==='kotel')sub+=' · kotel';
       if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».');
       return stepRow('ok',title,sub,null);
     }
     if(failure)return stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(agent)]);
     if(link.state===missing)return stepRow(1,title,tr('Сначала настройте его во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')]);
     if(link.state==='no_folder')return stepRow(1,title,tr('Сначала укажите папку проекта'),null);
-    if(link.state==='other')return stepRow('no',title,tr('Имя MCP-сервера занято. Проверьте подключения в настройках агента.'),null);
+    if(link.state==='other')return stepRow('no',title,tr('Запись MCP относится к другому подключению. Проверьте настройки агента.'),null);
     if(link.state==='off')return stepRow('no',title,tr('Подключение MCP выключено в настройках агента'),null);
     if(link.state==='unknown')return stepRow('no',title,(agent==='cursor'?tr('Не удалось прочитать настройки Cursor'):agent==='codex'?tr('Не удалось прочитать настройки Codex'):tr('Не удалось прочитать настройки Claude'))+(link.detail?': '+link.detail:''),connect);
+    if(agent==='claude'&&link.state==='missing')return stepRow(1,title,tr('MCP не подключён для этой папки в Claude Code'),connect);
     return stepRow(1,title,tr('Не подключён'),connect);
   }
   // Whether this computer's Claude Code is the project's coordinator. Other
@@ -5488,10 +5489,9 @@
     for(const v of [clientInfo?.window_version,clientInfo?.client_version,knownUpdate,...(server?.peers||[]).map(p=>p.version)])if(v&&(!best||versionOlder(best,v)))best=v;
     return best;
   }
-  // The update icon says in its tooltip which version came out (T-066).
+  // The update icon names the action or shows its active progress.
   function updateTip(version,busy){
-    const name=versionName(version);
-    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Обновить до ')+name:tr('Обновить');
+    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):version?tr('Обновить версию'):tr('Обновить');
     if(busy==='downloading'&&updateProgress)text=tr('Загружается обновление')+(updateProgress.version?' '+versionName(updateProgress.version):'')+': '+Math.floor(100*updateProgress.done/updateProgress.total)+'%';
     $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
   }

@@ -770,7 +770,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       }),'a long agent label must give way to the timer');
       assert.equal(await runner.locator('.am-machine-name .am-card-update').count(),1);
       assert.equal(await page.locator('.am-machine-name #app-update-button').count(),1);
-      const peerUpdate=runner.getByRole('button',{name:'Обновить до v0.99'});
+      const peerUpdate=runner.getByRole('button',{name:'Обновить версию'});
       const peerVersion=runner.locator('.am-machine-version');
       assert.equal(await peerVersion.textContent(),'v0.97');
       assert.equal(await peerUpdate.locator('.am-machine-version').count(),0);

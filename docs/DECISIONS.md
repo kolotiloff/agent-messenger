@@ -998,3 +998,7 @@ A project file link opens a tab in the existing task toolbar and a reader alongs
 ## D-268 — Keep permission details beside the model in an existing conversation
 
 The new task composer keeps its access choice. An existing conversation shows its access mode or executor computer beside the model below the reply field. Its scrolling viewport ends at the footer. Stop ends a turn and adds an unboxed system event. The original conversation can accept a follow-up when its recorded continuation capability allows it. See T-375.
+
+## D-269 — Recognize a coordinator registration through the installed bundle link
+
+A registration pointing to the migrated macOS bundle remains connected when the installer’s relative link leads to the current executable and the coordinator arguments match. This preserves the server name and configuration. A different target remains a conflict. See T-376.

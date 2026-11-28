@@ -38,6 +38,8 @@ T-374 places project references in document tabs beside the chat. A separate, re
 
 T-375 lets the history scroll down to the composer and shows access beside the model below the field. Stopped turns use a short system event in the saved conversation. Task tabs use compact menu spacing, and drop targets start below the toolbar. Main-window icon buttons share size and hover styling. The project filter now says All projects.
 
+T-376 recognizes the installed macOS bundle's compatibility link in existing coordinator registrations. The project settings identify the folder-scoped MCP connection, the update menu uses a short action label, and model sections have equal insets around dividers. The grouping menu fits its choices within the viewport. The macOS icon uses more of the tile, and the running app reads it directly from the installed bundle.
+
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.

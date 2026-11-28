@@ -69,7 +69,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await fs.mkdir(process.env.SCREENSHOT_DIR,{recursive:true});
       await card.screenshot({path:path.join(process.env.SCREENSHOT_DIR,name+'.png')});
     }
-    const arrow=card.getByRole('button',{name:/Обновить до/});
+    const arrow=card.getByRole('button',{name:/Обновить версию/});
     await arrow.waitFor();
     assert.equal(await page.locator('#notices .am-notice-bad').count(),0,'previous update errors and timeouts must stay quiet on startup');
     const pending={computer:peer.id,request_id:'previous-pending',state:'waiting',updated_at:previousTime};
@@ -84,7 +84,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     server.updates=[];
     await refreshServer();
     await arrow.waitFor();
-    assert.match(await arrow.getAttribute('title'),/^Обновить до v/);
+    assert.match(await arrow.getAttribute('title'),/^Обновить версию/);
     assert.deepEqual(await arrow.locator('svg').evaluate(svg=>{
       const box=svg.getBoundingClientRect(),head=svg.closest('.am-machine-name').getBoundingClientRect();
       return [box.width,box.height,Math.abs(box.top+box.height/2-head.top-head.height/2)<0.5];
@@ -97,7 +97,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await shot('available');
     const menu=page.locator('#device-menu');
     await card.locator('.am-machine-name').click({button:'right'});
-    const menuOffer=menu.getByRole('menuitem',{name:/Обновить до/});
+    const menuOffer=menu.getByRole('menuitem',{name:/Обновить версию/});
     await menuOffer.hover();
     assert.equal(await menuOffer.locator('svg').count(),0);
     if(process.env.SCREENSHOT_DIR)await menu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'menu-available.png')});

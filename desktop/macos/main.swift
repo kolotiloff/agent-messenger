@@ -79,8 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             } else { fatalLaunch("Другое окно Kotel уже запускается. Откройте его через Dock.") }
             return
         }
-        // Use the bundle icon with the same system framing as the application list.
-        NSApp.applicationIconImage = NSWorkspace.shared.icon(forFile: Bundle.main.bundleURL.resolvingSymlinksInPath().path)
+        // Read the installed resource directly after an in-place update.
+        if let resource = Bundle.main.url(forResource: "KotelIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: resource) {
+            NSApp.applicationIconImage = icon
+        }
         applyTheme(UserDefaults.standard.string(forKey: "appearance") ?? "system")
         buildMenu()
         let config = WKWebViewConfiguration()

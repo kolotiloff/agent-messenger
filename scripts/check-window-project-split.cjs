@@ -520,7 +520,7 @@ if (require.main === module) (async()=>{
         }
       });
       await footer.getByText('v1.0.9',{exact:true}).waitFor();
-      const localUpdate=footer.getByRole('button',{name:'Обновить до v1.0.10'});
+      const localUpdate=footer.getByRole('button',{name:'Обновить версию'});
       await localUpdate.waitFor();
       const downloadBox=await localUpdate.boundingBox(),versionBox=await footer.locator('.am-version').boundingBox();
       assert.equal(versionBox.x-downloadBox.x-downloadBox.width,4);
@@ -934,6 +934,12 @@ if (require.main === module) (async()=>{
       const checkedModel=modelMenu.locator('[aria-selected=true]');
       assert.equal(await checkedModel.textContent(),'Sol 6.2 Medium');
       assert.deepEqual(await modelMenu.locator('.am-model-group-title').allTextContents(),['Claude Code','Codex','Cursor']);
+      assert.deepEqual(await modelMenu.getByRole('group').evaluateAll(groups=>groups.map(group=>[
+        getComputedStyle(group).paddingBlockStart,
+        getComputedStyle(group).paddingBlockEnd,
+        getComputedStyle(group.firstElementChild).paddingBlockStart,
+        getComputedStyle(group.firstElementChild).paddingBlockEnd
+      ])),Array.from({length:3},()=>Array(4).fill('4px')));
       if(process.env.SCREENSHOT_DIR){
         await draftPage.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'model-groups.png')});
       }
@@ -1455,7 +1461,13 @@ if (require.main === module) (async()=>{
       await projectMenu.getByRole('menuitem',{name:'Удалить локальный проект'}).click();
       await browserPreview.locator('#confirm-dialog').getByText('Удалить проект «Игра»?').waitFor();
       await browserPreview.locator('#confirm-cancel').click();
-      await group('По компьютеру, затем по проекту');
+      await browserPreview.locator('[aria-controls="sidebar-group-menu"]').click();
+      const groupingMenu=browserPreview.locator('#sidebar-group-menu');
+      const combined=groupingMenu.getByRole('option',{name:'По компьютеру и проекту',exact:true});
+      assert.equal(await combined.locator(':scope > span').first().evaluate(label=>
+        Math.round(label.getBoundingClientRect().height)===Math.round(parseFloat(getComputedStyle(label).lineHeight))),true);
+      if(process.env.SCREENSHOT_DIR)await groupingMenu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'task-grouping.png')});
+      await combined.click();
       const localGame=card(browserPreview,'local').locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       assert.equal(await localGame.getByText('Экран настроек',{exact:true}).count(),1);
       const localFolderButton=localGame.locator('.am-folder-heading');
@@ -1492,7 +1504,8 @@ if (require.main === module) (async()=>{
       await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');
       const computerMenu=browserPreview.locator('#device-menu');
       await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
-      const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить до v1.0.9'});
+      const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить версию'});
+      if(process.env.SCREENSHOT_DIR)await computerMenu.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'update-menu.png')});
       await peerUpdate.click();
       await browserPreview.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
       await browserPreview.locator('#confirm-cancel').click();
@@ -1703,13 +1716,13 @@ if (require.main === module) (async()=>{
     assert.equal(await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).count(),1);
     assert.equal(await cells(page,'pc1').nth(0).locator('.am-machine-version').count(),0);
     assert.equal(await cells(page,'pc1').nth(1).getByText('v1.0.5',{exact:true}).count(),1);
-    await cells(page,'pc1').nth(1).getByRole('button',{name:'Обновить до v1.0.9'}).click();
+    await cells(page,'pc1').nth(1).getByRole('button',{name:'Обновить версию'}).click();
     await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
     await page.locator('#confirm-cancel').click();
     await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).click({button:'right'});
     const peerMenu=page.locator('#device-menu');
     await peerMenu.getByText('v1.0.5',{exact:true}).waitFor();
-    await peerMenu.getByRole('menuitem',{name:'Обновить до v1.0.9'}).click();
+    await peerMenu.getByRole('menuitem',{name:'Обновить версию'}).click();
     await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
     await page.locator('#confirm-cancel').click();
     assert.equal(await cells(page,'pc1').nth(1).getAttribute('aria-pressed'),'false');

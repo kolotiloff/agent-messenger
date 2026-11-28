@@ -224,9 +224,9 @@ func classifyCursorCoordinator(raw []byte, messenger, root, project string) (sta
 		state = LinkOff
 		return
 	}
-	if sameTrustPath(server.Command, messenger) || coordinatorProgramAlias(server.Command, messenger) {
+	if sameCoordinatorProgram(server.Command, messenger) {
 		state = LinkConnected
-	} else if managedCoordinatorProgram(server.Command, messenger, root) {
+	} else if managedCoordinatorProgram(server.Command, root) {
 		state = LinkStale
 	} else {
 		state = LinkOther

@@ -1391,9 +1391,10 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
   #am-concept .am-pane-board:is([data-layout=columns],[data-layout=grid]) .am-pane-grid { grid-template-columns:minmax(0,1fr); grid-template-rows:none; }
 }
 
-#am-concept .am-model-group-title { display:flex; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-2) var(--am-space-3); color:var(--am-muted); font-size:var(--am-text-s); }
+#am-concept .am-model-group { padding-block:var(--am-space-1); }
+#am-concept .am-model-group-title { display:flex; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); color:var(--am-muted); font-size:var(--am-text-s); }
 #am-concept .am-model-group-title svg { width:var(--am-space-4); height:var(--am-space-4); }
-#am-concept .am-model-group:not([hidden]) ~ .am-model-group:not([hidden]) { border-block-start:1px solid var(--am-menu-line); margin-block-start:var(--am-space-1); }
+#am-concept .am-model-group:not([hidden]) ~ .am-model-group:not([hidden]) { border-block-start:1px solid var(--am-menu-line); }
 #am-concept .am-compose-field > :is(#task-draft-add,#answer-add):not([hidden]) + textarea { padding-inline-start:0; }
 #am-concept .am-context-menu > button.am-select-option { width:100%; text-align:start; }
 @media (hover:hover) {

@@ -3,6 +3,7 @@ package adapters
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -94,6 +95,52 @@ func TestCodexCoordinatorStaleIsReplaced(t *testing.T) {
 	}
 	if got, _ := CodexCoordinatorLink(path, messenger, root, "Game"); got != LinkConnected {
 		t.Fatal(got)
+	}
+}
+
+func TestCodexCoordinatorRecognizesMigratedBundle(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("macOS bundle link")
+	}
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "Agent Messenger.app")
+	relative := filepath.Join("Contents", "Resources", "kotel")
+	program := filepath.Join(dir, "Kotel.app", relative)
+	if err := os.MkdirAll(filepath.Dir(program), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(program, []byte("fixture"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("./Kotel.app", legacy); err != nil {
+		t.Fatal(err)
+	}
+	path := CodexProjectConfig(dir)
+	if err := os.Mkdir(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "data")
+	original := CodexCoordinatorBlock(filepath.Join(legacy, relative), root, "Game")
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := CodexCoordinatorLink(path, program, root, "Game"); state != LinkConnected || err != nil {
+		t.Fatalf("migrated bundle: %s, %v", state, err)
+	}
+	if err := EnsureCodexCoordinator(path, program, root, "Game"); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != original {
+		t.Fatal("the usable legacy path was rewritten", err)
+	}
+	if err := os.Remove(legacy); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("./Unrelated.app", legacy); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := CodexCoordinatorLink(path, program, root, "Game"); state != LinkOther || err != nil {
+		t.Fatalf("unrelated bundle: %s, %v", state, err)
 	}
 }
 
