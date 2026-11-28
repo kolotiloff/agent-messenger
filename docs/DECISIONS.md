@@ -1001,7 +1001,7 @@ A project file link opens a tab in the existing task toolbar and a reader alongs
 
 ## D-268 — Keep permission details beside the model in an existing conversation
 
-The new task composer keeps its access choice. An existing conversation shows its access mode or executor computer beside the model below the reply field. Its scrolling viewport ends at the footer. When the reply composer is visible, its history has a 32 px bottom inset so the last action row can scroll clear of the field. Stop ends a turn and adds an unboxed system event. The original conversation can accept a follow-up when its recorded continuation capability allows it. See T-375.
+The new task composer keeps its access choice. An existing conversation shows its access mode or executor computer beside the model below the reply field. Its scrollbar runs to the bottom of the pane beside the fixed footer. When the reply composer is visible, the history reserves the footer height plus 32 px so the last action row can scroll clear of the field. Stop ends a turn and adds an unboxed system event. The original conversation can accept a follow-up when its recorded continuation capability allows it. See T-375.
 
 ## D-269 — Recognize a coordinator registration through the installed bundle link
 

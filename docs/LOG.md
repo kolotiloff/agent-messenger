@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-375 Full-height chat scrollbar
+
+Codex extended the scrollable viewport to the pane edge in draft PR #261. The footer height is reserved in the scrollable content so the last message actions stay above the fixed composer. Tab close and sidebar add buttons highlight the glyph alone.
+
+The upper pane tabs now occupy the shared caption row with the archive toggle. Dark mode uses a slightly lighter text color for the primary sidebar labels.
+
 ## 2026-11-28 — T-372 Split task workspace and T-341 Dock icon
 
 Codex replaced layout presets with edge-based splits in draft PR #261. Pane-local tabs use the regular conversation and composer. The macOS icon is smaller, with a softer reflection over both sides.

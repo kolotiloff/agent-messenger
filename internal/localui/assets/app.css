@@ -30,6 +30,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-panel:light-dark(#fff,#202020);
   --am-side:light-dark(#fafafa,#1e1e1e);
   --am-text:light-dark(#303030,#e5e5e3);
+  --am-sidebar-text:light-dark(var(--am-text),color-mix(in srgb,var(--am-text) 70%,white));
   --am-muted:light-dark(#6b6b6b,#acacaa);
   --am-line:light-dark(#e5e5e5,#333);
   --am-button:light-dark(#efefef,#404040);
@@ -107,6 +108,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   /* Tall enough that the tab row keeps a gap above it while it stays
      centred on the window buttons (owner, 2026-11-15). */
   --am-caption-height:44px;
+  --am-window-button-width:46px;
   --am-pane-inset:var(--am-space-4);
   --am-chat-max:760px;
 
@@ -377,11 +379,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept.am-task-sidebar-preview :is(#project-column-first,#sidebar-group-control,.am-task-filter) { display:flex; align-items:center; }
 #am-concept.am-task-sidebar-preview .am-project-heading { margin:0; padding-inline-start:var(--am-row-pad-inline); justify-content:flex-start; gap:var(--am-gap-line); }
 #am-concept.am-task-sidebar-preview .am-project-heading .am-label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-#am-concept.am-task-sidebar-preview .am-project .am-label { display:block; color:var(--am-text); text-transform:none; letter-spacing:normal; }
+#am-concept.am-task-sidebar-preview .am-project .am-label { display:block; color:var(--am-sidebar-text); text-transform:none; letter-spacing:normal; }
 #am-concept.am-task-sidebar-preview :is(.am-project .am-label,.am-queue-header h3,.am-conversation-title) { font-size:var(--am-text-m); font-weight:400; line-height:var(--am-computer-heading-line); }
 #am-concept.am-task-sidebar-preview :is(.am-project,.am-task-filter) .am-select-trigger:not(.am-chrome-icon) { min-height:var(--am-preview-header-control); }
-#am-concept.am-task-sidebar-preview #task-new { width:100%; height:var(--am-preview-header-control); min-height:var(--am-preview-header-control); justify-content:flex-start; padding:var(--am-row-pad-block) var(--am-row-pad-inline); gap:var(--am-gap-control); text-align:start; color:var(--am-text); }
-#am-concept.am-task-sidebar-preview #task-new:is(:hover,:focus-visible):not(:disabled) { background:var(--am-list-row-hover); color:var(--am-text); }
+#am-concept.am-task-sidebar-preview #task-new { width:100%; height:var(--am-preview-header-control); min-height:var(--am-preview-header-control); justify-content:flex-start; padding:var(--am-row-pad-block) var(--am-row-pad-inline); gap:var(--am-gap-control); text-align:start; color:var(--am-sidebar-text); }
+#am-concept.am-task-sidebar-preview #task-new:is(:hover,:focus-visible):not(:disabled) { background:var(--am-list-row-hover); color:var(--am-sidebar-text); }
+#am-concept.am-task-sidebar-preview .am-sidebar :is(.am-machine-name,.am-folder-heading,.am-sidebar-task-title) { color:var(--am-sidebar-text); }
 #am-concept.am-task-sidebar-preview .am-computers { border-block-start:0; padding-block-start:0; }
 #am-concept.am-task-sidebar-preview .am-computers { margin-inline:calc(-1 * var(--am-gap-content)); padding-inline:var(--am-gap-content); }
 #am-concept.am-task-sidebar-preview .am-machines { gap:var(--am-space-1); }
@@ -642,10 +645,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-head-row { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--am-gap-content); min-width:0; }
 #am-concept .am-task-head { display:flex; flex:1; flex-direction:column; gap:var(--am-gap-line); min-width:0; }
 #am-concept .am-task-head h3 { overflow-wrap:anywhere; }
-/* The scrolling viewport ends where the measured composer footer starts. */
+/* Keep the scrollbar beside the footer and reserve room for the last message above it. */
 #am-concept .am-chat-body { position:relative; flex:1; min-height:0; --am-footer-height:120px; --am-thread-end-gap:var(--am-gap-section); }
 #am-concept .am-chat-body:has(> .am-chat-footer > #compose:not([hidden])) { --am-thread-end-gap:calc(var(--am-gap-region) + var(--am-gap-control)); }
-#am-concept .am-thread { position:absolute; inset:0; inset-block-end:var(--am-footer-height); display:flex; flex-direction:column; gap:var(--am-gap-region); padding:var(--am-space-3) calc(var(--am-pane-inset) - var(--am-gutter, 0px)) var(--am-thread-end-gap) var(--am-pane-inset); scroll-padding-block-end:var(--am-thread-end-gap); scrollbar-gutter:stable; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
+#am-concept .am-thread { --am-thread-bottom-inset:calc(var(--am-footer-height) + var(--am-thread-end-gap)); position:absolute; inset:0; display:flex; flex-direction:column; gap:var(--am-gap-region); padding:var(--am-space-3) calc(var(--am-pane-inset) - var(--am-gutter, 0px)) var(--am-thread-bottom-inset) var(--am-pane-inset); scroll-padding-block-end:var(--am-thread-bottom-inset); scrollbar-gutter:stable; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
 #am-concept .am-thread:focus { outline:none; }
 /* T-133: the feed keeps its place while the owner reads higher up; this
    button brings them back down and says when something new came. */
@@ -1190,7 +1193,8 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
   align-self:stretch; width:var(--am-computer-icon-size); min-width:var(--am-computer-icon-size); height:auto; min-height:0;
 }
 #am-concept button.am-chrome-icon.am-group-new > svg { width:100%; height:var(--am-computer-icon-size); }
-#am-concept button.am-chrome-icon.am-group-new:enabled:is(:hover,:focus-visible) { background:transparent; }
+#am-concept button.am-chrome-icon.am-group-new:enabled:is(:hover,:focus-visible,:active),
+#am-concept .am-pane-tab button.am-close-x:enabled:is(:hover,:focus-visible,:active) { background:transparent; color:var(--am-text); }
 
 #am-concept .am-steps { display:flex; flex-direction:column; }
 #am-concept .am-step { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:var(--am-space-2); align-items:center; min-height:40px; padding:var(--am-space-2) 0; }
@@ -1267,7 +1271,7 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 /* Windows without the system title bar (T-062): the window's own buttons at
    the top right, sized like the system's. */
 #am-concept .am-window-controls { position:fixed; top:0; right:0; z-index:50; display:flex; }
-#am-concept button.am-window-btn { width:46px; height:var(--am-caption-height); min-height:0; padding:0; border-radius:0; background:transparent; color:var(--am-text); display:inline-flex; align-items:center; justify-content:center; }
+#am-concept button.am-window-btn { width:var(--am-window-button-width); height:var(--am-caption-height); min-height:0; padding:0; border-radius:0; background:transparent; color:var(--am-text); display:inline-flex; align-items:center; justify-content:center; }
 #am-concept button.am-window-btn svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.4; }
 #am-concept button.am-window-btn:is(:hover,:focus-visible) { background:var(--am-soft); }
 #am-concept button.am-window-btn.am-window-close:is(:hover,:focus-visible) { background:#c42b1c; color:#fff; }
@@ -1275,7 +1279,7 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
    the task list toggle stands right beside them (owner, 2026-11-14: it hung
    lower and apart from them). */
 body.am-frameless #am-concept:not(.am-task-sidebar-preview) .am-main { padding-top:calc((var(--am-caption-height) - var(--am-control-compact)) / 2); }
-body.am-frameless #am-concept .am-tabs { margin-right:0; padding-right:calc(3 * 46px + var(--am-space-1)); }
+body.am-frameless #am-concept .am-tabs { margin-right:0; padding-right:calc(3 * var(--am-window-button-width) + var(--am-space-1)); }
 body.am-frameless #am-concept .am-tabs, body.am-frameless #am-concept .am-sidebar { user-select:none; }
 body.am-native #am-concept.am-task-sidebar-preview { --am-task-top:calc(var(--am-control-compact) + var(--am-space-2)); }
 body.am-frameless #am-concept.am-task-sidebar-preview { --am-task-top:var(--am-caption-height); }
@@ -1434,7 +1438,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-pane-empty { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; }
 #am-concept .am-pane-empty-title { margin:0; font-size:var(--am-text-m); }
 /* First-run setup uses the same card and rows as Settings. */
-#am-concept .am-thread:has(> .am-welcome) { padding-block:var(--am-gap-region); }
+#am-concept .am-thread:has(> .am-welcome) { --am-thread-end-gap:var(--am-gap-region); padding-block-start:var(--am-gap-region); }
 #am-concept .am-welcome { align-self:center; margin:0; max-width:var(--am-chat-max); width:100%; padding:0; }
 #am-concept .am-welcome-intro { display:flex; flex-direction:column; gap:var(--am-space-2); }
 #am-concept .am-welcome-intro p { margin:0; }
@@ -1494,7 +1498,8 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-file-changes summary { cursor:pointer; color:var(--am-muted); }
 
 #am-concept .am-pane-board { grid-column:1; grid-row:2; min-width:0; min-height:0; display:grid; grid-template-rows:minmax(0,1fr); }
-#am-concept .am-task-toolbar:has(.am-pane-strip[hidden]) { padding-block-end:var(--am-space-1); }
+#am-concept .am-chat-layout[data-split-caption] { grid-template-rows:var(--am-caption-height) minmax(0,1fr); }
+#am-concept [data-split-caption] > .am-pane-board { grid-row:1 / -1; }
 #am-concept .am-pane-toolbar { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-control); min-width:0; flex:1; }
 #am-concept .am-pane-strip { display:flex; flex:1; min-width:0; overflow:auto; gap:var(--am-space-1); padding:var(--am-space-1); }
 #am-concept .am-pane-tab { display:flex; flex:0 0 auto; align-items:center; max-inline-size:calc(var(--am-control) * 7); padding-inline-end:var(--am-space-1); border-radius:var(--am-radius-s); cursor:grab; }
@@ -1510,6 +1515,16 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-pane-cell { display:flex; flex-direction:column; min-width:0; min-height:0; }
 #am-concept .am-pane-cell > :is(.am-chat,.am-pane-conversation) { flex:1; min-height:0; }
 #am-concept .am-pane-header { display:flex; flex:none; min-width:0; padding:var(--am-space-1); border-block-end:1px solid var(--am-line); }
+#am-concept .am-pane-header[data-caption] { align-items:center; min-block-size:var(--am-caption-height); padding-block:0; }
+#am-concept .am-pane-header[data-caption-end] > #list-toggle { flex:none; margin-inline-start:auto; }
+#am-concept .am-pane-header[data-caption-end]:has(> :is(#list-toggle,.am-pane-strip):not([hidden])) > .am-pane-tab { min-inline-size:0; flex-shrink:1; }
+#am-concept .am-pane-header > .am-pane-strip { padding-block:0; }
+body.am-frameless #am-concept .am-pane-header[data-caption-end] { padding-inline-end:calc(3 * var(--am-window-button-width) + var(--am-control-compact) + 2 * var(--am-space-1)); }
+@media (min-width:621px) {
+  body.am-mac-titlebar #am-concept.am-nav-collapsed .am-pane-header[data-caption-start] {
+    padding-inline-start:calc(var(--am-mac-caption-reserve) + var(--am-control-compact) + var(--am-gap-content));
+  }
+}
 #am-concept .am-pane-header .am-pane-tab { max-inline-size:min(100%,calc(var(--am-control) * 7)); }
 #am-concept .am-pane-chat { display:block; inline-size:100%; block-size:100%; border:0; background:var(--am-bg); }
 #am-concept .am-pane-dragging .am-pane-chat { pointer-events:none; }

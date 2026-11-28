@@ -1243,11 +1243,10 @@ if (require.main === module) (async()=>{
       assert.equal(footerCenters.length,3);
       assert(Math.max(...footerCenters)-Math.min(...footerCenters)<=0.5,JSON.stringify(footerCenters));
       const viewportEnd=await draftPage.locator('#thread').evaluate(thread=>{
-        const field=document.querySelector('#compose .am-compose-field').getBoundingClientRect();
         const footer=thread.parentElement.querySelector('.am-chat-footer').getBoundingClientRect();
-        return [thread.getBoundingClientRect().bottom,field.top,footer.top,getComputedStyle(thread).bottom];
+        return [thread.getBoundingClientRect().bottom,footer.bottom,footer.height];
       });
-      assert(Math.abs(viewportEnd[0]-viewportEnd[1])<1,JSON.stringify(viewportEnd));
+      assert(viewportEnd[2]>0&&Math.abs(viewportEnd[0]-viewportEnd[1])<1,JSON.stringify(viewportEnd));
       await conversation.evaluate(thread=>{
         thread.scrollTop=thread.scrollHeight;
       });
@@ -1706,8 +1705,10 @@ if (require.main === module) (async()=>{
         await header.hover();
         assert.equal(await plus.evaluate(node=>getComputedStyle(node).opacity),'1');
         const rowFill=await header.evaluate(node=>getComputedStyle(node).backgroundColor);
+        const idleColor=await plus.evaluate(node=>getComputedStyle(node).color);
         await plus.hover();
         assert.equal(await plus.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+        assert.notEqual(await plus.evaluate(node=>getComputedStyle(node).color),idleColor);
         assert.equal(await header.evaluate(node=>getComputedStyle(node).backgroundColor),rowFill);
         const aligned=await header.evaluate(row=>{
           const edge=row.getBoundingClientRect();

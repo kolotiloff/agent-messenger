@@ -504,6 +504,7 @@
   const restartOutcome='the client restarted during this run; the outcome is unknown and nothing is retried';
   const restartLabel=()=>tr('Клиент перезапустился во время работы; результат неизвестен');
   let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneActive=null,paneDragging=null;
+  const narrowPaneLayout=matchMedia('(max-width:780px)');
   let paneTree=null,paneLegacy='',paneDropPreview=null;
   function savePanes(){
     remember('kotel-task-panes',JSON.stringify([...taskPanes.values()].map(({id,project,title,placement})=>({id,project,title,placement}))));
@@ -522,6 +523,7 @@
     const before=[...taskPanes.values()],index=before.indexOf(pane);
     const primary=$('task-primary-pane');
     const hadFocus=pane.tab.contains(document.activeElement)||pane.cell.contains(document.activeElement);
+    if(pane.header.contains(paneStrip))placePaneCaption([]);
     pane.chat.contentWindow?.messengerCancelDictation?.();
     taskPanes.delete(pane.id);
     paneTree=trimPaneTree(paneTree,new Set(taskPanes.keys()));
@@ -601,7 +603,28 @@
       cell.style.setProperty('--pane-row',String(i+1));
       cell.style.gridArea=[ys.indexOf(top)+1,xs.indexOf(left)+1,ys.indexOf(bottom)+1,xs.indexOf(right)+1].join(' / ');
     }
+    return positions;
   }
+  function placePaneCaption(positions){
+    const toolbar=paneToolbar.parentElement;
+    const layout=toolbar.parentElement;
+    const top=positions.length<=1?[]:narrowPaneLayout.matches?positions.slice(0,1):positions.filter(position=>position.top===0);
+    const first=taskPanes.get(top[0]?.node)?.header;
+    const last=taskPanes.get(top.at(-1)?.node)?.header;
+    const destination=last||paneToolbar;
+    const toggle=$('list-toggle');
+    layout.toggleAttribute('data-split-caption',!!last);
+    toolbar.hidden=!!last;
+    for(const {header} of taskPanes.values()){
+      header.toggleAttribute('data-caption',top.some(position=>taskPanes.get(position.node).header===header));
+      header.toggleAttribute('data-caption-start',header===first);
+      header.toggleAttribute('data-caption-end',header===last);
+    }
+    if(paneStrip.parentElement!==destination)destination.append(paneStrip);
+    paneStrip.setAttribute('role',last?'presentation':'tablist');
+    if(!toggle.closest('.am-window-controls')&&toggle.parentElement!==(last||toolbar))(last||toolbar).append(toggle);
+  }
+  narrowPaneLayout.addEventListener('change',syncTaskPanes);
   if(!paneHost)window.messengerPaneTitle=(frame,title)=>{
     const pane=taskPanes.get(frame.closest('.am-pane-cell')?.dataset.taskPane);
     if(!pane||pane.chat!==frame)return;
@@ -657,8 +680,9 @@
       }
       paneStrip.hidden=!nextTab;
     });
-    if(visible)applyPaneTree(visibleIDs);
-    else{paneGrid.style.gridTemplateColumns='';paneGrid.style.gridTemplateRows='';}
+    const positions=visible?applyPaneTree(visibleIDs):[];
+    if(!visible){paneGrid.style.gridTemplateColumns='';paneGrid.style.gridTemplateRows='';}
+    preservePaneFocus(()=>placePaneCaption(positions));
     paneBoard.toggleAttribute('data-single',visible<=1);
   }
   function activatePane(pane){
@@ -6011,7 +6035,7 @@
       window.amWindow(e.detail===2?'maximize':'drag');
     });
   }
-  const titleInteractive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls';
+  const titleInteractive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls,.am-pane-tab';
   // Mac (T-082): the page runs under a transparent title bar with the
   // system's buttons at the top left. The app moves the window by the empty
   // parts of the top, so the page tells it where they are: the tab row and
@@ -6048,15 +6072,17 @@
       // A modal covers the title row, so its controls must receive clicks.
       if(!root.querySelector('dialog:modal')){
         const tabs=root.querySelector('.am-tabs'),side=root.querySelector('.am-sidebar');
+        const paneHeaders=[...root.querySelectorAll('.am-pane-header[data-caption]')];
         if(taskSidebarPreview&&tab==='tasks'){
           const main=root.querySelector('.am-main'),r=main.getBoundingClientRect();
           const height=parseFloat(getComputedStyle(main).paddingBlockStart);
           const bar=toolbar?.getBoundingClientRect();
-          zones.push(bar?.width&&matchMedia('(min-width:621px)').matches?bar:new DOMRect(r.left,0,r.width,height));
+          if(paneHeaders.length&&matchMedia('(min-width:621px)').matches)zones.push(...paneHeaders.map(node=>node.getBoundingClientRect()));
+          else zones.push(bar?.width&&matchMedia('(min-width:621px)').matches?bar:new DOMRect(r.left,0,r.width,height));
         }else if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
         if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
         if(navToggle?.offsetWidth)holes.push(navToggle.getBoundingClientRect());
-        for(const parent of [tabs,side,toolbar])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
+        for(const parent of [tabs,side,toolbar,...paneHeaders])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
           const r=node.getBoundingClientRect();
           if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
         }

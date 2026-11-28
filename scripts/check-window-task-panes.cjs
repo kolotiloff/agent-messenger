@@ -8,6 +8,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
 (async () => {
   const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const engine = process.env.BROWSER_ENGINE || 'chromium';
+  const macTitlebar = process.env.MAC_TITLEBAR === '1';
   const browser = await playwright[engine].launch();
   try {
     const page = await browser.newPage({viewport:{width:1450,height:900},colorScheme:'dark'});
@@ -17,16 +18,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const reads = [], writes = [], errors=[];
     page.on('pageerror',error=>errors.push(error.message));
     let stoppedPrimary=false;
-    await page.addInitScript(() => {
+    await page.addInitScript(macTitlebar => {
       if(window===window.top){
+        window.amMacTitlebar=macTitlebar;
         window.dictationCommands=[];
-        window.webkit={messageHandlers:{composerDictation:{
-          postMessage:message=>window.dictationCommands.push(message),
-        }}};
+        window.webkit={messageHandlers:{
+          composerDictation:{postMessage:message=>window.dictationCommands.push(message)},
+          titlebar:{postMessage:message=>{window.titlebarAreas=message;}},
+        }};
       }
       const every = window.setInterval;
       window.setInterval = (callback, delay, ...args) => every(callback, delay===2000 ? 200 : delay, ...args);
-    });
+    },macTitlebar);
     await page.route('https://messenger-preview.test/**', async route => {
       const request = route.request();
       const url = new URL(request.url());
@@ -184,11 +187,42 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert(right.x>left.x&&right.y===left.y&&below.y>left.y&&below.x===left.x&&below.width>left.width+right.width-2);
     }
     await verifySplit();
+    assert.equal(await page.locator('.am-task-toolbar').isVisible(),false);
+    const captionTop=await page.locator('#task-layout').evaluate(node=>node.getBoundingClientRect().top);
+    const archive=page.locator('#list-toggle');
+    const archiveBox=await archive.boundingBox();
+    for(const title of [third,second]){
+      const header=await tab(title).locator('xpath=ancestor::*[@role="tablist"]').boundingBox();
+      assert(Math.abs(header.y-captionTop)<1&&archiveBox.y>=header.y&&archiveBox.y+archiveBox.height<=header.y+header.height);
+    }
+    assert.equal(await archive.evaluate(node=>node.closest('.am-pane-header')?.hasAttribute('data-caption-end')),true);
+    if(macTitlebar){
+      assert.equal(await page.locator('body').evaluate(node=>node.classList.contains('am-mac-titlebar')),true);
+      await page.waitForFunction(()=>[...document.querySelectorAll('[data-caption] .am-close-x')].every(button=>{
+        const box=button.getBoundingClientRect();
+        return window.titlebarAreas?.holes.some(([x,y,w,h])=>Math.abs(x-box.x)<1&&Math.abs(y-box.y)<1&&Math.abs(w-box.width)<1&&Math.abs(h-box.height)<1);
+      }));
+    }
+    const close=tab(first).locator('xpath=..').locator('.am-close-x');
+    await tab(first).hover();
+    const idleCloseColor=await close.evaluate(node=>getComputedStyle(node).color);
+    await close.hover();
+    const closeStyle=await close.evaluate(node=>{
+      const style=getComputedStyle(node);
+      return {color:style.color, background:style.backgroundColor};
+    });
+    assert.equal(closeStyle.background,'rgba(0, 0, 0, 0)');
+    assert.notEqual(closeStyle.color,idleCloseColor);
     for(const title of [first,second,third]){
       const composer=content(title).locator('.am-compose-field:visible');
       assert(await composer.locator('#answer-send svg').isVisible());
       assert.equal(await content(title).locator('.am-watch-compose').count(),0);
-      assert(await content(title).locator('#thread .am-message-content').count());
+      const thread=content(title).locator('#thread');
+      assert(await thread.locator('.am-message-content').count());
+      assert(await thread.evaluate(node=>{
+        const footer=node.parentElement.querySelector('.am-chat-footer').getBoundingClientRect();
+        return footer.height>0&&Math.abs(node.getBoundingClientRect().bottom-footer.bottom)<1;
+      }),title+' has a scrollbar beside its composer');
     }
     const leftComposer=await content(third).locator('.am-compose-field:visible').boundingBox();
     const rightComposer=await content(second).locator('.am-compose-field:visible').boundingBox();
@@ -207,6 +241,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     if(output)await page.screenshot({path:path.join(output,'task-split.png')});
     await page.setViewportSize({width:760,height:850});
     assert.equal(await page.locator('.am-pane-grid').evaluate(grid=>getComputedStyle(grid).gridTemplateColumns.split(' ').length),1);
+    await page.waitForFunction(()=>document.querySelectorAll('.am-pane-header[data-caption]').length===1);
+    assert.equal(await archive.evaluate(node=>node.closest('.am-pane-header')?.hasAttribute('data-caption-start')),true);
     await page.setViewportSize({width:1450,height:900});
     await page.evaluate(()=>{
       Object.defineProperty(document,'hidden',{configurable:true,value:true});

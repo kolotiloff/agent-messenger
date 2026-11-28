@@ -52,6 +52,10 @@ T-371 tracks shared task renaming and the separate Archive and Delete permanentl
 
 The T-372 branch also moves computer update notices to the top-right of the window, closes update menus when the pointer leaves, and redraws the spinner around the same fixed center. A recorded restart and a peer’s current connectivity are shown independently. Chromium and WebKit exercised the task feeds and update controls against fictional data.
 
+The T-375 follow-up extends the scrollbar to the bottom of every chat pane. The composer stays fixed, and the last reply actions retain their clearance when it grows. Hovering the tab close icon or the sidebar group add icon changes its color without filling the button.
+
+The top panes share the caption row with the archive toggle. Lower panes keep their local headers. The primary labels in the left sidebar are slightly lighter in the dark theme.
+
 T-373 adds a follow-up composer to stopped and recoverable conversations. The original worker conversation and messages remain attached to the task; stopping the follow-up is an independent operation. Recovery still requires confirmation that the old worker ended. Split views use one line at each boundary. The macOS native buttons and sidebar toggle share the top row, and the Linux shell uses an alpha visual when the compositor supports it. Local and peer stop/resume tests and both browser engines passed. The Linux binaries cross-compiled for both architectures and the macOS shell type-checked. Native appearance still needs observation.
 
 T-374 places project references in document tabs beside the chat. A separate, resizable text preview is an explicit action. The coordinator setup status and the executor's injected tool connection are independent. General defaults to Inter and retains saved choices. The model search groups available options by agent. Computer and project context menus show update and cancel as text actions above the installed version. The message footer appears on hover or focus and remains visible on touch screens.
