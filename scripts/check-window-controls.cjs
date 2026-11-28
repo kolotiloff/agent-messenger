@@ -474,7 +474,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[data-tab=tasks]').click();
       await page.locator('#notices .am-notice').nth(2).waitFor({timeout:10000});
       assert.equal(await page.locator('.am-chat-footer #notices').count(),0);
-      assert.equal(await page.locator('.am-chat > #notices').count(),1,'update messages are pinned above the thread');
+      assert.equal(await page.locator('.am-window > #notices').count(),1,'update messages belong to the window');
       assert.equal(await page.locator('#notices .am-notice').count(), 3);
       assert.deepEqual(await page.locator('#notices .am-notice').evaluateAll(n => n.map(c => c.dataset.key)),
         ['update-fixture-update-3-refused','update-fixture-update-4-refused','update-fixture-update-5-refused']);

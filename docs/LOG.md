@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-372 Task panes and update feedback
+
+Codex fixed secondary feeds to match the window API and verified simultaneous task messages, independent drafts, the top tab strip, and direct sidebar drops in Chromium and WebKit. Update controls share a centered spinner. Update menus close on pointer exit, and compact confirmations sit at the top right of the window.
+
 ## 2026-11-27 — T-338 and T-365 build 119
 
 [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) merged the desktop migration and task controls after [all eight checks passed](https://github.com/kolotiloff/agent-messenger/actions/runs/46090410913). The font menu sizes itself to its longest label. Chromium and WebKit verified the complete label and its checkmark. The [signed release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/46092302620) was dispatched for 1.0.16-preview.119 from the merged source.

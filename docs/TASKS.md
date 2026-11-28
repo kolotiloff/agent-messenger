@@ -49,7 +49,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-372 | Open multiple task conversations and keep separate drafts. | window | Implemented with tabs, keyboard and pointer reorder, and three pane layouts. Tested in Chromium and WebKit. |
+| T-372 | Open multiple task conversations and keep separate drafts. | window | Follow-up for build 119 fixes feed decoding and puts tabs in the top toolbar. Three layouts and sidebar drop targets verified in Chromium and WebKit. |
 | T-371 | Manage task names and archive entries. | window / network | Origin-owned edits, replicated metadata and explicit manual close upon interruption. Remote observer editing remains open. |
 | T-370 | Refine Statistics, Settings navigation, context details and offline presence. | window | [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
 | T-369 | Adjust the dark palette and compare sidebar task highlights. | window | Dark appearance uses a slightly darker sidebar and brighter text. The preview compares the current highlight with stronger row fills. |

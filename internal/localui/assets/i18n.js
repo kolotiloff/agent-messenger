@@ -8,6 +8,7 @@
   try{if(localStorage.getItem('messenger-lang')==='en')lang='en';}catch(_){}
   const EN={
   'Не удалось загрузить задачу':'Could not load task',
+  'Загружаем задачу…':'Loading task…',
   'Статус':'Status',
   'Исполнитель':'Worker',
   'Другой компьютер':'Another computer',

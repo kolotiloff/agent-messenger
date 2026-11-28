@@ -446,7 +446,9 @@
   }
   const taskPanes=new Map();
   const paneLayouts=['columns','stack','grid'];
-  let paneBoard=null,paneStrip=null,paneGrid=null,paneTimer=null,paneActive=null,paneDragging=null;
+  const restartOutcome='the client restarted during this run; the outcome is unknown and nothing is retried';
+  const restartLabel=()=>tr('Клиент перезапустился во время работы; результат неизвестен');
+  let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneTimer=null,paneActive=null,paneDragging=null;
   function savePanes(){
     remember('kotel-task-panes',JSON.stringify([...taskPanes.values()].map(({id,project,title,placement})=>({id,project,title,placement}))));
     remember('kotel-active-pane',paneActive?.id||'');
@@ -469,11 +471,14 @@
     if(paneActive===pane)paneActive=before[index+1]||before[index-1]||null;
     if(!taskPanes.size&&paneBoard){
       const primary=paneGrid.querySelector('.am-chat');
+      primary.hidden=false;primary.style.removeProperty('order');
+      primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
+      $('task-head').hidden=false;paneToolbar.remove();
       preservePaneFocus(()=>paneBoard.replaceWith(primary));
-      paneBoard=paneStrip=paneGrid=null;
+      paneBoard=paneStrip=paneToolbar=paneGrid=null;
       clearInterval(paneTimer);paneTimer=null;
     }
-    syncTaskPanes();
+    syncTaskPanes();renderMachines();
     if(hadFocus){
       if(paneActive)paneActive.label.focus({preventScroll:true});
       else if(!$('compose').hidden&&!$('answer-text').disabled)$('answer-text').focus({preventScroll:true});
@@ -516,7 +521,7 @@
       if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||!it.text)continue;
       const message=el('div',undefined,'am-pane-message');
       const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
-      message.append(el('span',role,'am-small am-muted'),richText(it.text));
+      message.append(el('span',role,'am-small am-muted'),richText(it.kind==='outcome'&&it.text===restartOutcome?restartLabel():it.text));
       pane.body.append(message);
     }
     pane.count=offset+(snapshot.items?.length||0);
@@ -532,23 +537,13 @@
   }
   async function updatePane(pane){
     if(!paneVisible(pane))return;
-    if(pane.id===selectedTask&&pane.project===project){
-      abortPaneRequest(pane);
-      if(feed?.task.id===pane.id&&feed.task.project===pane.project&&pane.primarySnapshot!==feed){
-        const offset=pane.cursor&&pane.count<=(feed.items?.length||0)&&feed.append_from===pane.count?pane.count:0;
-        renderPaneSnapshot(pane,offset?{...feed,items:feed.items.slice(offset)}:feed,offset);
-        pane.primarySnapshot=feed;
-      }
-      return;
-    }
-    pane.primarySnapshot=null;
     if(pane.request)return;
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
     pane.request=controller;
     try{
       const query=new URLSearchParams({id:pane.id,cursor:pane.cursor||''});
       const snapshot=await api('/api/task?'+query,5000,controller.signal);
-      if(controller.signal.aborted||!paneVisible(pane)||snapshot.task?.id!==pane.id||snapshot.task.project!==pane.project)return;
+      if(controller.signal.aborted||!paneVisible(pane)||snapshot.task?.id!==pane.id)return;
       if(snapshot.append_from&&snapshot.append_from!==pane.count){pane.cursor='';return;}
       renderPaneSnapshot(pane,snapshot,snapshot.append_from||0);
     }catch(error){if(!controller.signal.aborted)pane.status.textContent=tr('Не удалось загрузить задачу');}
@@ -557,24 +552,47 @@
   function syncTaskPanes(){
     if(!paneBoard)return;
     const enabled=tab==='tasks'&&!document.hidden;
-    let visible=0;
+    const primary=paneGrid.querySelector('.am-chat');
+    const current=taskPanes.get(selectedTask);
+    const usePrimary=!!current&&current.project===project;
+    const showPrimary=usePrimary&&(current===paneActive||current.placement==='alongside');
+    primary.hidden=!!paneActive&&!draftOpen&&!showPrimary;
+    if(showPrimary){
+      primary.setAttribute('role','tabpanel');
+      primary.setAttribute('aria-labelledby',current.label.id);
+    }
+    if(!showPrimary){
+      primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
+      primary.style.removeProperty('order');
+    }
+    $('task-head').hidden=!draftOpen;
+    paneToolbar.hidden=draftOpen;
+    let index=0,visible=0;
     for(const pane of taskPanes.values()){
       const active=pane===paneActive;
-      pane.node.hidden=pane.placement==='tab'&&!active;
+      const showing=!draftOpen&&!!paneActive&&(active||pane.placement==='alongside');
+      const full=usePrimary&&pane===current&&showPrimary;
+      pane.node.hidden=!showing||full;
+      pane.node.style.order=index;
+      if(full)primary.style.order=index;
+      pane.label.setAttribute('aria-controls',full?primary.id:pane.node.id);
+      if(showing)visible++;
+      index++;
       pane.label.setAttribute('aria-selected',String(active));
       pane.label.tabIndex=active?0:-1;
       pane.close.tabIndex=active?0:-1;
-      if(!pane.node.hidden)visible++;
       if(!enabled||pane.node.hidden)abortPaneRequest(pane);
       else updatePane(pane);
     }
     paneBoard.style.setProperty('--am-watch-visible',Math.max(1,visible));
+    paneBoard.toggleAttribute('data-single',visible<=1);
     if(!enabled&&paneTimer){clearInterval(paneTimer);paneTimer=null;}
     if(enabled&&!paneTimer)paneTimer=setInterval(()=>taskPanes.forEach(updatePane),5000);
   }
   function activatePane(pane){
     paneActive=pane;
-    syncTaskPanes();savePanes();
+    if(draftOpen){closeTaskDraft();renderThread();}
+    syncTaskPanes();renderMachines();savePanes();
   }
   function reorderPane(pane,target){
     const ordered=[...taskPanes.values()];
@@ -593,7 +611,7 @@
   function setPaneLayout(layout){
     if(!paneLayouts.includes(layout))layout='grid';
     paneBoard.dataset.layout=layout;
-    for(const button of paneBoard.querySelectorAll('[data-pane-layout]')){
+    for(const button of paneToolbar.querySelectorAll('[data-pane-layout]')){
       button.setAttribute('aria-pressed',String(button.dataset.paneLayout===layout));
     }
     remember('kotel-pane-layout',layout);
@@ -604,17 +622,25 @@
       paneGrid=el('div',undefined,'am-pane-grid');
       paneStrip=el('div',undefined,'am-pane-strip');
       paneStrip.setAttribute('role','tablist');paneStrip.setAttribute('aria-label',tr('Вкладки задач'));
-      const toolbar=el('div',undefined,'am-pane-toolbar');
+      paneToolbar=el('div',undefined,'am-pane-toolbar');
       const layouts=el('div',undefined,'am-pane-layouts');
       for(const [mode,text] of [['columns',tr('Столбцы')],['stack',tr('Строки')],['grid',tr('Сетка')]]){
         const button=el('button',text,'am-quiet-button');
-        button.type='button';button.dataset.paneLayout=mode;button.onclick=()=>setPaneLayout(mode);layouts.append(button);
+        button.type='button';button.dataset.paneLayout=mode;button.onclick=()=>{
+          for(const pane of taskPanes.values())pane.placement='alongside';
+          setPaneLayout(mode);syncTaskPanes();savePanes();
+        };layouts.append(button);
       }
-      toolbar.append(paneStrip,layouts);paneBoard.append(toolbar,paneGrid);
+      paneToolbar.append(paneStrip,layouts);paneBoard.append(paneGrid);
+      $('task-head').after(paneToolbar);
       const primary=$('task-layout').querySelector('.am-chat');
+      primary.id='task-primary-pane';
       preservePaneFocus(()=>{primary.replaceWith(paneBoard);paneGrid.append(primary);});
       setPaneLayout(recall('kotel-pane-layout'));
+      const current=selectedTaskRow();
+      if(!restore&&current&&current.id!==task.id)openTaskPane(current,project,placement,true);
     }
+    if(placement==='alongside'&&paneActive)paneActive.placement='alongside';
     if(taskPanes.has(task.id)){
       const pane=taskPanes.get(task.id);
       pane.placement=placement;activatePane(pane);return;
@@ -622,7 +648,7 @@
     const node=el('section',undefined,'am-watch-pane'), tabNode=el('div',undefined,'am-pane-tab');
     const label=el('button',task.title,'am-quiet-button');
     const close=el('button',undefined,'am-icon-btn am-close-x');
-    const status=el('span','','am-small am-muted');
+    const status=el('span',tr('Загружаем задачу…'),'am-small am-muted');
     const heading=el('h3',task.title);
     const body=el('div',undefined,'am-watch-body');
     const input=el('textarea',undefined,'am-watch-input');
@@ -664,22 +690,68 @@
       }
     };
     tabNode.ondragstart=event=>{
-      paneDragging=pane;event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',pane.id);
+      startPaneDrag(event,pane,pane.project);
     };
     tabNode.ondragover=event=>{
-      if(paneDragging&&paneDragging!==pane){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
+      if(paneDragging&&paneDragging.task.id!==pane.id){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
     };
     tabNode.ondragleave=()=>tabNode.classList.remove('am-pane-drop');
     tabNode.ondrop=event=>{
-      if(paneDragging){event.preventDefault();reorderPane(paneDragging,pane);paneDragging=null;}
-      tabNode.classList.remove('am-pane-drop');
+      if(paneDragging){
+        event.preventDefault();
+        const source=taskPanes.get(paneDragging.task.id);
+        if(source)reorderPane(source,pane);
+        else openTaskPane(paneDragging.task,paneDragging.project);
+        finishPaneDrag();
+      }
     };
-    tabNode.ondragend=()=>{
-      paneDragging=null;paneStrip?.querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
-    };
+    tabNode.ondragend=finishPaneDrag;
     tabNode.append(label,close);node.append(heading,status,body,compose);
     paneStrip.append(tabNode);paneGrid.append(node);taskPanes.set(task.id,pane);
     if(!restore)activatePane(pane);
+  }
+  function startPaneDrag(event,task,name){
+    paneDragging={task,project:name};
+    $('task-layout').classList.add('am-pane-dragging');
+    event.dataTransfer.effectAllowed='move';
+    event.dataTransfer.setData('text/plain',task.id);
+  }
+  function finishPaneDrag(){
+    paneDragging=null;
+    $('task-layout').classList.remove('am-pane-dragging');
+    $('task-layout').querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
+  }
+  function installPaneDropTargets(){
+    const layout=$('task-layout');
+    const targets=el('div',undefined,'am-pane-targets');
+    const layouts=[
+      ['columns',tr('Столбцы'),'M12 5v14'],
+      ['stack',tr('Строки'),'M4 12h16'],
+      ['grid',tr('Сетка'),'M12 5v14M4 12h16'],
+    ];
+    for(const [mode,title,divider] of layouts){
+      const target=el('div',undefined,'am-pane-target');
+      const preview=el('div',undefined,'am-pane-target-preview');
+      preview.append(svgIcon(['M4 5h16v14H4z',divider]),el('span',title));
+      target.append(preview);
+      target.dataset.dropLayout=mode;
+      target.ondragover=event=>{
+        if(!paneDragging)return;
+        event.preventDefault();event.dataTransfer.dropEffect='move';target.classList.add('am-pane-drop');
+      };
+      target.ondragleave=event=>{if(!target.contains(event.relatedTarget))target.classList.remove('am-pane-drop');};
+      target.ondrop=event=>{
+        if(!paneDragging)return;
+        event.preventDefault();
+        const {task,project:name}=paneDragging;
+        finishPaneDrag();
+        openTaskPane(task,name,'alongside');
+        for(const pane of taskPanes.values())pane.placement='alongside';
+        setPaneLayout(mode);syncTaskPanes();savePanes();
+      };
+      targets.append(target);
+    }
+    layout.append(targets);
   }
   function taskMenu(event,t,p,name,inArchive=false){
     event.preventDefault();
@@ -901,6 +973,11 @@
       document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))close();});
       menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}});
       menu.addEventListener('focusout',e=>{if(!menu.contains(e.relatedTarget))close();});
+      document.addEventListener('pointermove',event=>{
+        if(event.pointerType==='mouse'&&menu.matches(':popover-open')&&
+          menu.querySelector('.am-context-device')&&!menu.contains(event.target))close();
+      });
+      window.addEventListener('blur',close);
       window.addEventListener('resize',close);
     }
     const items=[];
@@ -1667,7 +1744,9 @@
       const selection=peer?{peer:peer.peer,id:t.id}:null;
       row.dataset.sidebarFocus=JSON.stringify([name,peer?.peer||'',t.id]);
       row.dataset.motionTask=row.dataset.sidebarFocus;
-      row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
+      const selected=paneActive?!selection&&paneActive.project===name&&paneActive.id===t.id:
+        name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask);
+      row.setAttribute('aria-pressed',String(!draftOpen&&selected));
       const title=el('span',undefined,'am-sidebar-task-title');
       if(groupSelect.value==='project'){
         const machine=peer?sharedComputer(t,peer):computerName(taskComputer(t))||t.remote?.name||taskComputer(t);
@@ -1694,8 +1773,14 @@
       row.append(title,meta);
       row.addEventListener('click',()=>{
         if(tab!=='tasks')show('tasks');
-        selectProject(name,selection?'':t.id,'',selection);
+        if(paneBoard&&!selection)openTaskPane(t,name,taskPanes.get(t.id)?.placement||'tab');
+        else selectProject(name,selection?'':t.id,'',selection);
       });
+      if(!peer){
+        row.draggable=true;
+        row.ondragstart=event=>startPaneDrag(event,t,name);
+        row.ondragend=finishPaneDrag;
+      }
       row.addEventListener('contextmenu',event=>taskMenu(event,t,peer,name));
       rows.append(row);
     }
@@ -2774,8 +2859,7 @@
   }
   function renderThread(){
     composerDictation?.sync();
-    const companion=taskPanes.get(selectedTask);
-    if(companion)updatePane(companion);
+    if(paneBoard)syncTaskPanes();
     const thread=$('thread'),head=$('task-head');
     const panelOpen=!!view?.project&&$('list-toggle').getAttribute('aria-expanded')==='true';
     $('task-panel').hidden=!panelOpen;$('task-layout').classList.toggle('am-queue-collapsed',!panelOpen);
@@ -3604,11 +3688,11 @@
         group=null;
         const overloaded=it.state==='failed'&&capacityFailure(it.text);
         const failedTitle=overloaded?tr('Завершение запуска не подтверждено'):t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой');
-        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
+        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:restartLabel(),cancelled:tr('Задача отменена')}[it.state]||it.state;
         const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad')),line=el('p',text);
         appendEventTime(line,it.at,t.remote&&!t.remote.from);note.append(line);
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
-        if(it.text)note.append(el('p',it.text,'am-small am-muted'));
+        if(it.text&&it.text!==restartOutcome)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
     }
@@ -3636,6 +3720,7 @@
     if(unreachable){
       const since=t.remote.last_seen?stamp(t.remote.last_seen):'';
       if(t.remote.silent&&!t.remote.lost)$('lost-text').textContent='«'+t.remote.name+tr('» на связи, но не отвечает по этой задаче. Что с ней там, неизвестно: она могла и выполниться.');
+      else if(!t.remote.lost&&['interrupted','blocked'].includes(t.state))$('lost-text').textContent=(t.state==='interrupted'?tr('Клиент перезапустился во время работы, и исход задачи неизвестен.'):tr('Процесс исполнителя не завершился полностью, исход задачи неизвестен.'));
       else $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
     }
     const active=activeStates.includes(t.state),box=$('answer-text'),compose=$('compose');
@@ -3754,8 +3839,8 @@
   // The update mark: a down arrow.
   function appendUpdateGlyphs(node){node.append(svgIcon(['M12 3v12m-5-5 5 5 5-5M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4']));}
   function updateSpinner(){
-    // Both ends of the arc are nine units from the center of the viewBox.
-    const icon=svgIcon(['M21 12A9 9 0 1 1 19.2 6.6','M20 3.5l-.8 3.1-3.2.6']);
+    // Keep the rotation axis at the center of the 24-unit viewBox.
+    const icon=svgIcon(['M12 4A8 8 0 1 0 20 12','M17 15l3-3 3 3']);
     icon.classList.add('am-update-spin');
     return icon;
   }
@@ -5529,6 +5614,7 @@
     const toolbar=el('header',undefined,'am-task-toolbar');
     toolbar.append($('task-head'),toggle);
     $('task-layout').prepend(toolbar);
+    installPaneDropTargets();
     toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-label',label);toggle.title=label;
     $('task-panel').setAttribute('aria-label',tr('Архив'));$('task-list-heading').textContent=tr('Архив');
     const plus=$('task-new');
@@ -5543,6 +5629,7 @@
     if(draftOpen)closeTaskDraft();
     if(!taskSidebarPreview&&(!combinedTasks()||computer!==''))taskHistories.clear();
     setProject(name,computer);remember('messenger-project',name);
+    paneActive=shared?null:taskPanes.get(task)||null;
     selectedTask=task;selectedShared=shared;feed=null;feedSignature='';viewSignature='';topTaskScope='';
     if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();
     renderProjects();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();loadProjectActivity();refresh();
@@ -5989,10 +6076,7 @@
     chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');
     const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;
   })).observe(chatFooter);
-  new ResizeObserver(()=>{
-    updateNoticeTooltips();
-    const thread=$('thread');if(feedPinned)thread.scrollTop=thread.scrollHeight;
-  }).observe($('notices'));
+  new ResizeObserver(updateNoticeTooltips).observe($('notices'));
   if(taskSidebarPreview){
     try{
       for(const saved of JSON.parse(recall('kotel-task-panes')||'[]')){
