@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-387 Task shortcuts and composer inputs
+
+Codex added project and computer shortcuts, a consistent context percentage label, installation groups, attachment chips and drop handling, and a slash picker for built-in window actions. The screenshots use the embedded window assets and fictional data in WebKit. Provider-native commands, remote binary transfer, and a Finder drop in an installed build are still unverified. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-28 — T-385 Chat activity and manual archive
 
 Codex added activity feedback, Claude Code reply fragments, a one-minute delay for the final process warning, and owner-controlled archives for personal chats. Scoped coordinator MCP archive reuses the task history action. The Codex worker transport remains T-386. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).

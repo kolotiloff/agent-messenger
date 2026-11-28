@@ -61,8 +61,8 @@ Message actions and the timestamp share a visible row one control gap (8 px) bel
 - `.am-field` is a label with a field under it.
 - Notes about a screen (what works, what does not yet) go in a side column, not between the cards: `.am-server-layout` with `.am-server-aside`. In a window narrower than 1000 px the column moves above the cards.
 - `.am-chrome-icon` shares the 28 px square, 18 px glyph box, 8 px corner radius and hover fill for standalone main-window controls.
-- Task provider marks use 12 px. The chat author, access and context icons, inline tool actions, computer and folder icons, and agent settings marks use 16 px. Provider logos in the Archive filter use 20 px. Drop layout illustrations use 32 px. The Windows caption uses 14 px glyphs in system-style controls.
-- The reply footer centers the model, access label, shield and context ring on the same line. In the draft model menu, scroll the option list within the menu insets and keep search above it.
+- Task provider marks use 12 px. The chat author, access and context icons, inline tool actions, computer and folder icons, and agent settings marks use 16 px. Provider logos in the Archive filter use the same 16 px box. Drop layout illustrations use 32 px. The Windows caption uses 14 px glyphs in system-style controls.
+- The reply footer centers the model, access label, shield and context ring on the same line. Attachment chips sit above the compose field, with the slash menu opening above the chips. In the draft model menu, scroll the option list within the menu insets and keep search above it.
 - `.am-icon-btn` is a square compact button; `.am-primary` the main action; `.am-danger` a destructive action.
 - Status texts: `.am-status-good/-bad/-run/-wait`; dots: `.am-dot-run/-idle/-offline`.
 

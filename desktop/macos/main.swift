@@ -9,6 +9,19 @@ import Darwin
 final class TitlebarWebView: WKWebView {
     var dragZones: [NSRect] = []
     var dragHoles: [NSRect] = []
+    var fileDropZones: [NSRect] = []
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let local = convert(sender.draggingLocation, from: nil)
+        let point = NSPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
+        guard fileDropZones.contains(where: { $0.contains(point) }) else { return super.performDragOperation(sender) }
+        let items = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        guard !items.isEmpty else { return super.performDragOperation(sender) }
+        let paths = items.prefix(17).map(\.path)
+        guard let data = try? JSONSerialization.data(withJSONObject: paths),
+              let json = String(data: data, encoding: .utf8) else { return false }
+        evaluateJavaScript("window.messengerDropFiles?.(\(json), \(point.x), \(point.y))")
+        return true
+    }
     override func mouseDown(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
         let point = NSPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
@@ -476,6 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if message.name == "titlebar", let body = message.body as? [String: Any], let view = web as? TitlebarWebView {
             view.dragZones = rects(body["zones"])
             view.dragHoles = rects(body["holes"])
+            view.fileDropZones = rects(body["fileDrop"])
         }
     }
 

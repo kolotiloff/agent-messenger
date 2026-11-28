@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+T-387 on PR #257 adds New Task actions to computer and project groups, simplifies the context label, groups local agents by installation status, and adds composer attachment chips, file drops and a slash menu for built-in actions. File and folder references resolve on the executor. Browser text drops include the text in the message. T-388 covers provider-native commands and T-389 covers transferring binary files and directories. See D-275.
+
 T-385 on PR #257 keeps personal chats in Projects until the owner archives them. A running chat shows activity before text arrives. Claude Code text deltas now flow through the task feed. The final process warning waits 60 seconds. The coordinator can archive its finished tasks through MCP. The Codex worker still uses completed message items, and T-386 tracks its streaming transport.
 
 Kotel 1.0.16 (build 119) is the desktop migration from 1.0.15. [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) merged at `d6e6ca59d8e1a334f016cce5c7addf2334776b41` after all eight PR checks passed. The [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/46092302620) records the signed upgrade on each platform and publication status. Keep the original repository address until the owner confirms the installed computers have moved over.

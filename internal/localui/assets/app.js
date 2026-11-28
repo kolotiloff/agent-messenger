@@ -10,12 +10,12 @@
   function syncSelects(){selectViews.forEach(view=>view.sync());}
   // Keep the existing select as the source of truth for delivery guards. The
   // visible list is a top-layer popover, so neither pane clips it or grows.
-  function positionPopover(menu,trigger,minWidth,alignEnd=false){
+  function positionPopover(menu,trigger,minWidth,alignEnd=false,preferAbove=false){
     const rect=trigger.getBoundingClientRect(),gap=6,margin=8;
     menu.style.width=minWidth==null?'':Math.min(innerWidth-2*margin,Math.max(rect.width,minWidth))+'px';
     menu.style.maxHeight='none';
     const below=innerHeight-rect.bottom-gap-margin,above=rect.top-gap-margin;
-    const upwards=below<Math.min(300,menu.scrollHeight)&&above>below;
+    const upwards=(preferAbove||below<Math.min(300,menu.scrollHeight))&&above>below;
     const maxHeight=menu.classList.contains('am-searchable-select')?460:360;
     menu.style.maxHeight=Math.max(0,Math.min(maxHeight,upwards?above:below))+'px';
     const width=menu.getBoundingClientRect().width,left=alignEnd?rect.right-width:rect.left;
@@ -167,7 +167,7 @@
     menu.addEventListener('toggle',()=>trigger.setAttribute('aria-expanded',String(isOpen())));
     new MutationObserver(()=>{close();sync();}).observe(select,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});
     window.addEventListener('resize',()=>close());select.addEventListener('change',sync);
-    selectViews.set(select.id,{sync});sync();
+    selectViews.set(select.id,{sync,trigger});sync();
     return trigger;
   }
   const providerPaths = {"claude":["m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"],"cursor":["M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"],"codex":["M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"]};
@@ -1712,7 +1712,23 @@
     count.setAttribute('aria-hidden','true');
     return count;
   }
+  function sidebarNewTask(group,name='',computer){
+    const projects=(view?.projects||[]).map(p=>p.name);
+    const preferred=name||sidebarProject||project;
+    const candidates=name?[name]:Array.from(new Set([preferred,...projects]));
+    const available=candidates.find(candidate=>projects.includes(candidate)&&taskDraftComputers(candidate)
+      .some(p=>(computer===undefined||p.id===computer)&&taskDraftModels(p).length));
+    const label=tr('Новая задача, {group}').replace('{group}',()=>group);
+    const plus=iconButton(label,['M12 4v16M4 12h16'],false,()=>{
+      show('tasks');openTaskDraft(true,available,computer);loadServer();
+    });
+    plus.classList.add('am-chrome-icon','am-group-new');
+    plus.dataset.sidebarFocus=JSON.stringify(['new',name,computer]);
+    plus.disabled=!online||!available||draftSending;
+    return plus;
+  }
   function sidebarTaskRows(body,head,card,computer,items=[],projectGroup=''){
+    head.append(sidebarNewTask(computerName(computer)||computer,projectGroup,computer==='local'?'':computer));
     const key=projectGroup?JSON.stringify([projectGroup,computer]):computer;
     if(!items.length)return;
     const rows=el('div',undefined,'am-sidebar-task-rows');
@@ -1743,8 +1759,8 @@
       appendSidebarRows(rows,items);
     }
   }
-  function appendProjectFolders(container,items,computer,appendRows=appendSidebarRows){
-    const folders=new Map();
+  function appendProjectFolders(container,items,computer,appendRows=appendSidebarRows,projects=[]){
+    const folders=new Map(projects.map(name=>[name,[]]));
     for(const item of items){
       if(!folders.has(item.name))folders.set(item.name,[]);
       folders.get(item.name).push(item);
@@ -1772,6 +1788,7 @@
       }
       button.append(count);
       showFolder(!collapsedFolders.has(key));
+      button.disabled=!tasks.length;
       button.addEventListener('click',()=>{
         const expand=rows.hidden;
         if(expand)collapsedFolders.delete(key);else collapsedFolders.add(key);
@@ -1796,7 +1813,9 @@
         }
       });
       appendRows(rows,tasks,name);
-      folder.append(button,rows);container.append(folder);
+      const heading=el('div',undefined,'am-folder-row');
+      heading.append(button,sidebarNewTask(projectTitle(name),name,computer?(computer==='local'?'':computer):undefined));
+      folder.append(heading,rows);container.append(folder);
     }
   }
   function appendSidebarRows(rows,items){
@@ -2068,7 +2087,7 @@
           rows.append(card);
         }
       }:appendSidebarRows;
-      appendProjectFolders(box,Array.from(sidebarTasks.values()).flat(),'',appendRows);
+      appendProjectFolders(box,Array.from(sidebarTasks.values()).flat(),'',appendRows,sidebarProjects());
       if(!box.childElementCount)box.append(el('p',tr('Нет текущих задач'),'am-small am-muted'));
     }else if(taskSidebarPreview){
       for(const card of box.children){
@@ -2767,7 +2786,7 @@
   function canDraftTask(name){
     return online&&taskDraftComputers(name).some(computer=>taskDraftModels(computer).length);
   }
-  function renderTaskDraft(preferredProject){
+  function renderTaskDraft(preferredProject,preferredComputer){
     const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
     const projects=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
     const requested=typeof preferredProject==='string'?preferredProject:projectSelect.value;
@@ -2775,7 +2794,8 @@
     projectSelect.dataset.selectedProject=name;
     projectOptions(projectSelect,[...projects,['__new',tr('Открыть папку…')]],name,draftSending||!online);
     const computers=taskDraftComputers(name);
-    const current=computerSelect.selectedIndex<0?null:computers.find(p=>p.id===computerSelect.value);
+    const current=preferredComputer!==undefined?computers.find(p=>p.id===preferredComputer):
+      computerSelect.selectedIndex<0?null:computers.find(p=>p.id===computerSelect.value);
     const computer=current||computers.find(p=>taskDraftModels(p).length)||computers[0];
     projectOptions(computerSelect,computers.map(p=>[p.id,p.name]),computer?.id||'',draftSending||!computer);
     const models=taskDraftModels(computer);
@@ -2796,10 +2816,11 @@
     const input=$('task-draft-text');
     input.readOnly=draftSending;
     $('task-draft-add').disabled=draftSending;
-    $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!input.value.trim();
+    const attachmentProblem=composerAttachmentProblem(input);
+    $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!composerMessage(input)||!!attachmentProblem;
     const status=$('task-draft-status');
-    status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
-    status.classList.toggle('am-status-bad',!draftSending&&!!draftAttempt?.error);
+    status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||attachmentProblem||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
+    status.classList.toggle('am-status-bad',!draftSending&&!!(draftAttempt?.error||attachmentProblem));
     composerDictation?.sync();
     syncSelects();
   }
@@ -2819,14 +2840,59 @@
     if($('task-draft-add').getAttribute('aria-expanded')==='true')$('task-draft-add-menu').hidePopover();
     feedSignature='';
   }
-  function openTaskDraft(focus=true){
+  function openTaskDraft(focus=true,name,computer){
     draftOpen=true;
     $('task-new').setAttribute('aria-expanded','true');
     $('task-draft').hidden=false;
     if(!$('task-draft-text').value)$('task-draft-project').value=sidebarProject||project;
     renderThread();
+    if(name)renderTaskDraft(name,computer);
     if(focus)$('task-draft-text').focus();
     renderMachines();renderTaskList();
+  }
+  const composerAttachments=new Map();
+  function composerMessage(input){
+    return [input.value.trim(),...(composerAttachments.get(input)||[]).map(item=>item.text)].filter(Boolean).join('\n\n');
+  }
+  function composerAttachmentProblem(input){
+    const attachments=composerAttachments.get(input)||[];
+    if(input.id==='task-draft-text'&&attachments.some(item=>item.computer!==undefined&&item.computer!==$('task-draft-computer').value))return tr('Вложения находятся на другом компьютере.');
+    return composerMessage(input).length>input.maxLength?tr('Сообщение с вложениями слишком длинное.'):'';
+  }
+  function updateComposerAttachments(input,items){
+    composerAttachments.set(input,items);
+    const form=input.closest('.am-compose');
+    let bar=form.querySelector('.am-composer-attachments');
+    if(!bar){
+      bar=el('div',undefined,'am-composer-attachments');
+      bar.setAttribute('aria-label',tr('Вложения'));
+      input.parentElement.before(bar);
+    }
+    bar.hidden=!items.length;
+    bar.replaceChildren(...items.map(item=>{
+      const chip=el('span',undefined,'am-attachment');
+      chip.title=item.text;
+      const remove=iconButton(tr('Убрать вложение {name}').replace('{name}',()=>item.name),['M6 6l12 12M18 6 6 18'],false,()=>{
+        if(draftSending||answering)return;
+        updateComposerAttachments(input,items.filter(other=>other!==item));
+        input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));
+      });
+      chip.append(el('span',item.name),remove);
+      return chip;
+    }));
+  }
+  function addComposerReferences(input,items){
+    const current=composerAttachments.get(input)||[];
+    const next=[...current];
+    for(const item of items)if(!next.some(other=>other.text===item.text&&other.computer===item.computer))next.push(item);
+    if(next.length>16)return tr('В одно сообщение можно добавить до 16 вложений.');
+    updateComposerAttachments(input,next);
+    input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));
+    return '';
+  }
+  function pathAttachment(path,computer){
+    const parts=path.replace(/[\\/]+$/,'').split(/[\\/]/);
+    return {text:path,name:parts.at(-1)||path,computer};
   }
   function setupComposerPaths(){
     const menu=$('task-draft-add-menu'),pathInput=$('task-draft-path'),manual=$('task-draft-manual-path');
@@ -2846,10 +2912,10 @@
     function insert(path,current){
       if(!path||!valid(current))return;
       const {input,trigger}=current;
-      const addition=(input.value&&!input.value.endsWith('\n')?'\n':'')+path;
-      if(input.value.length+addition.length>input.maxLength){status.textContent=tr('Путь не помещается в сообщение.');place(trigger);return;}
-      input.setRangeText(addition,input.value.length,input.value.length,'end');
-      menu.hidePopover();input.focus();input.dispatchEvent(new Event('input',{bubbles:true}));
+      if(/[\r\n\0]/.test(path)){status.textContent=tr('Этот путь нельзя добавить.');return;}
+      const error=addComposerReferences(input,[pathAttachment(path,current.isDraft?current.computer:undefined)]);
+      if(error){status.textContent=error;place(trigger);return;}
+      menu.hidePopover();
     }
     for(const [trigger,input,isDraft] of [[$('task-draft-add'),$('task-draft-text'),true],[$('answer-add'),$('answer-text'),false]]){
       trigger.addEventListener('click',()=>{
@@ -2890,6 +2956,70 @@
       catch(error){if(valid(current)){status.textContent=pickerError(error);place(current.trigger);}}
       finally{busy=false;for(const [,picker] of pickers)picker.disabled=false;}
     });
+    const chat=root.querySelector('.am-chat-body');
+    const dropLabel=el('div',tr('Перетащите файлы или папку сюда'),'am-attachment-drop');
+    dropLabel.hidden=true;
+    chat.append(dropLabel);
+    const reset=()=>{dropLabel.hidden=true;};
+    const dropTarget=()=>{
+      if(tab!=='tasks'||root.querySelector('dialog:modal'))return null;
+      if(draftOpen&&!draftSending)return $('task-draft-text');
+      if(!$('compose').hidden&&!$('answer-text').disabled&&!answering)return $('answer-text');
+      return null;
+    };
+    const isLocal=input=>input.id==='task-draft-text'?!draftComputer.disabled&&!draftComputer.value:!selectedTaskRow()?.remote;
+    const report=(input,text)=>{
+      const node=$(input.id==='task-draft-text'?'task-draft-status':'answer-status');
+      text||=composerAttachmentProblem(input);
+      node.textContent=text;node.classList.toggle('am-status-bad',!!text);
+    };
+    function addPaths(input,paths){
+      if(!input)return;
+      if(!isLocal(input)){report(input,tr('Укажите путь на компьютере исполнителя через меню вложений.'));return;}
+      if(paths.length>16){report(input,tr('В одно сообщение можно добавить до 16 вложений.'));return;}
+      const eligible=paths.filter(path=>typeof path==='string'&&path.length>0&&path.length<=4096&&!/[\r\n\0]/.test(path));
+      if(eligible.length!==paths.length){report(input,tr('Этот путь нельзя добавить.'));return;}
+      report(input,addComposerReferences(input,eligible.map(path=>pathAttachment(path,input.id==='task-draft-text'?'':undefined))));
+    }
+    window.messengerDropFiles=(paths,x,y)=>{
+      reset();
+      if(Array.isArray(paths)&&chat.contains(document.elementFromPoint(x,y)))addPaths(dropTarget(),paths);
+    };
+    const fileDrop=event=>['Files','text/uri-list'].some(type=>event.dataTransfer.types.includes(type));
+    chat.addEventListener('dragover',event=>{
+      if(!fileDrop(event)||!dropTarget())return;
+      event.preventDefault();event.dataTransfer.dropEffect='copy';dropLabel.hidden=false;
+    });
+    chat.addEventListener('dragleave',event=>{if(!chat.contains(event.relatedTarget))reset();});
+    chat.addEventListener('drop',async event=>{
+      if(!fileDrop(event))return;
+      event.preventDefault();reset();
+      const input=dropTarget();
+      if(!input)return;
+      const data=event.dataTransfer;
+      const paths=data.getData('text/uri-list').split(/\r?\n/).flatMap(line=>{
+        try{
+          const url=new URL(line);
+          if(url.protocol!=='file:'||url.hostname&&url.hostname!=='localhost')return [];
+          return [decodeURIComponent(url.pathname).replace(/^\/([a-z]:\/)/i,'$1')];
+        }catch(_){return [];}
+      });
+      if(paths.length&&isLocal(input)){addPaths(input,paths);return;}
+      const files=[...data.files];
+      if(!files.length||files.length>16||files.some(file=>file.size>input.maxLength)){
+        report(input,tr('Перетащите файл из Finder или выберите его через меню вложений.'));return;
+      }
+      const task=selectedTask,computer=draftComputer.value;
+      try{
+        const decoder=new TextDecoder('utf-8',{fatal:true});
+        const items=await Promise.all(files.map(async file=>{
+          const text=decoder.decode(await file.arrayBuffer());
+          if(text.includes('\0'))throw Error();
+          return {name:file.name,text:tr('Файл {name}').replace('{name}',()=>file.name)+'\n'+text};
+        }));
+        if(input===dropTarget()&&task===selectedTask&&computer===draftComputer.value)report(input,addComposerReferences(input,items));
+      }catch(_){if(input===dropTarget())report(input,tr('Браузер передаёт только содержимое текстовых файлов. Выберите файл в приложении.'));}
+    });
   }
   function setupComposerTokens(){
     const trigger=$('answer-tokens'),menu=$('answer-token-menu');
@@ -2905,6 +3035,75 @@
       event.preventDefault();event.stopPropagation();menu.hidePopover();trigger.focus();
     });
     window.addEventListener('resize',()=>menu.hidePopover());
+  }
+  function setupComposerCommands(){
+    const menu=el('div',undefined,'am-select-menu am-composer-commands');
+    menu.setAttribute('popover','manual');
+    menu.setAttribute('role','listbox');menu.setAttribute('aria-label',tr('Команды'));
+    menu.id='composer-commands';
+    root.append(menu);
+    for(const input of [$('task-draft-text'),$('answer-text')]){
+      input.setAttribute('aria-controls',menu.id);
+      let choices=[],index=0;
+      const draft=input.id==='task-draft-text';
+      const close=()=>{
+        if(menu.matches(':popover-open'))menu.hidePopover();
+        input.removeAttribute('aria-activedescendant');
+        choices=[];
+      };
+      const highlight=()=>{
+        [...menu.children].forEach((option,i)=>option.setAttribute('aria-selected',String(i===index)));
+        input.setAttribute('aria-activedescendant',menu.children[index].id);
+        menu.children[index].scrollIntoView({block:'nearest'});
+      };
+      function refresh(){
+        const query=input.value.match(/^\/([a-z-]*)$/i);
+        if(!query){close();return;}
+        const task=draft?null:selectedTaskRow();
+        choices=[
+          ['/attach',tr('Добавить файл или папку'),()=>$(draft?'task-draft-add':'answer-add').click()],
+          ...(draft?[
+            ...($('task-draft-model').disabled?[]:[['/model',tr('Выбрать модель'),()=>selectViews.get('task-draft-model')?.trigger.click()]])
+          ]:[
+            ['/new',tr('Открыть новую задачу'),()=>openTaskDraft()],
+            ...($('answer-tokens').hidden?[]:[['/usage',tr('Показать контекст и токены задачи'),()=>$('answer-tokens').click()]]),
+            ...($('task-stop').hidden||$('task-stop').disabled?[]:[['/stop',tr('Остановить задачу'),stopSelectedTask]]),
+            ...(task&&!task.remote?.from&&!task.archived&&finishedStates.includes(task.state)?[
+              ['/archive',tr('Отправить в архив'),()=>changeTaskArchive(task,project,'archive')]
+            ]:[])
+          ])
+        ].filter(([command])=>command.startsWith('/'+query[1].toLowerCase()));
+        if(!choices.length){close();return;}
+        index=0;
+        const pick=choice=>{
+          close();input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));choice[2]();
+        };
+        menu.replaceChildren(...choices.map((choice,i)=>{
+          const row=el('div',undefined,'am-select-option');row.id='composer-command-'+i;row.setAttribute('role','option');
+          row.append(el('code',choice[0]),el('span',choice[1],'am-muted'));
+          row.addEventListener('mousedown',event=>event.preventDefault());
+          row.addEventListener('click',()=>pick(choice));
+          return row;
+        }));
+        if(!menu.matches(':popover-open'))menu.showPopover();
+        const field=input.closest('.am-compose-field');
+        const attachments=field.previousElementSibling;
+        positionPopover(menu,attachments?.matches('.am-composer-attachments:not([hidden])')?attachments:field,260,false,true);
+        highlight();
+      }
+      input.addEventListener('input',refresh);
+      input.addEventListener('blur',close);
+      input.addEventListener('keydown',event=>{
+        if(!choices.length||event.isComposing)return;
+        if(!['ArrowDown','ArrowUp','Enter','Tab','Escape'].includes(event.key)||event.shiftKey)return;
+        event.preventDefault();event.stopImmediatePropagation();
+        if(event.key==='Escape'){close();return;}
+        if(event.key==='Enter'||event.key==='Tab'){menu.children[index].click();return;}
+        index=(index+choices.length+(event.key==='ArrowDown'?1:-1))%choices.length;
+        highlight();
+      },true);
+      window.addEventListener('resize',close);
+    }
   }
   function renderComposerTokens(task,model,available){
     const trigger=$('answer-tokens'),menu=$('answer-token-menu');
@@ -2933,7 +3132,6 @@
     const spent=$('answer-task-total');
     spent.hidden=!task.usage;
     spent.textContent=spent.hidden?'':tr('{tokens} по задаче').replace('{tokens}',tokensFull(task.usage.input_tokens+task.usage.output_tokens));
-    if(hasContext&&task.state!=='running')$('answer-context-summary').textContent=tr('Последний замер контекста')+': '+occupancy;
     const details=$('answer-context-count');
     details.textContent=count;
     details.hidden=!count;
@@ -2947,7 +3145,7 @@
     const split=selection.indexOf(':');
     const payload={
       project:$('task-draft-project').value,computer:$('task-draft-computer').value,
-      agent:selection.slice(0,split),model:selection.slice(split+1),text:$('task-draft-text').value.trim()
+      agent:selection.slice(0,split),model:selection.slice(split+1),text:composerMessage($('task-draft-text'))
     };
     if($('task-draft-access').value)payload.access=$('task-draft-access').value;
     const key=JSON.stringify(payload);
@@ -2958,7 +3156,7 @@
       if(typeof id!=='string'||!id)throw Error(tr('Действие не подтверждено. Проверьте состояние и повторите.'));
       draftAttempt=null;
       $('task-draft-access').value='';
-      const input=$('task-draft-text');input.value='';sizeComposer(input);
+      const input=$('task-draft-text');input.value='';updateComposerAttachments(input,[]);sizeComposer(input);
       if(draftOpen){
         if(sidebarProject)sidebarProject=payload.project;
         selectProject(payload.project,id,'');
@@ -3901,7 +4099,7 @@
     box.placeholder=taskMessagePlaceholder(t);
     $('answer-send').hidden=!canDraft;
     $('answer-add').hidden=!taskSidebarPreview||!canDraft;
-    if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';$('answer-status').textContent='';}
+    if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';updateComposerAttachments(box,[]);$('answer-status').textContent='';}
     renderStopControls(t);
     sizeAnswer();
     if(atBottom){thread.scrollTop=thread.scrollHeight;feedPinned=true;}
@@ -3979,17 +4177,20 @@
     const available=canSendTaskMessage(task);
     box.title=canDraftTaskMessage(task)&&!available?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
     send.title=box.title||tr('Отправить ответ');
-    send.disabled=answering||!available||!box.value.trim();
+    const problem=composerAttachmentProblem(box);
+    send.disabled=answering||!available||!composerMessage(box)||!!problem;
+    if(problem)$('answer-status').textContent=problem;
+    else if($('answer-status').textContent===tr('Сообщение с вложениями слишком длинное.'))$('answer-status').textContent='';
     composerDictation?.sync();
   }
   async function sendNote(){
     const t=selectedTaskRow();if(!canNote(t)||answering)return;
-    const text=$('answer-text').value.trim();if(!text)return;
+    const box=$('answer-text'),text=composerMessage(box);if(!text||composerAttachmentProblem(box))return;
     const key='messenger-note-op:'+t.id+':'+text;
     let op=recall(key);
     if(!op){op='window-'+t.id+'-'+crypto.randomUUID();remember(key,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем сообщение…');
-    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});try{localStorage.removeItem(key);}catch(_){}if(selectedTask===t.id){showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
+    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});try{localStorage.removeItem(key);}catch(_){}if(selectedTask===t.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
     catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
@@ -3999,11 +4200,11 @@
     if($('compose').inert||!canSendTaskMessage(t))return;
     if(!q&&canNote(t))return sendNote();
     if(!q||answering||t.remote?.from)return;
-    const text=$('answer-text').value.trim();if(!text)return;
+    const box=$('answer-text'),text=composerMessage(box);if(!text||composerAttachmentProblem(box))return;
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
-    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});if(selectedTask===t.id){showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
+    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});if(selectedTask===t.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
     catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
@@ -4081,7 +4282,12 @@
       syncSelects();
     }
     const computer=taskSidebarPreview?agentComputer:computerFilter;
-    if(computer&&computer!=='local'){renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
+    if(computer&&computer!=='local'){delete live.dataset.localGroups;renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
+    const groups=new Map([
+      ['installed',[tr('Установлено'),[]]],
+      ['available',[tr('Доступны для установки'),[]]],
+      ['checking',[tr('Проверка установки'),[]]]
+    ]);
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
@@ -4105,6 +4311,14 @@
       recheck.disabled=busy;
       head.append(heading,recheck,iconButton(tr('Настройки'),gearPath,true,()=>openAgentSetup(provider)),sw);
       card.append(head);
+      if(missing&&!rowNote.get(provider+':program')){
+        const install=el('button',tr('Установить'));
+        install.type='button';
+        install.addEventListener('click',()=>installAgent(provider));
+        sw.replaceWith(install);
+        groups.get('available')[1].push(card);
+        continue;
+      }
       const steps=el('div',undefined,'am-steps');
       // mark: 'ok', 'no', a step number, or a node (the limit ring).
       const step=(mark,title,sub,action,tip)=>steps.append(stepRow(mark,title,sub,action,tip));
@@ -4164,15 +4378,29 @@
         tasks.append(label);
         tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
       }else{tasks.textContent=tr('Задачи');tasks.disabled=true;}
-      card.append(tasks);cards.append(card);
+      card.append(tasks);
+      groups.get(cli||a?'installed':missing?'available':'checking')[1].push(card);
     }
-    // A check on one provider must not replace the other providers' cards.
-    for(const [index,card] of [...cards.children].entries()){
-      const previous=live.children[index];
-      if(previous?.outerHTML===card.outerHTML)continue;
-      if(previous)previous.replaceWith(card);else live.append(card);
+    if(!live.hasAttribute('data-local-groups'))live.replaceChildren();
+    live.dataset.localGroups='';
+    const existing=new Map([...live.querySelectorAll('.am-agent-card[data-provider]')].map(card=>[card.dataset.provider,card]));
+    for(const [key,[title,providers]] of groups){
+      let section=live.querySelector('[data-agent-group="'+key+'"]');
+      if(!section){
+        section=el('section',undefined,'am-settings-group am-agent-section');
+        section.dataset.agentGroup=key;
+        section.append(el('h3',title),el('div',undefined,'am-agent-roster'));
+        live.append(section);
+      }
+      section.hidden=!providers.length;
+      const roster=section.lastElementChild;
+      providers.forEach((card,index)=>{
+        const old=existing.get(card.dataset.provider);
+        const node=old?.outerHTML===card.outerHTML?old:card;
+        if(old&&node!==old)old.remove();
+        if(roster.children[index]!==node)roster.insertBefore(node,roster.children[index]||null);
+      });
     }
-    while(live.children.length>3)live.lastElementChild.remove();
     renderAccessBar();
   }
   // Another computer's agents, as its reports show them: view only (T-076).
@@ -5534,7 +5762,8 @@
           if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
         }
       }
-      const message={zones:zones.map(box),holes:holes.map(box)},text=JSON.stringify(message);
+      const fileDrop=tab==='tasks'&&!root.querySelector('dialog:modal')?[root.querySelector('.am-chat-body')?.getBoundingClientRect()].filter(Boolean):[];
+      const message={zones:zones.map(box),holes:holes.map(box),fileDrop:fileDrop.map(box)},text=JSON.stringify(message);
       if(text!==last){last=text;bridge.postMessage(message);}
     };
     const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
@@ -6091,6 +6320,7 @@
     }
     setupComposerPaths();
     setupComposerTokens();
+    setupComposerCommands();
     $('task-draft').addEventListener('submit',sendTaskDraft);
     $('task-draft-text').addEventListener('input',event=>{
       sizeComposer(event.currentTarget);

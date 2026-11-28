@@ -50,7 +50,7 @@ function reply(url,p,available){
     {...linux,ready:{projects:['tools','site']},agents:[{agent:'codex',paused:true},{agent:'claude'}]},
     {id:'vps',name:'VPS-PC2',host:true,ready:{projects:[]},agents:[]}
   ].map(peer=>({age:0,version:'1.0.5',agents,...peer}))};
-  if(url.pathname==='/api/discovery')return {agents:[]};
+  if(url.pathname==='/api/discovery')return {agents:[{provider:'cursor',state:'not_found'}]};
   if(url.pathname==='/api/client-info')return {client:'running',outdated:false,window_version:'1.0.9'};
   if(url.pathname==='/api/self-update')return {installed_version:'1.0.9',state:'idle'};
   if(url.pathname==='/api/usage-stats'){
@@ -880,6 +880,10 @@ if (require.main === module) (async()=>{
       await settingsOpen.click();
       await settingsNav.locator('[data-tab=agents]').click();
       assert.equal(await draftPage.locator('#agents-computer').inputValue(),'local');
+      assert.deepEqual(await settingsDialog.locator('[data-agent-group=installed] .am-agent-card').evaluateAll(cards=>
+        cards.map(card=>card.dataset.provider)),['claude','codex']);
+      await settingsDialog.locator('[data-agent-group=available] .am-agent-card[data-provider=cursor]')
+        .getByRole('button',{name:'Установить',exact:true}).waitFor();
       const agentIcon=settingsDialog.locator('.am-provider-heading .am-provider-icon svg').first();
       assert.deepEqual(await agentIcon.evaluate(icon=>{
         const {width,height}=icon.getBoundingClientRect();
@@ -980,8 +984,8 @@ if (require.main === module) (async()=>{
       await draftPage.waitForFunction(()=>document.getElementById('project-folder').value==='/fictional/project/notes.txt');
       await folderDialog.press('Escape');
       assert.equal(await form.locator('#task-draft-project').inputValue(),'tools');
-      const pathMenu=draftPage.getByRole('dialog',{name:'Добавить путь',exact:true});
-      const addPath=form.getByRole('button',{name:'Добавить путь',exact:true});
+      const pathMenu=draftPage.getByRole('dialog',{name:'Вложения',exact:true});
+      const addPath=form.getByRole('button',{name:'Вложения',exact:true});
       await addPath.hover();
       assert(await addPath.evaluate(async button=>{
         await Promise.all(button.getAnimations().map(animation=>animation.finished));
@@ -1003,24 +1007,35 @@ if (require.main === module) (async()=>{
         await folderGlyph('[aria-controls="task-draft-project-menu"]'),
       );
       const pickRequest=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
-      await pathMenu.getByRole('button',{name:'Выбрать файл…',exact:true}).click();
+      await pathMenu.getByRole('button',{name:'Добавить файл…',exact:true}).click();
       assert.deepEqual((await pickRequest).postDataJSON(),{kind:'file',current:''});
       await pathMenu.waitFor({state:'hidden'});
-      assert.equal(await form.locator('textarea').inputValue(),'/fictional/project/notes.txt');
-      await form.locator('textarea').fill('');
+      await form.getByRole('button',{name:'Убрать вложение notes.txt'}).waitFor();
+      assert.equal(await form.locator('textarea').inputValue(),'');
       await select(draftPage,'task-draft-computer','ПК-1');
+      await form.getByText('Вложения находятся на другом компьютере.').waitFor();
+      await form.getByRole('button',{name:'Убрать вложение notes.txt'}).click();
       assert.equal(await form.locator('#task-draft-access').textContent(),'Доступ задаётся на ПК-1');
       await addPath.click();
-      assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
+      assert.equal(await pathMenu.getByRole('button',{name:'Добавить файл…'}).isVisible(),false);
       assert.equal(await pathMenu.getByRole('textbox').isVisible(),false);
       await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
       const remotePath=pathMenu.getByRole('textbox',{name:'Путь на компьютере исполнителя'});
       await remotePath.fill('docs/notes.md');
       await remotePath.press('Enter');
       await pathMenu.waitFor({state:'hidden'});
-      assert.equal(await form.locator('textarea').inputValue(),'docs/notes.md');
-      await form.locator('textarea').fill('');
-      await modelTrigger.click();
+      await form.getByRole('button',{name:'Убрать вложение notes.md'}).click();
+      await draftPage.locator('.am-chat-body').evaluate(chat=>{
+        const data=new DataTransfer();
+        data.items.add(new File(['Draft notes'],'brief.txt',{type:'text/plain'}));
+        chat.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:data}));
+        if(chat.querySelector('.am-attachment-drop').hidden)throw Error('File drop feedback is missing');
+        chat.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data}));
+      });
+      await form.getByRole('button',{name:'Убрать вложение brief.txt'}).click();
+      await form.locator('textarea').fill('/mo');
+      await draftPage.getByRole('option',{name:/\/model/}).waitFor();
+      await form.locator('textarea').press('Enter');
       const modelMenu=draftPage.locator('#task-draft-model-menu');
       const draftSearch=modelMenu.getByRole('searchbox',{name:'Поиск моделей'});
       assert.equal(await draftSearch.evaluate(node=>node===document.activeElement),true);
@@ -1157,15 +1172,16 @@ if (require.main === module) (async()=>{
         }});
       }
       await draftPage.locator('#answer-add').click();
-      assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
+      assert.equal(await pathMenu.getByRole('button',{name:'Добавить файл…'}).isVisible(),false);
       await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
       await remotePath.fill('docs/reply.md');
       await remotePath.press('Enter');
-      assert.equal(await draftPage.locator('#answer-text').inputValue(),'Уточнение исполнителю\ndocs/reply.md');
+      await draftPage.getByRole('button',{name:'Убрать вложение reply.md'}).waitFor();
+      assert.equal(await draftPage.locator('#answer-text').inputValue(),'Уточнение исполнителю');
       const note=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-note');
       await draftPage.locator('#answer-send').click();
       const {task:noteTask,text:noteText}=(await note).postDataJSON();
-      assert.deepEqual([noteTask,noteText],[directTask.id,'Уточнение исполнителю\ndocs/reply.md']);
+      assert.deepEqual([noteTask,noteText],[directTask.id,'Уточнение исполнителю\n\ndocs/reply.md']);
       assert.equal(await form.isVisible(),false);
       const drawer=draftPage.locator('#list-toggle');
       assert.equal(await drawer.getAttribute('aria-label'),'Показать архив');
@@ -1576,6 +1592,8 @@ if (require.main === module) (async()=>{
       await group('По проекту');
       const gameFolder=machines.locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       const gameButton=gameFolder.locator('.am-folder-heading');
+      await gameFolder.locator('.am-folder-row > .am-group-new').click();
+      assert.equal(await browserPreview.locator('#task-draft-project').inputValue(),'game');
       assert.equal(await gameFolder.locator('.am-sidebar-task-title').filter({hasText:'Мак, Экран настроек'}).count(),1);
       await gameButton.click();
       assert.equal(await gameFolder.locator('.am-sidebar-task:visible').count(),0);
@@ -1658,6 +1676,9 @@ if (require.main === module) (async()=>{
       await reverseLocal.locator('.am-sidebar-disclosure').click();
       if(process.env.SCREENSHOT_DIR)await machines.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'project-computer.png')});
       await group('По компьютеру');
+      await card(browserPreview,'pc1').locator('.am-group-new').click();
+      assert.equal(await browserPreview.locator('#task-draft-computer').inputValue(),'pc1');
+      await card(browserPreview,'local').locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');
       const computerMenu=browserPreview.locator('#device-menu');
       await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
